@@ -550,6 +550,8 @@ export default function Discover({ tasteProfile, initialTab }) {
       if (cancelled) return;
 
       if (remote) {
+        const clerkProfileName = user.fullName || user.firstName || "User";
+        const clerkProfileUsername = user.username || user.primaryEmailAddress?.emailAddress?.split("@")[0] || "";
         const remoteHeat = remote.heat || {
           loved: Array.isArray(remote.loved) ? remote.loved : [],
           noped: Array.isArray(remote.noped) ? remote.noped : [],
@@ -579,6 +581,12 @@ export default function Discover({ tasteProfile, initialTab }) {
         if (remote.banner_photo) {
           localStorage.setItem("cooked_banner_photo", remote.banner_photo);
         }
+        if (!remote.profile_name || !String(remote.profile_name).trim()) {
+          await saveUserData(user.id, {
+            profile_name: clerkProfileName,
+            profile_username: clerkProfileUsername,
+          });
+        }
       } else {
         await followUser(user.id, 'user_3B9bXI2JCTGmvdVl6lRtjQ276W3');
         await supabase.from("notification_prefs").insert([
@@ -593,6 +601,8 @@ export default function Discover({ tasteProfile, initialTab }) {
         try { localPhotos = JSON.parse(localStorage.getItem("cooked_photos") || "{}"); } catch {}
         const profilePhoto = localStorage.getItem("cooked_profile_photo") || null;
         const bannerPhoto = localStorage.getItem("cooked_banner_photo") || null;
+        const clerkProfileName = user.fullName || user.firstName || "User";
+        const clerkProfileUsername = user.username || user.primaryEmailAddress?.emailAddress?.split("@")[0] || "";
         const hasLocalData =
           (heatResults?.loved?.length || 0) > 0 ||
           (heatResults?.noped?.length || 0) > 0 ||
@@ -618,6 +628,8 @@ export default function Discover({ tasteProfile, initialTab }) {
             photo_resolved: photoResolved || [],
             profile_photo: profilePhoto,
             banner_photo: bannerPhoto,
+            profile_name: clerkProfileName,
+            profile_username: clerkProfileUsername,
           });
         }
       }
