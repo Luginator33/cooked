@@ -6,7 +6,8 @@ import { SignInButton, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
 import { RESTAURANTS, CITIES, ALL_TAGS } from "../data/restaurants";
 import ChatBot from "../components/ChatBot";
 import Profile from "./Profile";
-import { addCommunityRestaurant, getCommunityRestaurants, loadUserData, saveUserData } from "../lib/supabase";
+import UserProfile from "./UserProfile";
+import { addCommunityRestaurant, followUser, getCommunityRestaurants, getFollowing, loadUserData, saveUserData, supabase } from "../lib/supabase";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -350,6 +351,8 @@ export default function Discover({ tasteProfile, initialTab }) {
   const filteredRef = useRef([]);
   const [mapsReady, setMapsReady] = useState(false);
   const [selectedRest, setSelectedRest] = useState(null);
+  const [viewingUserId, setViewingUserId] = useState(null);
+  const [friendsLovedCount, setFriendsLovedCount] = useState(0);
   const [allRestaurants, setAllRestaurants] = useState(() => {
     try {
       const stored = localStorage.getItem("cooked_restaurants");
@@ -501,6 +504,40 @@ export default function Discover({ tasteProfile, initialTab }) {
   }, [initialTab]);
   useEffect(() => { localStorage.setItem("cooked_heat", JSON.stringify(heatResults)); }, [heatResults]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.id || !detailRestaurant?.id) {
+      setFriendsLovedCount(0);
+      return;
+    }
+    (async () => {
+      try {
+        const { data: followingRows } = await getFollowing(user.id);
+        const followingIds = (followingRows || []).map((row) => row.following_id).filter(Boolean);
+        if (!followingIds.length) {
+          if (!cancelled) setFriendsLovedCount(0);
+          return;
+        }
+        const { data, error } = await supabase
+          .from("user_data")
+          .select("clerk_user_id,loved,heat")
+          .in("clerk_user_id", followingIds);
+        if (error) {
+          if (!cancelled) setFriendsLovedCount(0);
+          return;
+        }
+        const count = (data || []).reduce((acc, row) => {
+          const loved = Array.isArray(row?.loved) ? row.loved : (Array.isArray(row?.heat?.loved) ? row.heat.loved : []);
+          return loved.includes(detailRestaurant.id) || loved.includes(Number(detailRestaurant.id)) ? acc + 1 : acc;
+        }, 0);
+        if (!cancelled) setFriendsLovedCount(count);
+      } catch {
+        if (!cancelled) setFriendsLovedCount(0);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, detailRestaurant?.id]);
+
   // Load user data from Supabase on sign-in; migrate local data if no remote row yet.
   useEffect(() => {
     if (!user?.id) {
@@ -543,6 +580,15 @@ export default function Discover({ tasteProfile, initialTab }) {
           localStorage.setItem("cooked_banner_photo", remote.banner_photo);
         }
       } else {
+        await followUser(user.id, 'user_3B9bXI2JCTGmvdVl6lRtjQ276W3');
+        await supabase.from("notification_prefs").insert([
+          { clerk_user_id: user.id, type: "followed_you", enabled: true },
+          { clerk_user_id: user.id, type: "friend_loved_your_watchlist", enabled: true },
+          { clerk_user_id: user.id, type: "restaurant_trending", enabled: true },
+          { clerk_user_id: user.id, type: "friend_new_find", enabled: true },
+          { clerk_user_id: user.id, type: "friend_visited_your_city", enabled: true },
+        ]);
+
         let localPhotos = {};
         try { localPhotos = JSON.parse(localStorage.getItem("cooked_photos") || "{}"); } catch {}
         const profilePhoto = localStorage.getItem("cooked_profile_photo") || null;
@@ -2412,7 +2458,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       {/* Profile Tab */}
       {tab === "profile" && (
         <div style={{ paddingTop: headerHeight }}>
-          <Profile tasteProfile={tasteProfile} allRestaurants={allRestaurants} heatResults={heatResults} watchlist={watchlist} onOpenDetail={setDetailRestaurant} onFixPhotos={rePickPhotosForAll} clerkName={user?.fullName} clerkImageUrl={user?.imageUrl} />
+          <Profile tasteProfile={tasteProfile} allRestaurants={allRestaurants} heatResults={heatResults} watchlist={watchlist} onOpenDetail={setDetailRestaurant} onFixPhotos={rePickPhotosForAll} clerkName={user?.fullName} clerkImageUrl={user?.imageUrl} onViewUser={setViewingUserId} />
         </div>
       )}
 
@@ -2903,6 +2949,13 @@ export default function Discover({ tasteProfile, initialTab }) {
                 <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:16, color:"#e8e0d4", lineHeight:1.65 }}>{detail.desc}</div>
               </div>
             )}
+            {friendsLovedCount > 0 && (
+              <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"10px 18px" }}>
+                <div style={{ fontSize:12, color:"#c4603a", fontFamily:"-apple-system,sans-serif" }}>
+                  {friendsLovedCount} friend{friendsLovedCount !== 1 ? "s" : ""} have been here
+                </div>
+              </div>
+            )}
 
             {/* SECTION 5 — INFO */}
             {(() => {
@@ -3069,6 +3122,13 @@ export default function Discover({ tasteProfile, initialTab }) {
 
       {/* Toast */}
       {toast && <div style={{ position:"fixed", top:76, left:"50%", transform:"translateX(-50%)", background:C.terracotta, color:"#fff", borderRadius:20, padding:"10px 20px", fontSize:13, fontWeight:600, zIndex:300, fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap", boxShadow:"0 4px 20px rgba(196,96,58,0.4)" }}>Link copied — {toast} 📋</div>}
+      {viewingUserId && (
+        <UserProfile
+          clerkUserId={viewingUserId}
+          onClose={() => setViewingUserId(null)}
+          onOpenDetail={setDetailRestaurant}
+        />
+      )}
     </div>
     </div>
     </SignedIn>

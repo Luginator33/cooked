@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import { useUser } from "@clerk/clerk-react";
+import { getFollowers, getFollowing, getUserProfile } from "../lib/supabase";
 
 const C = {
   bg: "#0f0c09", bg2: "#1a1208", bg3: "#2e1f0e",
@@ -27,7 +29,8 @@ function EyeIcon({ size = 14, color = C.muted }) {
   );
 }
 
-export default function Profile({ allRestaurants = [], heatResults = {}, watchlist = [], onOpenDetail, onFixPhotos, clerkName, clerkImageUrl }) {
+export default function Profile({ allRestaurants = [], heatResults = {}, watchlist = [], onOpenDetail, onFixPhotos, clerkName, clerkImageUrl, onViewUser }) {
+  const { user } = useUser();
   const [photo, setPhoto] = useState(() => clerkImageUrl || localStorage.getItem("cooked_profile_photo") || null);
   const [name, setName] = useState(() => clerkName || localStorage.getItem("cooked_profile_name") || "Luga");
   const [username, setUsername] = useState(() => localStorage.getItem("cooked_profile_username") || "@luginator33");
@@ -36,6 +39,9 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
   const [editUsername, setEditUsername] = useState(username);
   const [activeTab, setActiveTab] = useState("loved");
   const [listModal, setListModal] = useState(null);
+  const [socialModal, setSocialModal] = useState(null);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
   const [bannerIdx, setBannerIdx] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const fileRef = useRef();
@@ -154,6 +160,45 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
     input.click();
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.id) {
+      setFollowersCount(0);
+      setFollowingCount(0);
+      return;
+    }
+    (async () => {
+      const [followersRes, followingRes] = await Promise.all([
+        getFollowers(user.id),
+        getFollowing(user.id),
+      ]);
+      if (cancelled) return;
+      setFollowersCount(followersRes?.data?.length || 0);
+      setFollowingCount(followingRes?.data?.length || 0);
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  const openSocialList = async (kind) => {
+    if (!user?.id) return;
+    setSocialModal({ title: kind === "followers" ? "Followers" : "Following", users: [], loading: true });
+    const res = kind === "followers" ? await getFollowers(user.id) : await getFollowing(user.id);
+    const rows = res?.data || [];
+    const ids = rows
+      .map((row) => (kind === "followers" ? row.follower_id : row.following_id))
+      .filter(Boolean);
+    const profiles = await Promise.all(ids.map(async (id) => {
+      const { data } = await getUserProfile(id);
+      return {
+        clerk_user_id: id,
+        profile_name: data?.profile_name || "User",
+        profile_username: data?.profile_username || "",
+        profile_photo: data?.profile_photo || null,
+      };
+    }));
+    setSocialModal({ title: kind === "followers" ? "Followers" : "Following", users: profiles, loading: false });
+  };
+
   const tabs = [
     { key: "loved", label: "Loved", items: lovedRestaurants },
     { key: "watchlist", label: "Watchlist", items: watchlistRestaurants },
@@ -162,8 +207,8 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
   const activeItems = tabs.find(t => t.key === activeTab)?.items || [];
 
   const stats = [
-    { val: lovedRestaurants.length || 248, label: "FOLLOWING", items: lovedRestaurants, title: "Loved" },
-    { val: 91, label: "FOLLOWERS", items: [], title: "Followers" },
+    { val: followingCount, label: "FOLLOWING", items: [], title: "Following", onClick: () => openSocialList("following") },
+    { val: followersCount, label: "FOLLOWERS", items: [], title: "Followers", onClick: () => openSocialList("followers") },
     { val: cities.length || 12, label: "CITIES", items: cities.map(c => ({ id: c, name: c })), title: "Cities" },
   ];
 
@@ -242,11 +287,14 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
           <button
             key={s.label}
             type="button"
-            onClick={() => s.items.length > 0 && setListModal({ title: s.title, items: s.items })}
+            onClick={() => {
+              if (s.onClick) { s.onClick(); return; }
+              if (s.items.length > 0) setListModal({ title: s.title, items: s.items });
+            }}
             style={{
               flex: 1, background: "none", border: "none",
               borderRight: i < stats.length - 1 ? `1px solid ${C.border}` : "none",
-              padding: "0 6px 0", cursor: s.items.length > 0 ? "pointer" : "default",
+              padding: "0 6px 0", cursor: (s.onClick || s.items.length > 0) ? "pointer" : "default",
               textAlign: "center",
             }}
           >
@@ -346,6 +394,42 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
                   </div>
                 )
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {socialModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => setSocialModal(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", maxHeight: "70vh", display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>{socialModal.title}</div>
+              <button type="button" onClick={() => setSocialModal(null)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}>×</button>
+            </div>
+            <div style={{ overflowY: "auto", padding: "8px 18px 24px" }}>
+              {socialModal.loading ? (
+                <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Loading…</div>
+              ) : (
+                socialModal.users.map((u) => (
+                  <button
+                    key={u.clerk_user_id}
+                    type="button"
+                    onClick={() => {
+                      setSocialModal(null);
+                      onViewUser?.(u.clerk_user_id);
+                    }}
+                    style={{ width: "100%", background: "none", border: "none", borderBottom: `1px solid ${C.border}`, padding: "12px 0", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", textAlign: "left" }}
+                  >
+                    <div style={{ width: 34, height: 34, borderRadius: "50%", overflow: "hidden", border: `1px solid ${C.border}`, background: C.bg3, flexShrink: 0 }}>
+                      {u.profile_photo ? <img src={u.profile_photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: C.text, fontSize: 14, fontFamily: "-apple-system,sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.profile_name}</div>
+                      <div style={{ color: C.muted, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>{u.profile_username}</div>
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         </div>

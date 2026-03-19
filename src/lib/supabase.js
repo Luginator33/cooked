@@ -51,3 +51,87 @@ export async function getCommunityRestaurants() {
   }
   return data || []
 }
+
+// Follow a user
+export async function followUser(followerClerkId, followingClerkId) {
+  const { error } = await supabase
+    .from('follows')
+    .insert({ follower_id: followerClerkId, following_id: followingClerkId })
+  return { error }
+}
+
+// Unfollow a user
+export async function unfollowUser(followerClerkId, followingClerkId) {
+  const { error } = await supabase
+    .from('follows')
+    .delete()
+    .eq('follower_id', followerClerkId)
+    .eq('following_id', followingClerkId)
+  return { error }
+}
+
+// Get followers of a user
+export async function getFollowers(clerkUserId) {
+  const { data, error } = await supabase
+    .from('follows')
+    .select('*')
+    .eq('following_id', clerkUserId)
+  return { data, error }
+}
+
+// Get users a user is following
+export async function getFollowing(clerkUserId) {
+  const { data, error } = await supabase
+    .from('follows')
+    .select('*')
+    .eq('follower_id', clerkUserId)
+  return { data, error }
+}
+
+// Check if user A follows user B
+export async function isFollowing(followerClerkId, followingClerkId) {
+  const { data, error } = await supabase
+    .from('follows')
+    .select('id')
+    .eq('follower_id', followerClerkId)
+    .eq('following_id', followingClerkId)
+    .single()
+  return { isFollowing: !!data && !error }
+}
+
+// Follow a city
+export async function followCity(clerkUserId, city) {
+  const { error } = await supabase
+    .from('city_follows')
+    .insert({ clerk_user_id: clerkUserId, city })
+  return { error }
+}
+
+// Unfollow a city
+export async function unfollowCity(clerkUserId, city) {
+  const { error } = await supabase
+    .from('city_follows')
+    .delete()
+    .eq('clerk_user_id', clerkUserId)
+    .eq('city', city)
+  return { error }
+}
+
+// Get cities a user follows
+export async function getFollowedCities(clerkUserId) {
+  const { data, error } = await supabase
+    .from('city_follows')
+    .select('city')
+    .eq('clerk_user_id', clerkUserId)
+  return { data, error }
+}
+
+// Get user profile data by clerk_user_id
+export async function getUserProfile(clerkUserId) {
+  const { data, error } = await supabase
+    .from('user_data')
+    .select('*')
+    .eq('clerk_user_id', clerkUserId)
+    .single()
+  return { data, error }
+}
