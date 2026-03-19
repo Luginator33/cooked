@@ -1033,6 +1033,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       const arr = raw ? JSON.parse(raw) : [];
       const set = new Set(arr);
       ids.forEach((id) => set.add(id));
+      console.log('FINDS SAVE:', ids);
       localStorage.setItem("cooked_finds", JSON.stringify([...set]));
     } catch {}
   };
@@ -1179,7 +1180,11 @@ export default function Discover({ tasteProfile, initialTab }) {
         setAllRestaurants((prev) => (toAdd.length ? [...toAdd, ...prev] : prev));
         if (toAdd.length) {
           addToCookedFinds(toAdd.map((x) => x.id));
-          Promise.all(toAdd.map((restaurantObject) => addCommunityRestaurant(restaurantObject))).catch(() => {});
+          for (const restaurantObject of toAdd) {
+            console.log('Saving to community:', restaurantObject);
+            const result = await addCommunityRestaurant(restaurantObject);
+            console.log('Community save result:', result);
+          }
           try { localStorage.setItem("cooked_restaurants", JSON.stringify([...toAdd, ...current])); } catch {}
         }
         setIgAddedRestaurants(baseRestaurants);
@@ -1301,6 +1306,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   };
 
   const confirmAddFromPicker = () => {
+    console.log('CONFIRM CLICKED');
     const confirmedIds = igPhotoPicker
       .filter((item) => item.userSelected === true && item.photoOptions[item.selectedIndex]?.photoUri)
       .map((item) => item.restaurant.id);
@@ -1360,7 +1366,13 @@ export default function Discover({ tasteProfile, initialTab }) {
       })
       .filter(Boolean);
     if (updated.length) {
-      Promise.all(updated.map((restaurantObject) => addCommunityRestaurant(restaurantObject))).catch(() => {});
+      (async () => {
+        for (const restaurantObject of updated) {
+          console.log('Saving to community:', restaurantObject);
+          const result = await addCommunityRestaurant(restaurantObject);
+          console.log('Community save result:', result);
+        }
+      })();
     }
     setIgAddedRestaurants(updated);
     setIgDone(true);
@@ -2546,7 +2558,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       {/* IG Modal */}
       {igModal && createPortal(
         <div style={{ position:"fixed", inset:0, background:"rgba(30,18,8,0.7)", zIndex:999999, display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={closeIgModal}>
-          <div style={{ width:"100%", maxWidth:480, background:C.cream, borderRadius:"24px 24px 0 0", borderTop:`1px solid ${C.border}`, padding:"28px 24px 44px", maxHeight:"85vh", overflowY:"auto", zIndex:1000000 }} onClick={e=>e.stopPropagation()}>
+          <div style={{ width:"100%", maxWidth:480, background:C.bg, borderRadius:"24px 24px 0 0", borderTop:`1px solid ${C.border}`, padding:"28px 24px 44px", maxHeight:"85vh", overflowY:"auto", zIndex:1000000 }} onClick={e=>e.stopPropagation()}>
             {pickerMode === "fix-photos" ? (
               <div style={{ padding:"8px 0" }}>
                 <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:22, fontWeight:700, marginBottom:16, color:C.text }}>Fix photos</div>

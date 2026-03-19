@@ -33,7 +33,10 @@ export async function addCommunityRestaurant(restaurantObject) {
   const { error } = await supabase
     .from('community_restaurants')
     .upsert(payload, { onConflict: 'id' })
-  if (error) console.error(error)
+  if (error) {
+    console.log('addCommunityRestaurant error:', error)
+  }
+  return { error }
 }
 
 // Fetch all community-added restaurants.
