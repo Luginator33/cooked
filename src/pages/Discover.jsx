@@ -204,7 +204,11 @@ function RestCard({ r, loved, watched, onLove, onWatch, onShare, onOpenDetail, o
         <img src={imgSrc} alt={r.name} style={{ width:"100%", height:"100%", objectFit:"cover", transition:"transform 0.4s" }} />
         <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, transparent 50%, rgba(30,18,8,0.7) 100%)" }} />
         {r.source && (
-          <div style={{ position:"absolute", top:10, left:10, background:"rgba(15,12,9,0.75)", border:`0.5px solid ${C.border2}`, borderRadius:16, padding:"3px 9px", fontFamily:"'DM Mono',monospace", fontSize:9, color:C.cream }}>
+          <div style={{ position:"absolute", top:10, left:10, background:"rgba(15,12,9,0.75)", border:`0.5px solid ${C.border2}`, borderRadius:16, padding:"3px 9px", fontFamily:"-apple-system, sans-serif", fontSize:9, color:C.cream, display:"flex", alignItems:"center", gap:6 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={C.cream} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5" />
+            </svg>
             {r.source}
           </div>
         )}
@@ -1107,6 +1111,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       const parsed = JSON.parse(jsonStr);
       const list = Array.isArray(parsed) ? parsed : [parsed];
       const googleKey = import.meta.env.VITE_GOOGLE_PLACES_KEY;
+      const foundBy = user?.fullName || user?.username || "a user";
       const baseRestaurants = list.map((item, i) => {
         const name = item.name || "Unknown";
         const seed = encodeURIComponent(name) + "-" + i;
@@ -1121,7 +1126,7 @@ export default function Discover({ tasteProfile, initialTab }) {
           img: `https://picsum.photos/seed/${seed}/800/600`,
           img2: `https://picsum.photos/seed/${seed}-2/400/400`,
           rating: 8.5,
-          source: "Instagram",
+          source: `Found by ${foundBy}`,
           desc: item.description || item.desc || "",
           heat: "🔥🔥",
         };
@@ -1130,6 +1135,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       if (googleKey) {
         const pickerItems = await Promise.all(baseRestaurants.map(async (restaurant) => {
           const photoOptions = [];
+          let enrichedRestaurant = restaurant;
           try {
             const searchRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
               method: "POST",
@@ -1148,7 +1154,58 @@ export default function Discover({ tasteProfile, initialTab }) {
             }
             const searchData = await searchRes.json();
             const place = searchData.places?.[0];
-            const photos = place?.photos?.slice(0, 12) || [];
+            let details = null;
+            if (place?.id) {
+              try {
+                const detailsRes = await fetch(`https://places.googleapis.com/v1/places/${place.id}`, {
+                  headers: {
+                    "X-Goog-Api-Key": googleKey,
+                    "X-Goog-FieldMask": "formattedAddress,nationalPhoneNumber,internationalPhoneNumber,regularOpeningHours.weekdayDescriptions,websiteUri,location,photos,priceLevel,rating,addressComponents",
+                  },
+                });
+                if (detailsRes.ok) {
+                  details = await detailsRes.json();
+                } else {
+                  const detailsErr = await detailsRes.text().catch(() => "");
+                  console.error("[Places API] details error:", detailsRes.status, detailsErr);
+                }
+              } catch (detailsErr) {
+                console.error("[Places API] details fetch error for", restaurant.name, detailsErr);
+              }
+            }
+
+            const addressComponents = details?.addressComponents || [];
+            const cityComponent =
+              addressComponents.find((c) => c?.types?.includes("locality")) ||
+              addressComponents.find((c) => c?.types?.includes("administrative_area_level_1"));
+            const neighborhoodComponent =
+              addressComponents.find((c) => c?.types?.includes("neighborhood")) ||
+              addressComponents.find((c) => c?.types?.includes("sublocality")) ||
+              addressComponents.find((c) => c?.types?.includes("sublocality_level_1"));
+            const cityFromAddress = cityComponent?.longText || cityComponent?.shortText || "";
+            const neighborhoodFromAddress = neighborhoodComponent?.longText || neighborhoodComponent?.shortText || "";
+            const level = details?.priceLevel;
+            const priceFromLevel =
+              typeof level === "number" && level > 0 && level <= 4
+                ? "$".repeat(level)
+                : restaurant.price;
+
+            enrichedRestaurant = {
+              ...restaurant,
+              city: cityFromAddress || restaurant.city,
+              neighborhood: neighborhoodFromAddress || restaurant.neighborhood,
+              address: details?.formattedAddress || restaurant.address,
+              phone: details?.nationalPhoneNumber || details?.internationalPhoneNumber || restaurant.phone,
+              hours: details?.regularOpeningHours?.weekdayDescriptions || restaurant.hours,
+              website: details?.websiteUri || restaurant.website,
+              lat: details?.location?.latitude ?? restaurant.lat,
+              lng: details?.location?.longitude ?? restaurant.lng,
+              rating: details?.rating || restaurant.rating,
+              price: priceFromLevel,
+              source: `Found by ${foundBy}`,
+            };
+
+            const photos = (details?.photos || place?.photos || []).slice(0, 12);
             for (const photo of photos) {
               const photoName = photo.name;
               if (!photoName) continue;
@@ -1166,7 +1223,7 @@ export default function Discover({ tasteProfile, initialTab }) {
           } catch (placesErr) {
             console.error("[Places API] error for", restaurant.name, placesErr);
           }
-          return { restaurant, photoOptions, selectedIndex: 0, isRefreshing: false, refreshOffset: 0, userSelected: false };
+          return { restaurant: enrichedRestaurant, photoOptions, selectedIndex: 0, isRefreshing: false, refreshOffset: 0, userSelected: false };
         }));
         console.log("[processScreenshot] Setting igPhotoPicker with", pickerItems.length, "items");
         setPickerMode("ig-import");
@@ -1179,7 +1236,6 @@ export default function Discover({ tasteProfile, initialTab }) {
         const toAdd = baseRestaurants.filter((x) => !existingIds.has(x.id));
         setAllRestaurants((prev) => (toAdd.length ? [...toAdd, ...prev] : prev));
         if (toAdd.length) {
-          addToCookedFinds(toAdd.map((x) => x.id));
           for (const restaurantObject of toAdd) {
             console.log('Saving to community:', restaurantObject);
             const result = await addCommunityRestaurant(restaurantObject);
@@ -1327,6 +1383,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       return updated;
     });
 
+    console.log('Adding to finds:', confirmedIds);
     addToCookedFinds(confirmedIds);
     try {
       let current = [];
@@ -1365,6 +1422,9 @@ export default function Discover({ tasteProfile, initialTab }) {
         return { ...restaurant, img: chosen, img2: chosen };
       })
       .filter(Boolean);
+    const updatedIds = updated.map(r => r.id);
+    console.log('Adding to finds:', updatedIds);
+    if (updatedIds.length) addToCookedFinds(updatedIds);
     if (updated.length) {
       (async () => {
         for (const restaurantObject of updated) {

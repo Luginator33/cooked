@@ -29,7 +29,8 @@ export async function saveUserData(clerkUserId, updates) {
 
 // Save a community restaurant so other users can see it.
 export async function addCommunityRestaurant(restaurantObject) {
-  const payload = { ...restaurantObject, updated_at: new Date().toISOString() }
+  const payload = { ...restaurantObject, description: restaurantObject.desc, updated_at: new Date().toISOString() }
+  delete payload.desc;
   const { error } = await supabase
     .from('community_restaurants')
     .upsert(payload, { onConflict: 'id' })

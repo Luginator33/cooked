@@ -64,8 +64,32 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
     const seen = new Set();
     return arr.filter(r => seen.has(r.id) ? false : seen.add(r.id));
   }, [allRestaurants, watchlist]);
-  // Finds = IG import only, always empty unless explicitly added
-  const findsRestaurants = [];
+
+  const [findsIds, setFindsIds] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("cooked_finds") || "[]"); } catch { return []; }
+  });
+
+  useEffect(() => {
+    const handler = () => {
+      try { setFindsIds(JSON.parse(localStorage.getItem("cooked_finds") || "[]")); } catch {}
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, []);
+
+  // When user switches to the Finds tab within the same session, localStorage won't emit a `storage` event.
+  // Re-read immediately so the list updates.
+  useEffect(() => {
+    if (activeTab !== "finds") return;
+    try { setFindsIds(JSON.parse(localStorage.getItem("cooked_finds") || "[]")); } catch {}
+  }, [activeTab]);
+
+  const findsRestaurants = useMemo(() => {
+    const ids = new Set((findsIds || []).map(id => Number(id)));
+    const arr = allRestaurants.filter(r => ids.has(Number(r.id)));
+    const seen = new Set();
+    return arr.filter(r => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+  }, [allRestaurants, findsIds]);
 
   const cities = [...new Set(lovedRestaurants.map(r => r.city).filter(Boolean))];
 
