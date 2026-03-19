@@ -27,9 +27,9 @@ function EyeIcon({ size = 14, color = C.muted }) {
   );
 }
 
-export default function Profile({ allRestaurants = [], heatResults = {}, watchlist = [], onOpenDetail, onFixPhotos }) {
-  const [photo, setPhoto] = useState(() => localStorage.getItem("cooked_profile_photo") || null);
-  const [name, setName] = useState(() => localStorage.getItem("cooked_profile_name") || "Luga");
+export default function Profile({ allRestaurants = [], heatResults = {}, watchlist = [], onOpenDetail, onFixPhotos, clerkName, clerkImageUrl }) {
+  const [photo, setPhoto] = useState(() => clerkImageUrl || localStorage.getItem("cooked_profile_photo") || null);
+  const [name, setName] = useState(() => clerkName || localStorage.getItem("cooked_profile_name") || "Luga");
   const [username, setUsername] = useState(() => localStorage.getItem("cooked_profile_username") || "@luginator33");
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(name);
@@ -39,6 +39,17 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
   const [bannerIdx, setBannerIdx] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const fileRef = useRef();
+
+  useEffect(() => {
+    if (!clerkName) return;
+    setName(clerkName);
+    setEditName(clerkName);
+  }, [clerkName]);
+
+  useEffect(() => {
+    if (!clerkImageUrl) return;
+    setPhoto(clerkImageUrl);
+  }, [clerkImageUrl]);
 
   // Rules: heat (flame) OR loved → Loved list; watchlist → Watchlist list; IG imports → Finds list
   const lovedIds = heatResults?.loved || [];

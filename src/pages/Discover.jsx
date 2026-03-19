@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { SignInButton, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
 import { RESTAURANTS, CITIES, ALL_TAGS } from "../data/restaurants";
 import ChatBot from "../components/ChatBot";
 import Profile from "./Profile";
@@ -318,6 +319,7 @@ function LazyPhotoRow({ item, pickerIndex, onLoad, onSelect, onRefresh, C }) {
 }
 
 export default function Discover({ tasteProfile, initialTab }) {
+  const { user } = useUser();
   const [tab, setTab] = useState(initialTab || "home");
   const [city, setCity] = useState("Los Angeles");
   const [watchlist, setWatchlist] = useState(() => {
@@ -1497,6 +1499,38 @@ export default function Discover({ tasteProfile, initialTab }) {
   };
 
   return (
+    <>
+    <SignedOut>
+      <div style={{ width:"100%", minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", padding:"24px" }}>
+        <div style={{ width:"100%", maxWidth:480, textAlign:"center" }}>
+          <div style={{ display:"flex", justifyContent:"center", marginBottom:16 }}>
+            <Wordmark size={44} />
+          </div>
+          <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:20, color:C.text, marginBottom:24 }}>
+            your personal restaurant guide
+          </div>
+          <SignInButton mode="modal">
+            <button
+              type="button"
+              style={{
+                background:C.terracotta,
+                color:"#fff",
+                border:"none",
+                borderRadius:14,
+                padding:"14px 28px",
+                fontFamily:"-apple-system,sans-serif",
+                fontSize:15,
+                fontWeight:600,
+                cursor:"pointer",
+              }}
+            >
+              Sign In
+            </button>
+          </SignInButton>
+        </div>
+      </div>
+    </SignedOut>
+    <SignedIn>
     <div style={{ width:"100%", minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
     <div style={{ maxWidth:480, margin:"0 auto", minHeight:"100vh", background:C.bg, paddingBottom:90, position:"relative" }}>
       <style>{`
@@ -2176,7 +2210,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       {/* Profile Tab */}
       {tab === "profile" && (
         <div style={{ paddingTop: headerHeight }}>
-          <Profile tasteProfile={tasteProfile} allRestaurants={allRestaurants} heatResults={heatResults} watchlist={watchlist} onOpenDetail={setDetailRestaurant} onFixPhotos={rePickPhotosForAll} />
+          <Profile tasteProfile={tasteProfile} allRestaurants={allRestaurants} heatResults={heatResults} watchlist={watchlist} onOpenDetail={setDetailRestaurant} onFixPhotos={rePickPhotosForAll} clerkName={user?.fullName} clerkImageUrl={user?.imageUrl} />
         </div>
       )}
 
@@ -2835,5 +2869,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       {toast && <div style={{ position:"fixed", top:76, left:"50%", transform:"translateX(-50%)", background:C.terracotta, color:"#fff", borderRadius:20, padding:"10px 20px", fontSize:13, fontWeight:600, zIndex:300, fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap", boxShadow:"0 4px 20px rgba(196,96,58,0.4)" }}>Link copied — {toast} 📋</div>}
     </div>
     </div>
+    </SignedIn>
+    </>
   );
 }
