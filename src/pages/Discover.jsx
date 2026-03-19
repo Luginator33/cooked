@@ -2675,10 +2675,29 @@ export default function Discover({ tasteProfile, initialTab }) {
               const todayHours = (detail.hours||[]).find(h => h.startsWith(todayStr));
               const hoursVal = todayHours ? todayHours.replace(todayStr+": ","") : null;
               const shortAddr = (detail.address||"").split(",").slice(0,2).join(",").trim();
+              const websiteRaw = (detail.website || "").trim();
+              const websiteLower = websiteRaw.toLowerCase();
+              const hasNonOpenTableWebsite = websiteRaw && !websiteLower.includes("opentable.com");
+              const websiteHref = hasNonOpenTableWebsite
+                ? (websiteRaw.startsWith("http://") || websiteRaw.startsWith("https://") ? websiteRaw : `https://${websiteRaw.replace(/^\/+/, "")}`)
+                : "";
+              const websiteDisplay = (() => {
+                if (!hasNonOpenTableWebsite) return "";
+                try {
+                  return new URL(websiteHref).hostname.replace(/^www\./i, "");
+                } catch {
+                  return websiteRaw
+                    .replace(/^https?:\/\//i, "")
+                    .replace(/^www\./i, "")
+                    .replace(/\/+$/, "")
+                    .split("/")[0];
+                }
+              })();
               const infoRows = [
                 hoursVal && { svgPath:<><circle cx="12" cy="12" r="9" stroke="#5a3a20" strokeWidth="1.5" fill="none"/><polyline points="12 7 12 12 15 15" stroke="#5a3a20" strokeWidth="1.5" strokeLinecap="round"/></>, label:"HOURS TODAY", value:hoursVal },
                 shortAddr && { svgPath:<><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#5a3a20" strokeWidth="1.5" fill="none"/><circle cx="12" cy="9" r="2.5" stroke="#5a3a20" strokeWidth="1.5" fill="none"/></>, label:"ADDRESS", value:shortAddr },
                 detail.phone && { svgPath:<><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6.1 6.1l1.09-1.09a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" stroke="#5a3a20" strokeWidth="1.5" fill="none"/></>, label:"PHONE", value:detail.phone, href:`tel:${detail.phone}` },
+                hasNonOpenTableWebsite && { svgPath:<><circle cx="12" cy="12" r="9" stroke="#5a3a20" strokeWidth="1.5" fill="none"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" stroke="#5a3a20" strokeWidth="1.5" fill="none" strokeLinecap="round"/></>, label:"WEBSITE", value:websiteDisplay, href:websiteHref, newTab:true },
               ].filter(Boolean);
               if (!infoRows.length) return null;
               return (
@@ -2689,7 +2708,7 @@ export default function Discover({ tasteProfile, initialTab }) {
                       <div>
                         <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:2, fontFamily:"-apple-system,sans-serif" }}>{row.label}</div>
                         {row.href
-                          ? <a href={row.href} style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:15, color:"#e8e0d4", textDecoration:"none" }}>{row.value}</a>
+                          ? <a href={row.href} target={row.newTab ? "_blank" : undefined} rel={row.newTab ? "noopener noreferrer" : undefined} style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:15, color:"#e8e0d4", textDecoration:"none" }}>{row.value}</a>
                           : <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:15, color:"#e8e0d4" }}>{row.value}</div>
                         }
                       </div>
