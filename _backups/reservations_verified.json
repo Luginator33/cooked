@@ -1,0 +1,402 @@
+{
+  "1": {
+    "resy": "https://resy.com/cities/la/venues/nobu-malibu",
+    "openTable": null
+  },
+  "2": {
+    "resy": "https://resy.com/cities/la/venues/guelaguetza",
+    "openTable": null
+  },
+  "3": {
+    "resy": "https://resy.com/cities/la/venues/sqirl",
+    "openTable": null
+  },
+  "4": {
+    "resy": "https://resy.com/cities/la/venues/republique",
+    "openTable": null
+  },
+  "5": {
+    "resy": "https://resy.com/cities/la/venues/bestia",
+    "openTable": null
+  },
+  "6": {
+    "resy": "https://resy.com/cities/la/venues/kismet",
+    "openTable": null
+  },
+  "8": {
+    "resy": "https://resy.com/cities/la/venues/nnaka",
+    "openTable": null
+  },
+  "9": {
+    "resy": "https://resy.com/cities/la/venues/bavel",
+    "openTable": null
+  },
+  "10": {
+    "resy": "https://resy.com/cities/la/venues/gjusta",
+    "openTable": null
+  },
+  "11": {
+    "resy": "https://resy.com/cities/la/venues/osteria-mozza",
+    "openTable": null
+  },
+  "12": {
+    "resy": "https://resy.com/cities/la/venues/horses",
+    "openTable": null
+  },
+  "13": {
+    "resy": "https://resy.com/cities/la/venues/majordomo",
+    "openTable": null
+  },
+  "14": {
+    "resy": "https://resy.com/cities/la/venues/shunji",
+    "openTable": null
+  },
+  "15": {
+    "resy": "https://resy.com/cities/la/venues/guerrilla-tacos",
+    "openTable": null
+  },
+  "102": {
+    "resy": "https://resy.com/cities/nyc/venues/lilia",
+    "openTable": null
+  },
+  "103": {
+    "resy": "https://resy.com/cities/nyc/venues/lucali",
+    "openTable": null
+  },
+  "104": {
+    "resy": "https://resy.com/cities/nyc/venues/atomix",
+    "openTable": null
+  },
+  "105": {
+    "resy": "https://resy.com/cities/nyc/venues/joe",
+    "openTable": null
+  },
+  "106": {
+    "resy": "https://resy.com/cities/nyc/venues/don-angie",
+    "openTable": null
+  },
+  "107": {
+    "resy": "https://resy.com/cities/nyc/venues/ugly-baby",
+    "openTable": null
+  },
+  "108": {
+    "resy": "https://resy.com/cities/nyc/venues/rezdora",
+    "openTable": null
+  },
+  "109": {
+    "resy": "https://resy.com/cities/nyc/venues/momofuku-ko",
+    "openTable": null
+  },
+  "110": {
+    "resy": "https://resy.com/cities/nyc/venues/superiority-burger",
+    "openTable": null
+  },
+  "201": {
+    "resy": "https://resy.com/cities/chi/venues/alinea",
+    "openTable": null
+  },
+  "202": {
+    "resy": "https://resy.com/cities/chi/venues/girl-the-goat",
+    "openTable": null
+  },
+  "203": {
+    "resy": "https://resy.com/cities/chi/venues/au-cheval",
+    "openTable": null
+  },
+  "204": {
+    "resy": "https://resy.com/cities/chi/venues/smyth",
+    "openTable": null
+  },
+  "205": {
+    "resy": "https://resy.com/cities/chi/venues/monteverde",
+    "openTable": null
+  },
+  "301": {
+    "resy": "https://resy.com/cities/sf/venues/zuni-cafe",
+    "openTable": null
+  },
+  "302": {
+    "resy": "https://resy.com/cities/sf/venues/state-bird-provisions",
+    "openTable": null
+  },
+  "303": {
+    "resy": "https://resy.com/cities/sf/venues/tartine-manufactory",
+    "openTable": null
+  },
+  "304": {
+    "resy": "https://resy.com/cities/sf/venues/benu",
+    "openTable": null
+  },
+  "305": {
+    "resy": "https://resy.com/cities/sf/venues/la-taqueria",
+    "openTable": null
+  },
+  "401": {
+    "resy": "https://resy.com/cities/miami/venues/cote-miami",
+    "openTable": null
+  },
+  "402": {
+    "resy": "https://resy.com/cities/miami/venues/zak-the-baker",
+    "openTable": null
+  },
+  "403": {
+    "resy": "https://resy.com/cities/miami/venues/kyu",
+    "openTable": null
+  },
+  "404": {
+    "resy": "https://resy.com/cities/miami/venues/stubborn-seed",
+    "openTable": null
+  },
+  "405": {
+    "resy": "https://resy.com/cities/miami/venues/versailles",
+    "openTable": null
+  },
+  "501": {
+    "resy": "https://resy.com/cities/london/venues/st-john",
+    "openTable": null
+  },
+  "502": {
+    "resy": "https://resy.com/cities/london/venues/dishoom",
+    "openTable": null
+  },
+  "503": {
+    "resy": "https://resy.com/cities/london/venues/brat",
+    "openTable": null
+  },
+  "504": {
+    "resy": "https://resy.com/cities/london/venues/the-clove-club",
+    "openTable": null
+  },
+  "505": {
+    "resy": "https://resy.com/cities/london/venues/rochelle-canteen",
+    "openTable": null
+  },
+  "506": {
+    "resy": "https://resy.com/cities/london/venues/kiln",
+    "openTable": null
+  },
+  "601": {
+    "resy": "https://resy.com/cities/tokyo/venues/sukiyabashi-jiro-honten",
+    "openTable": null
+  },
+  "602": {
+    "resy": "https://resy.com/cities/tokyo/venues/narisawa",
+    "openTable": null
+  },
+  "603": {
+    "resy": "https://resy.com/cities/tokyo/venues/ichiran",
+    "openTable": null
+  },
+  "604": {
+    "resy": "https://resy.com/cities/tokyo/venues/tempura-kondo",
+    "openTable": null
+  },
+  "605": {
+    "resy": "https://resy.com/cities/tokyo/venues/sushi-saito",
+    "openTable": null
+  },
+  "606": {
+    "resy": "https://resy.com/cities/tokyo/venues/afuri",
+    "openTable": null
+  },
+  "701": {
+    "resy": "https://resy.com/cities/paris/venues/septime",
+    "openTable": null
+  },
+  "702": {
+    "resy": "https://resy.com/cities/paris/venues/l",
+    "openTable": null
+  },
+  "703": {
+    "resy": "https://resy.com/cities/paris/venues/du-pain-et-des-idees",
+    "openTable": null
+  },
+  "704": {
+    "resy": "https://resy.com/cities/paris/venues/frenchie",
+    "openTable": null
+  },
+  "705": {
+    "resy": "https://resy.com/cities/paris/venues/le-jules-verne",
+    "openTable": null
+  },
+  "801": {
+    "resy": "https://resy.com/cities/copenhagen/venues/noma",
+    "openTable": null
+  },
+  "802": {
+    "resy": "https://resy.com/cities/copenhagen/venues/geranium",
+    "openTable": null
+  },
+  "803": {
+    "resy": "https://resy.com/cities/copenhagen/venues/kadeau",
+    "openTable": null
+  },
+  "901": {
+    "resy": "https://resy.com/cities/sandiego/venues/addison",
+    "openTable": null
+  },
+  "902": {
+    "resy": "https://resy.com/cities/sandiego/venues/juniper-ivy",
+    "openTable": null
+  },
+  "903": {
+    "resy": "https://resy.com/cities/sandiego/venues/el-jardin",
+    "openTable": null
+  },
+  "1001": {
+    "resy": "https://resy.com/cities/austin/venues/franklin-barbecue",
+    "openTable": null
+  },
+  "1002": {
+    "resy": "https://resy.com/cities/austin/venues/uchi",
+    "openTable": null
+  },
+  "1003": {
+    "resy": "https://resy.com/cities/austin/venues/emmer-rye",
+    "openTable": null
+  },
+  "1004": {
+    "resy": "https://resy.com/cities/austin/venues/interstellar-bbq",
+    "openTable": null
+  },
+  "1005": {
+    "resy": "https://resy.com/cities/austin/venues/veracruz-all-natural",
+    "openTable": null
+  },
+  "1006": {
+    "resy": "https://resy.com/cities/austin/venues/la-barbecue",
+    "openTable": null
+  },
+  "1007": {
+    "resy": "https://resy.com/cities/austin/venues/odd-duck",
+    "openTable": null
+  },
+  "1101": {
+    "resy": "https://resy.com/cities/nashville/venues/prince",
+    "openTable": null
+  },
+  "1102": {
+    "resy": "https://resy.com/cities/nashville/venues/the-catbird-seat",
+    "openTable": null
+  },
+  "1103": {
+    "resy": "https://resy.com/cities/nashville/venues/husk-nashville",
+    "openTable": null
+  },
+  "1104": {
+    "resy": "https://resy.com/cities/nashville/venues/rolf-daughters",
+    "openTable": null
+  },
+  "1105": {
+    "resy": "https://resy.com/cities/nashville/venues/arnold",
+    "openTable": null
+  },
+  "1106": {
+    "resy": "https://resy.com/cities/nashville/venues/butchertown-hall",
+    "openTable": null
+  },
+  "1201": {
+    "resy": "https://resy.com/cities/barcelona/venues/el-celler-de-can-roca",
+    "openTable": null
+  },
+  "1202": {
+    "resy": "https://resy.com/cities/barcelona/venues/bar-del-pla",
+    "openTable": null
+  },
+  "1203": {
+    "resy": "https://resy.com/cities/barcelona/venues/tickets",
+    "openTable": null
+  },
+  "1204": {
+    "resy": "https://resy.com/cities/barcelona/venues/la-cova-fumada",
+    "openTable": null
+  },
+  "1205": {
+    "resy": "https://resy.com/cities/barcelona/venues/bodega-sepulveda",
+    "openTable": null
+  },
+  "1206": {
+    "resy": "https://resy.com/cities/barcelona/venues/disfrutar",
+    "openTable": null
+  },
+  "1301": {
+    "resy": "https://resy.com/cities/mexico-city/venues/pujol",
+    "openTable": null
+  },
+  "1304": {
+    "resy": "https://resy.com/cities/mexico-city/venues/quintonil",
+    "openTable": null
+  },
+  "1305": {
+    "resy": "https://resy.com/cities/mexico-city/venues/los-cocuyos",
+    "openTable": null
+  },
+  "1401": {
+    "resy": "https://resy.com/cities/lisbon/venues/belcanto",
+    "openTable": null
+  },
+  "1402": {
+    "resy": "https://resy.com/cities/lisbon/venues/time-out-market",
+    "openTable": null
+  },
+  "1403": {
+    "resy": "https://resy.com/cities/lisbon/venues/a-cevicheria",
+    "openTable": null
+  },
+  "1404": {
+    "resy": "https://resy.com/cities/lisbon/venues/tasca-do-chico",
+    "openTable": null
+  },
+  "1405": {
+    "resy": "https://resy.com/cities/lisbon/venues/cervejaria-ramiro",
+    "openTable": null
+  },
+  "1406": {
+    "resy": "https://resy.com/cities/lisbon/venues/solar-dos-presuntos",
+    "openTable": null
+  },
+  "1501": {
+    "resy": "https://resy.com/cities/seoul/venues/mingles",
+    "openTable": null
+  },
+  "1502": {
+    "resy": "https://resy.com/cities/seoul/venues/jungsik",
+    "openTable": null
+  },
+  "1503": {
+    "resy": "https://resy.com/cities/seoul/venues/gwangjang-market",
+    "openTable": null
+  },
+  "1504": {
+    "resy": "https://resy.com/cities/seoul/venues/maple-tree-house",
+    "openTable": null
+  },
+  "1505": {
+    "resy": "https://resy.com/cities/seoul/venues/tosokchon-samgyetang",
+    "openTable": null
+  },
+  "1506": {
+    "resy": "https://resy.com/cities/seoul/venues/neurin-maeul",
+    "openTable": null
+  },
+  "5001": {
+    "resy": "https://resy.com/cities/la/venues/anajak-thai",
+    "openTable": null
+  },
+  "5002": {
+    "resy": "https://resy.com/cities/la/venues/holbox",
+    "openTable": null
+  },
+  "5003": {
+    "resy": "https://resy.com/cities/la/venues/gjelina",
+    "openTable": null
+  },
+  "5004": {
+    "resy": "https://resy.com/cities/la/venues/the-tasting-kitchen",
+    "openTable": null
+  },
+  "5005": {
+    "resy": "https://resy.com/cities/la/venues/dialogue",
+    "openTable": null
+  }
+}
