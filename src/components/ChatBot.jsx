@@ -4623,6 +4623,17 @@ function renderText(text) {
     .replace(/`(.*?)`/g, "$1");
 }
 
+function normalizeOpenTableUrl(urlOrSlug, restaurantName) {
+  const raw = (urlOrSlug || "").trim();
+  if (raw.startsWith("https://")) return raw;
+  if (raw.startsWith("http://")) return "https://" + raw.slice(7);
+  const lower = raw.toLowerCase();
+  if (lower.startsWith("opentable.com") || lower.startsWith("www.opentable.com")) return "https://" + raw.replace(/^https?:\/\//i, "").replace(/^\/+/, "");
+  if (raw.startsWith("/")) return "https://www.opentable.com" + raw;
+  if (!raw) return "https://www.opentable.com/s/?term=" + encodeURIComponent(restaurantName || "");
+  return "https://www.opentable.com/" + raw.replace(/^\/+/, "");
+}
+
 function renderMessageContent(content) {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = content.split(urlRegex);
@@ -4631,8 +4642,9 @@ function renderMessageContent(content) {
       const isOpenTable = part.includes('opentable.com');
       const isResy = part.includes('resy.com');
       if (isOpenTable || isResy) {
+        const href = isOpenTable ? normalizeOpenTableUrl(part) : part;
         return (
-          <a key={i} href={part} target="_blank" rel="noopener noreferrer"
+          <a key={i} href={href} target="_blank" rel="noopener noreferrer"
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               marginTop: 8, padding: "8px 14px", borderRadius: 20,
