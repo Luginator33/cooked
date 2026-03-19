@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import { RESTAURANTS, CITIES, ALL_TAGS } from "../data/restaurants";
 import ChatBot from "../components/ChatBot";
 import Profile from "./Profile";
 
-const DATA_VERSION = "v5-2919";
+mapboxgl.accessToken = "pk.eyJ1IjoibHVnaW5hdG9yMzMiLCJhIjoiY21teDAwMDd4MGh4MjJwcGxiN2lsc256YiJ9.86LYbprLBOMM5xEK5mHmNg";
+
+const DATA_VERSION = "v5-2920";
 
 const BACKUP_KEYS = [
   "cooked_photos",
@@ -801,74 +805,66 @@ export default function Discover({ tasteProfile, initialTab }) {
     }));
   };
 
+  // Mapbox: create/destroy map when entering/leaving Map tab
   useEffect(() => {
-    if (tab !== "map" || !mapsReady) return;
+    if (tab !== "map") {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+      markersRef.current = [];
+      return;
+    }
     const el = mapRef.current;
     if (!el) return;
-    const center = city === "All" ? { lat: 30, lng: 10 } : (CITY_COORDS[city] || CITY_COORDS["Los Angeles"]);
-    const zoom = city === "All" ? 2 : 13;
-    filteredRef.current = filtered;
-
-    const initMap = async () => {
-      const { Map } = await google.maps.importLibrary("maps");
-      const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
-
-      if (!mapInstanceRef.current) {
-        mapInstanceRef.current = new Map(el, {
-          center,
-          zoom: 13,
-          mapId: "4504f8b37365c3d0",
-          disableDefaultUI: true,
-          zoomControl: true,
-          styles: [],
-        });
-      } else {
-        mapInstanceRef.current.setCenter(center);
-        mapInstanceRef.current.setZoom(zoom);
+    const map = new mapboxgl.Map({
+      container: el,
+      style: "mapbox://styles/mapbox/dark-v11",
+      center: [0, 20],
+      zoom: 2,
+    });
+    mapInstanceRef.current = map;
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
       }
-
-      markersRef.current.forEach(m => { m.map = null; });
       markersRef.current = [];
-      const cityRestaurants = filteredRef.current.filter(r => {
-        if (!r.lat || !r.lng) return true;
-        const dlat = Math.abs(r.lat - center.lat);
-        const dlng = Math.abs(r.lng - center.lng);
-        return dlat < 8 && dlng < 8;
-      });
+    };
+  }, [tab]);
 
-      const googleKey = import.meta.env.VITE_GOOGLE_PLACES_KEY;
-      for (const r of cityRestaurants) {
-        const lat = r.lat || center.lat + (Math.random() - 0.5) * 0.04;
-        const lng = r.lng || center.lng + (Math.random() - 0.5) * 0.04;
+  // Mapbox: update markers and fitBounds when tab is map and city/restaurants change
+  useEffect(() => {
+    if (tab !== "map" || !mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    const byCity = city === "All" ? allRestaurants : allRestaurants.filter(r => r.city === city);
+    const mapRestaurants = byCity.filter(r => r.lat != null && r.lng != null && r.lat !== 0);
 
-        const pin = document.createElement("div");
-        pin.style.cssText = `
-          width: 52px; height: 52px; border-radius: 50%;
-          overflow: hidden; border: 3px solid #fff;
-          box-shadow: 0 3px 12px rgba(0,0,0,0.35);
-          cursor: pointer; background: #eee;
-          transition: transform 0.2s;
-        `;
-        pin.onmouseenter = () => { pin.style.transform = "scale(1.15)"; };
-        pin.onmouseleave = () => { pin.style.transform = "scale(1)"; };
-        const img = document.createElement("img");
-        img.src = r.img || "";
-        img.style.cssText = "width:100%;height:100%;object-fit:cover;";
-        pin.appendChild(img);
-
-        const marker = new AdvancedMarkerElement({
-          map: mapInstanceRef.current,
-          position: { lat, lng },
-          content: pin,
-          title: r.name,
-        });
-        marker.addListener("click", () => setSelectedRest(r));
+    const updateMarkers = () => {
+      markersRef.current.forEach(m => m.remove());
+      markersRef.current = [];
+      mapRestaurants.forEach(r => {
+        const el = document.createElement("div");
+        el.style.cssText = "width:14px;height:14px;border-radius:50%;background:#c4603a;border:2px solid #fff;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.35);";
+        const marker = new mapboxgl.Marker({ element: el, anchor: "center" })
+          .setLngLat([r.lng, r.lat])
+          .addTo(map);
+        el.addEventListener("click", () => setSelectedRest(r));
         markersRef.current.push(marker);
+      });
+      if (mapRestaurants.length > 0) {
+        const bounds = new mapboxgl.LngLatBounds();
+        mapRestaurants.forEach(r => bounds.extend([r.lng, r.lat]));
+        map.fitBounds(bounds, { padding: 40, maxZoom: 14 });
       }
     };
 
-    initMap();
-  }, [tab, city, mapsReady]);
+    if (map.loaded()) {
+      updateMarkers();
+    } else {
+      map.once("load", updateMarkers);
+    }
+  }, [tab, city, allRestaurants]);
 
   const findsIds = (() => { try { return JSON.parse(localStorage.getItem("cooked_finds") || "[]"); } catch { return []; } })();
   const findsList = findsIds.map((id) => allRestaurants.find((r) => r.id === id || r.id === Number(id))).filter(Boolean);
@@ -2148,8 +2144,10 @@ export default function Discover({ tasteProfile, initialTab }) {
 
       {/* Map Tab */}
       {tab === "map" && (
-        <div style={{ position:"fixed", top:130, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, bottom:70, zIndex:1 }}>
-          <div ref={mapRef} style={{ width:"100%", height:"100%" }} />
+        <>
+          <div style={{ position:"fixed", top:0, left:0, right:0, bottom:60, zIndex:1, background:C.bg }} />
+          <div style={{ position:"fixed", top:0, bottom:60, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, zIndex:2 }}>
+            <div ref={mapRef} style={{ width:"100%", height:"100%" }} />
           {selectedRest && (
             <div style={{ position:"absolute", bottom:16, left:16, right:16, background:"#fff9f2", borderRadius:20, overflow:"hidden", boxShadow:"0 8px 40px rgba(30,18,8,0.25)", border:"1px solid #ddd0bc", cursor:"pointer" }} onClick={() => { setDetailRestaurant(selectedRest); setSelectedRest(null); }}>
               <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedRest(null); }} style={{ position:"absolute", top:10, right:10, zIndex:10, width:32, height:32, borderRadius:"50%", border:"none", background:"rgba(30,18,8,0.5)", backdropFilter:"blur(4px)", color:"#fff", fontSize:16, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, isolation:"isolate" }}>✕</button>
@@ -2171,7 +2169,8 @@ export default function Discover({ tasteProfile, initialTab }) {
               </div>
             </div>
           )}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Profile Tab */}
