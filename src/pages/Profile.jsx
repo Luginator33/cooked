@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
-import { getFollowers, getFollowing, getUserProfile } from "../lib/supabase";
+import { getFollowers, getFollowing, getUserProfile, saveUserData, supabase } from "../lib/supabase";
 
 const C = {
   bg: "#0f0c09", bg2: "#1a1208", bg3: "#2e1f0e",
@@ -31,6 +31,13 @@ function EyeIcon({ size = 14, color = C.muted }) {
 
 export default function Profile({ allRestaurants = [], heatResults = {}, watchlist = [], onOpenDetail, onFixPhotos, clerkName, clerkImageUrl, onViewUser }) {
   const { user } = useUser();
+  const NOTIFICATION_TYPES = [
+    { key: "followed_you", label: "Someone follows you", sublabel: "Get notified when someone follows your profile." },
+    { key: "friend_loved_your_watchlist", label: "Friend loved a restaurant you watchlisted", sublabel: "See when friends love places you've saved." },
+    { key: "restaurant_trending", label: "A restaurant you loved is trending", sublabel: "Track momentum for your favorite spots." },
+    { key: "friend_new_find", label: "Friend added a new Find", sublabel: "Know when friends discover new places." },
+    { key: "friend_visited_your_city", label: "Friend visited a city you follow", sublabel: "Stay updated on friend activity in your cities." },
+  ];
   const [photo, setPhoto] = useState(() => clerkImageUrl || localStorage.getItem("cooked_profile_photo") || null);
   const [name, setName] = useState(() => clerkName || localStorage.getItem("cooked_profile_name") || "Luga");
   const [username, setUsername] = useState(() => localStorage.getItem("cooked_profile_username") || "@luginator33");
@@ -44,6 +51,11 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
   const [followingCount, setFollowingCount] = useState(0);
   const [bannerIdx, setBannerIdx] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState(() =>
+    NOTIFICATION_TYPES.reduce((acc, n) => ({ ...acc, [n.key]: true }), {})
+  );
   const fileRef = useRef();
 
   useEffect(() => {
@@ -52,10 +64,40 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
     setEditName(clerkName);
   }, [clerkName]);
 
+  // Custom banner (base64 or URL); when set, overrides rotating loved-photo banner
+  const [customBanner, setCustomBanner] = useState(() => localStorage.getItem("cooked_banner_photo") || null);
+  const bannerFileRef = useRef();
+
+  // Supabase is source of truth for profile_photo / banner_photo; then Clerk image, then localStorage
   useEffect(() => {
-    if (!clerkImageUrl) return;
-    setPhoto(clerkImageUrl);
-  }, [clerkImageUrl]);
+    let cancelled = false;
+    (async () => {
+      if (!user?.id) {
+        if (!cancelled) {
+          setPhoto(clerkImageUrl || localStorage.getItem("cooked_profile_photo") || null);
+          setCustomBanner(localStorage.getItem("cooked_banner_photo") || null);
+        }
+        return;
+      }
+      const { data } = await getUserProfile(user.id);
+      if (cancelled) return;
+      if (data?.profile_photo) {
+        setPhoto(data.profile_photo);
+        localStorage.setItem("cooked_profile_photo", data.profile_photo);
+      } else {
+        const p = clerkImageUrl || localStorage.getItem("cooked_profile_photo") || null;
+        setPhoto(p);
+      }
+      if (data?.banner_photo) {
+        setCustomBanner(data.banner_photo);
+        localStorage.setItem("cooked_banner_photo", data.banner_photo);
+      } else {
+        const b = localStorage.getItem("cooked_banner_photo") || null;
+        setCustomBanner(b);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, clerkImageUrl]);
 
   // Rules: heat (flame) OR loved → Loved list; watchlist → Watchlist list; IG imports → Finds list
   const lovedIds = heatResults?.loved || [];
@@ -108,18 +150,39 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
   }).filter(Boolean);
 
   useEffect(() => {
-    if (lovedPhotos.length > 1) {
-      const timer = setInterval(() => setBannerIdx(i => (i + 1) % lovedPhotos.length), 4000);
-      return () => clearInterval(timer);
-    }
-  }, [lovedPhotos.length]);
+    if (customBanner || lovedPhotos.length <= 1) return;
+    const timer = setInterval(() => setBannerIdx(i => (i + 1) % lovedPhotos.length), 4000);
+    return () => clearInterval(timer);
+  }, [customBanner, lovedPhotos.length]);
 
-  const currentBanner = lovedPhotos[bannerIdx] || null;
+  const rotatingBanner = lovedPhotos[bannerIdx] || null;
+  const currentBanner = customBanner || rotatingBanner;
 
   const handlePhotoUpload = (e) => {
     const file = e.target.files[0]; if (!file) return;
+    const input = e.target;
     const reader = new FileReader();
-    reader.onload = (ev) => { setPhoto(ev.target.result); localStorage.setItem("cooked_profile_photo", ev.target.result); };
+    reader.onload = (ev) => {
+      const base64DataUrl = ev.target.result;
+      setPhoto(base64DataUrl);
+      localStorage.setItem("cooked_profile_photo", base64DataUrl);
+      if (user?.id) saveUserData(user.id, { profile_photo: base64DataUrl });
+      input.value = "";
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleBannerUpload = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const input = e.target;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const base64DataUrl = ev.target.result;
+      setCustomBanner(base64DataUrl);
+      localStorage.setItem("cooked_banner_photo", base64DataUrl);
+      if (user?.id) saveUserData(user.id, { banner_photo: base64DataUrl });
+      input.value = "";
+    };
     reader.readAsDataURL(file);
   };
 
@@ -131,7 +194,7 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
   };
 
   const exportBackup = () => {
-    const keys = ["cooked_restaurants","cooked_photos","cooked_photo_resolved","cooked_heat","cooked_hidden","cooked_watchlist","cooked_finds","cooked_profile_photo","cooked_profile_name","cooked_profile_username","cooked_data_version"];
+    const keys = ["cooked_restaurants","cooked_photos","cooked_photo_resolved","cooked_heat","cooked_hidden","cooked_watchlist","cooked_finds","cooked_profile_photo","cooked_banner_photo","cooked_profile_name","cooked_profile_username","cooked_data_version"];
     const backup = {};
     keys.forEach(k => { const v = localStorage.getItem(k); if (v) backup[k] = v; });
     const blob = new Blob([JSON.stringify(backup)], { type: "application/json" });
@@ -197,6 +260,41 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
       };
     }));
     setSocialModal({ title: kind === "followers" ? "Followers" : "Following", users: profiles, loading: false });
+  };
+
+  const openNotifications = async () => {
+    setNotificationsOpen(true);
+    if (!user?.id) return;
+    setNotifLoading(true);
+    const defaults = NOTIFICATION_TYPES.reduce((acc, n) => ({ ...acc, [n.key]: true }), {});
+    try {
+      const { data } = await supabase
+        .from("notification_prefs")
+        .select("*")
+        .eq("clerk_user_id", user.id);
+      const merged = { ...defaults };
+      (data || []).forEach((row) => {
+        if (row?.type) merged[row.type] = row.enabled !== false;
+      });
+      setNotifPrefs(merged);
+    } finally {
+      setNotifLoading(false);
+    }
+  };
+
+  const toggleNotificationPref = async (type) => {
+    if (!user?.id) return;
+    const nextEnabled = !notifPrefs[type];
+    setNotifPrefs((prev) => ({ ...prev, [type]: nextEnabled }));
+    const { error } = await supabase
+      .from("notification_prefs")
+      .upsert(
+        { clerk_user_id: user.id, type, enabled: nextEnabled, updated_at: new Date().toISOString() },
+        { onConflict: "clerk_user_id,type" }
+      );
+    if (error) {
+      setNotifPrefs((prev) => ({ ...prev, [type]: !nextEnabled }));
+    }
   };
 
   const tabs = [
@@ -447,6 +545,12 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
               Edit Profile
             </button>
 
+            <button type="button" onClick={() => { bannerFileRef.current?.click(); }}
+              style={{ width: "100%", padding: "14px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 10 }}>
+              Change banner photo
+            </button>
+            <input ref={bannerFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleBannerUpload} />
+
             {/* Fix photos */}
             {onFixPhotos && (
               <button type="button" onClick={() => { setSettingsOpen(false); onFixPhotos(); }}
@@ -454,6 +558,14 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
                 🖼 Fix Photos
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={openNotifications}
+              style={{ width: "100%", padding: "14px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 10 }}
+            >
+              Notification Preferences
+            </button>
 
             {/* Backup */}
             <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
@@ -470,6 +582,53 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
             <button type="button" onClick={() => setSettingsOpen(false)}
               style={{ width: "100%", padding: 14, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 12, color: C.muted, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
               Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {notificationsOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 1000, display: "flex", alignItems: "flex-end" }} onClick={() => setNotificationsOpen(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px", maxHeight: "78vh", overflowY: "auto" }}>
+            <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 20, color: C.text, marginBottom: 14 }}>Notification Preferences</div>
+            {notifLoading ? (
+              <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Loading…</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {NOTIFICATION_TYPES.map((pref) => {
+                  const enabled = notifPrefs[pref.key] !== false;
+                  return (
+                    <div key={pref.key} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: C.text, fontSize: 14, fontFamily: "-apple-system,sans-serif", marginBottom: 2 }}>{pref.label}</div>
+                        <div style={{ color: C.muted, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>{pref.sublabel}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleNotificationPref(pref.key)}
+                        style={{
+                          width: 44,
+                          height: 24,
+                          borderRadius: 999,
+                          border: `1px solid ${enabled ? C.terracotta : C.dim}`,
+                          background: enabled ? C.terracotta : C.dim,
+                          cursor: "pointer",
+                          padding: 2,
+                          display: "flex",
+                          justifyContent: enabled ? "flex-end" : "flex-start",
+                          alignItems: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <span style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", display: "block" }} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <button type="button" onClick={() => setNotificationsOpen(false)} style={{ width: "100%", padding: 14, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 12, color: C.muted, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif", marginTop: 14 }}>
+              Done
             </button>
           </div>
         </div>

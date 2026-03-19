@@ -130,6 +130,79 @@ const PageHeader = ({ right }) => (
   </div>
 );
 
+function NotificationBellIcon({ color = C.text }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+
+function MapPinTabIcon({ size = 18, color = C.muted }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round">
+      <path d="M12 2C8 2 5 5.5 5 9c0 5 7 13 7 13s7-8 7-13c0-3.5-3-7-7-7z" />
+      <circle cx="12" cy="9" r="2.5" />
+    </svg>
+  );
+}
+
+function NotificationTypeIcon({ type, size = 18 }) {
+  const stroke = C.muted;
+  switch (type) {
+    case "followed_you":
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <line x1="19" y1="8" x2="19" y2="14" />
+          <line x1="22" y1="11" x2="16" y2="11" />
+        </svg>
+      );
+    case "restaurant_trending":
+    case "friend_loved_your_watchlist":
+      return <FlameIcon size={size} color={stroke} filled={false} />;
+    case "friend_new_find":
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-4-4" />
+        </svg>
+      );
+    case "friend_visited_your_city":
+      return <MapPinTabIcon size={size} color={stroke} />;
+    default:
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.5" strokeLinecap="round">
+          <circle cx="12" cy="12" r="9" />
+        </svg>
+      );
+  }
+}
+
+function formatNotificationTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const diff = Date.now() - d.getTime();
+  const min = Math.floor(diff / 60000);
+  const h = Math.floor(diff / 3600000);
+  const day = Math.floor(diff / 86400000);
+  if (min < 1) return "now";
+  if (min < 60) return `${min}m ago`;
+  if (h < 24) return `${h}h ago`;
+  if (day < 7) return `${day}d ago`;
+  return d.toLocaleDateString();
+}
+
+function notificationMessage(row) {
+  if (row?.message != null && String(row.message).trim()) return String(row.message);
+  if (row?.body != null && String(row.body).trim()) return String(row.body);
+  if (row?.content != null && String(row.content).trim()) return String(row.content);
+  return "Notification";
+}
+
 // Restaurant cuisine → display category (Tier 2 dropdown when Restaurants selected)
 const RESTAURANT_CUISINE_CATEGORIES = [
   { label: "American", values: ["American", "American / Burgers", "American Diner", "American Southern", "New American", "California", "Californian", "BBQ", "Hawaiian", "British", "European"] },
@@ -444,6 +517,13 @@ export default function Discover({ tasteProfile, initialTab }) {
   });
   const [heatCity, setHeatCity] = useState("All");
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
+  const [notifUnreadCount, setNotifUnreadCount] = useState(0);
+  const [notifSheetOpen, setNotifSheetOpen] = useState(false);
+  const [notifList, setNotifList] = useState([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [headerProfilePhoto, setHeaderProfilePhoto] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("cooked_profile_photo") : null
+  );
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState({ done: 0, total: 0 });
   useEffect(() => {
@@ -452,6 +532,52 @@ export default function Discover({ tasteProfile, initialTab }) {
     const t = setTimeout(() => document.addEventListener("click", close), 0);
     return () => { clearTimeout(t); document.removeEventListener("click", close); };
   }, [cityPickerOpen]);
+
+  useEffect(() => {
+    setHeaderProfilePhoto(typeof window !== "undefined" ? localStorage.getItem("cooked_profile_photo") : null);
+  }, [tab]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setNotifUnreadCount(0);
+      return;
+    }
+    const fetchUnreadCount = async () => {
+      const { count } = await supabase
+        .from("notifications")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("read", false);
+      setNotifUnreadCount(typeof count === "number" ? count : 0);
+    };
+    fetchUnreadCount();
+    const intervalId = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(intervalId);
+  }, [user?.id]);
+
+  const openNotificationsSheet = async () => {
+    setNotifSheetOpen(true);
+    if (!user?.id) {
+      setNotifList([]);
+      setNotifLoading(false);
+      return;
+    }
+    setNotifLoading(true);
+    const { data } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    const rows = data || [];
+    setNotifList(rows);
+    setNotifLoading(false);
+    // Let one paint so unread rows briefly show the terracotta accent before we mark read
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await supabase.from("notifications").update({ read: true }).eq("user_id", user.id).eq("read", false);
+    setNotifUnreadCount(0);
+    setNotifList((prev) => (prev || []).map((r) => ({ ...r, read: true })));
+  };
 
   useEffect(() => {
     if (tab === "home") setHomeChatKey((k) => k + 1);
@@ -1843,6 +1969,34 @@ export default function Discover({ tasteProfile, initialTab }) {
                 style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)", border:"none", fontSize:15, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
                 📸
               </button>
+              <button
+                type="button"
+                onClick={openNotificationsSheet}
+                aria-label="Notifications"
+                style={{ position:"relative", width:40, height:40, borderRadius:"50%", border:"none", background:"transparent", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", padding:0, flexShrink:0 }}
+              >
+                <NotificationBellIcon color={C.text} />
+                {notifUnreadCount > 0 ? (
+                  <span style={{ position:"absolute", top:6, right:6, width:8, height:8, borderRadius:"50%", background:C.terracotta, pointerEvents:"none" }} />
+                ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("profile")}
+                aria-label="Profile"
+                style={{ width:36, height:36, borderRadius:"50%", border:`1.5px solid ${C.border}`, overflow:"hidden", padding:0, cursor:"pointer", background:C.bg2, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}
+              >
+                {headerProfilePhoto || user?.imageUrl ? (
+                  <img
+                    src={headerProfilePhoto || user?.imageUrl || ""}
+                    alt=""
+                    style={{ width:"100%", height:"100%", objectFit:"cover" }}
+                    onError={(e) => { e.target.style.display = "none"; }}
+                  />
+                ) : (
+                  <div style={{ width:"100%", height:"100%", background:C.bg3 }} />
+                )}
+              </button>
             </div>
           }
         />
@@ -3140,6 +3294,73 @@ export default function Discover({ tasteProfile, initialTab }) {
           onClose={() => setViewingUserId(null)}
           onOpenDetail={setDetailRestaurant}
         />
+      )}
+
+      {notifSheetOpen && createPortal(
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1001, display: "flex", alignItems: "flex-end" }}
+          onClick={() => setNotifSheetOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 480,
+              margin: "0 auto",
+              background: C.bg2,
+              borderRadius: "20px 20px 0 0",
+              maxHeight: "75vh",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Notifications</div>
+              <button
+                type="button"
+                onClick={() => setNotifSheetOpen(false)}
+                style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ overflowY: "auto", flex: 1, padding: "8px 18px 24px", WebkitOverflowScrolling: "touch" }}>
+              {notifLoading ? (
+                <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Loading…</div>
+              ) : notifList.length === 0 ? (
+                <div style={{ padding: "24px 0", textAlign: "center", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>No notifications yet</div>
+              ) : (
+                notifList.map((n) => {
+                  const unread = n.read === false;
+                  return (
+                    <div
+                      key={n.id ?? `${n.created_at}-${n.type}`}
+                      style={{
+                        display: "flex",
+                        gap: 12,
+                        alignItems: "flex-start",
+                        padding: "12px 0",
+                        borderBottom: `1px solid ${C.border}`,
+                        borderLeft: unread ? `3px solid ${C.terracotta}` : "none",
+                        paddingLeft: unread ? 11 : 14,
+                      }}
+                    >
+                      <div style={{ flexShrink: 0, marginTop: 2 }}>
+                        <NotificationTypeIcon type={n.type} size={18} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, color: C.text, fontFamily: "-apple-system,sans-serif", lineHeight: 1.45 }}>{notificationMessage(n)}</div>
+                        <div style={{ fontSize: 11, color: C.muted, fontFamily: "-apple-system,sans-serif", marginTop: 4 }}>{formatNotificationTime(n.created_at)}</div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
     </div>
