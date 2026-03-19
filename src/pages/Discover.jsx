@@ -6,7 +6,7 @@ import { RESTAURANTS, CITIES, ALL_TAGS } from "../data/restaurants";
 import ChatBot from "../components/ChatBot";
 import Profile from "./Profile";
 
-mapboxgl.accessToken = "pk.eyJ1IjoibHVnaW5hdG9yMzMiLCJhIjoiY21teDAwMDd4MGh4MjJwcGxiN2lsc256YiJ9.86LYbprLBOMM5xEK5mHmNg";
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const DATA_VERSION = "v5-2920";
 
