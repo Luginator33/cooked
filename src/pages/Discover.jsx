@@ -6,6 +6,7 @@ import { SignInButton, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
 import { RESTAURANTS, CITIES, ALL_TAGS } from "../data/restaurants";
 import ChatBot from "../components/ChatBot";
 import Profile from "./Profile";
+import { addCommunityRestaurant, getCommunityRestaurants, loadUserData, saveUserData } from "../lib/supabase";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -459,9 +460,27 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [userLists, setUserLists] = useState(() => {
     try { return JSON.parse(localStorage.getItem("cooked_lists") || "{\"Breakfast/Brunch\":[],\"Lunch\":[],\"Dinner\":[],\"Bar\":[],\"Coffee\":[]}"); } catch { return { "Breakfast/Brunch": [], "Lunch": [], "Dinner": [], "Bar": [], "Coffee": [] }; }
   });
+  const supabaseLoadedRef = useRef(false);
   useEffect(() => {
     localStorage.setItem("cooked_restaurants", JSON.stringify(allRestaurants));
   }, [allRestaurants]);
+
+  // Merge in community restaurants from Supabase so all users can see them.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const community = await getCommunityRestaurants();
+      if (cancelled || !Array.isArray(community) || community.length === 0) return;
+      setAllRestaurants((prev) => {
+        const byId = new Map(prev.map((r) => [r.id, r]));
+        community.forEach((r) => {
+          if (r && typeof r.id === "number") byId.set(r.id, { ...(byId.get(r.id) || {}), ...r });
+        });
+        return Array.from(byId.values());
+      });
+    })();
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => { localStorage.setItem("cooked_ratings", JSON.stringify(userRatings)); }, [userRatings]);
   useEffect(() => { localStorage.setItem("cooked_notes", JSON.stringify(userNotes)); }, [userNotes]);
   useEffect(() => { localStorage.setItem("cooked_lists", JSON.stringify(userLists)); }, [userLists]);
@@ -477,6 +496,114 @@ export default function Discover({ tasteProfile, initialTab }) {
     setTab(initialTab);
   }, [initialTab]);
   useEffect(() => { localStorage.setItem("cooked_heat", JSON.stringify(heatResults)); }, [heatResults]);
+
+  // Load user data from Supabase on sign-in; migrate local data if no remote row yet.
+  useEffect(() => {
+    if (!user?.id) {
+      supabaseLoadedRef.current = false;
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const remote = await loadUserData(user.id);
+      if (cancelled) return;
+
+      if (remote) {
+        const remoteHeat = remote.heat || {
+          loved: Array.isArray(remote.loved) ? remote.loved : [],
+          noped: Array.isArray(remote.noped) ? remote.noped : [],
+          skipped: Array.isArray(remote.skipped) ? remote.skipped : [],
+          votes: remote.votes && typeof remote.votes === "object" ? remote.votes : {},
+        };
+        const remoteWatchlist = Array.isArray(remote.watchlist) ? remote.watchlist : [];
+        const remoteRatings = remote.ratings && typeof remote.ratings === "object" ? remote.ratings : {};
+        const remotePhotos = remote.photos && typeof remote.photos === "object" ? remote.photos : null;
+        const remotePhotoResolved = Array.isArray(remote.photo_resolved) ? remote.photo_resolved : [];
+
+        setHeatResults(remoteHeat);
+        setWatchlist(remoteWatchlist);
+        setUserRatings(remoteRatings);
+        setPhotoResolved(remotePhotoResolved);
+
+        localStorage.setItem("cooked_heat", JSON.stringify(remoteHeat));
+        localStorage.setItem("cooked_watchlist", JSON.stringify(remoteWatchlist));
+        localStorage.setItem("cooked_ratings", JSON.stringify(remoteRatings));
+        localStorage.setItem("cooked_photo_resolved", JSON.stringify(remotePhotoResolved));
+        if (remotePhotos) {
+          localStorage.setItem("cooked_photos", JSON.stringify(remotePhotos));
+        }
+        if (remote.profile_photo) {
+          localStorage.setItem("cooked_profile_photo", remote.profile_photo);
+        }
+        if (remote.banner_photo) {
+          localStorage.setItem("cooked_banner_photo", remote.banner_photo);
+        }
+      } else {
+        let localPhotos = {};
+        try { localPhotos = JSON.parse(localStorage.getItem("cooked_photos") || "{}"); } catch {}
+        const profilePhoto = localStorage.getItem("cooked_profile_photo") || null;
+        const bannerPhoto = localStorage.getItem("cooked_banner_photo") || null;
+        const hasLocalData =
+          (heatResults?.loved?.length || 0) > 0 ||
+          (heatResults?.noped?.length || 0) > 0 ||
+          (heatResults?.skipped?.length || 0) > 0 ||
+          Object.keys(heatResults?.votes || {}).length > 0 ||
+          (watchlist?.length || 0) > 0 ||
+          Object.keys(userRatings || {}).length > 0 ||
+          Object.keys(localPhotos || {}).length > 0 ||
+          (photoResolved?.length || 0) > 0 ||
+          !!profilePhoto ||
+          !!bannerPhoto;
+
+        if (hasLocalData) {
+          await saveUserData(user.id, {
+            loved: heatResults?.loved || [],
+            noped: heatResults?.noped || [],
+            skipped: heatResults?.skipped || [],
+            votes: heatResults?.votes || {},
+            heat: heatResults || { loved: [], noped: [], skipped: [], votes: {} },
+            watchlist: watchlist || [],
+            ratings: userRatings || {},
+            photos: localPhotos || {},
+            photo_resolved: photoResolved || [],
+            profile_photo: profilePhoto,
+            banner_photo: bannerPhoto,
+          });
+        }
+      }
+
+      supabaseLoadedRef.current = true;
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  // Debounced Supabase sync so swipes/toggles don't trigger a write per action.
+  useEffect(() => {
+    if (!user?.id || !supabaseLoadedRef.current) return;
+    const timeoutId = setTimeout(() => {
+      let localPhotos = {};
+      try { localPhotos = JSON.parse(localStorage.getItem("cooked_photos") || "{}"); } catch {}
+      const profilePhoto = localStorage.getItem("cooked_profile_photo") || null;
+      const bannerPhoto = localStorage.getItem("cooked_banner_photo") || null;
+      saveUserData(user.id, {
+        loved: heatResults?.loved || [],
+        noped: heatResults?.noped || [],
+        skipped: heatResults?.skipped || [],
+        votes: heatResults?.votes || {},
+        heat: heatResults || { loved: [], noped: [], skipped: [], votes: {} },
+        watchlist: watchlist || [],
+        ratings: userRatings || {},
+        photos: localPhotos || {},
+        photo_resolved: photoResolved || [],
+        profile_photo: profilePhoto,
+        banner_photo: bannerPhoto,
+      });
+    }, 2000);
+    return () => clearTimeout(timeoutId);
+  }, [user?.id, heatResults, watchlist, userRatings, photoResolved]);
 
   const exportBackup = () => {
     const data = {};
@@ -1052,6 +1179,7 @@ export default function Discover({ tasteProfile, initialTab }) {
         setAllRestaurants((prev) => (toAdd.length ? [...toAdd, ...prev] : prev));
         if (toAdd.length) {
           addToCookedFinds(toAdd.map((x) => x.id));
+          Promise.all(toAdd.map((restaurantObject) => addCommunityRestaurant(restaurantObject))).catch(() => {});
           try { localStorage.setItem("cooked_restaurants", JSON.stringify([...toAdd, ...current])); } catch {}
         }
         setIgAddedRestaurants(baseRestaurants);
@@ -1231,6 +1359,9 @@ export default function Discover({ tasteProfile, initialTab }) {
         return { ...restaurant, img: chosen, img2: chosen };
       })
       .filter(Boolean);
+    if (updated.length) {
+      Promise.all(updated.map((restaurantObject) => addCommunityRestaurant(restaurantObject))).catch(() => {});
+    }
     setIgAddedRestaurants(updated);
     setIgDone(true);
     setIgPhotoPicker([]);
@@ -1969,7 +2100,6 @@ export default function Discover({ tasteProfile, initialTab }) {
                     },
                   };
                 });
-                if (dir === 'right') setSaved(prev => prev.includes(r.id) ? prev : [...prev, r.id]);
               }
             } finally {
               setSwipeDelta({ x: 0, y: 0 });
