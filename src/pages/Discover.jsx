@@ -7,7 +7,7 @@ import { RESTAURANTS, CITIES, ALL_TAGS } from "../data/restaurants";
 import ChatBot from "../components/ChatBot";
 import Profile from "./Profile";
 import UserProfile from "./UserProfile";
-import { addCommunityRestaurant, followUser, getCommunityRestaurants, getFollowing, isFollowing as checkUserIsFollowing, loadUserData, saveUserData, supabase, unfollowUser } from "../lib/supabase";
+import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadUserData, saveUserData, supabase, unfollowCity, unfollowUser } from "../lib/supabase";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -142,6 +142,24 @@ function NotificationBellIcon({ color = C.text }) {
 function MapPinTabIcon({ size = 18, color = C.muted }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round">
+      <path d="M12 2C8 2 5 5.5 5 9c0 5 7 13 7 13s7-8 7-13c0-3.5-3-7-7-7z" />
+      <circle cx="12" cy="9" r="2.5" />
+    </svg>
+  );
+}
+
+/** City picker follow toggle — filled terracotta when following, outlined when not */
+function CityFollowPinIcon({ followed }) {
+  if (followed) {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill={C.terracotta} stroke={C.terracotta} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2C8 2 5 5.5 5 9c0 5 7 13 7 13s7-8 7-13c0-3.5-3-7-7-7z" />
+        <circle cx="12" cy="9" r="2.5" fill={C.bg2} />
+      </svg>
+    );
+  }
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 2C8 2 5 5.5 5 9c0 5 7 13 7 13s7-8 7-13c0-3.5-3-7-7-7z" />
       <circle cx="12" cy="9" r="2.5" />
     </svg>
@@ -420,6 +438,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const { user } = useUser();
   const [tab, setTab] = useState(initialTab || "home");
   const [city, setCity] = useState("Los Angeles");
+  const [followedCities, setFollowedCities] = useState([]);
   const [watchlist, setWatchlist] = useState(() => {
     try { return JSON.parse(localStorage.getItem("cooked_watchlist") || "[]"); } catch { return []; }
   });
@@ -560,6 +579,35 @@ export default function Discover({ tasteProfile, initialTab }) {
     const t = setTimeout(() => document.addEventListener("click", close), 0);
     return () => { clearTimeout(t); document.removeEventListener("click", close); };
   }, [cityPickerOpen]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setFollowedCities([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await getFollowedCities(user.id);
+      if (cancelled) return;
+      const names = (data || []).map((row) => row?.city).filter(Boolean);
+      setFollowedCities(names);
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  const toggleCityFollow = async (cityName, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user?.id || !cityName || cityName === "All") return;
+    const isFollowingCity = followedCities.includes(cityName);
+    if (isFollowingCity) {
+      const { error } = await unfollowCity(user.id, cityName);
+      if (!error) setFollowedCities((prev) => prev.filter((c) => c !== cityName));
+    } else {
+      const { error } = await followCity(user.id, cityName);
+      if (!error) setFollowedCities((prev) => (prev.includes(cityName) ? prev : [...prev, cityName]));
+    }
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setPeopleDebouncedQuery(peopleSearchInput), 300);
@@ -2120,7 +2168,38 @@ export default function Discover({ tasteProfile, initialTab }) {
                     <span style={{ fontSize:11, color:C.muted, marginTop:1 }}>{cityPickerOpen ? "▴" : "▾"}</span>
                   </button>
                   {cityPickerOpen && (
-                    <div style={{ position:"absolute", top:"calc(100% + 8px)", left:-12, zIndex:600, background:C.bg2, borderRadius:14, boxShadow:"0 12px 40px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.25)", border:`1px solid ${C.border}`, width:188, maxHeight:340, overflowY:"auto", scrollbarWidth:"none", padding:"6px 0 8px" }} onClick={e => e.stopPropagation()}>
+                    <div style={{ position:"absolute", top:"calc(100% + 8px)", left:-12, zIndex:600, background:C.bg2, borderRadius:14, boxShadow:"0 12px 40px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.25)", border:`1px solid ${C.border}`, width:220, maxHeight:340, overflowY:"auto", scrollbarWidth:"none", padding:"6px 0 8px" }} onClick={e => e.stopPropagation()}>
+                      {user?.id && followedCities.length > 0 ? (
+                        <div style={{ padding:"0 0 8px", borderBottom:`1px solid ${C.border2}` }}>
+                          <div style={{ padding:"6px 14px 6px", fontFamily:"'DM Mono',monospace", fontSize:8, color:C.dim, letterSpacing:"1.8px", textTransform:"uppercase" }}>Cities You Follow</div>
+                          <div style={{ display:"flex", flexWrap:"wrap", gap:6, padding:"0 10px 4px" }}>
+                            {followedCities.map((fc) => (
+                              <button
+                                key={fc}
+                                type="button"
+                                onClick={() => { setCity(fc); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
+                                style={{
+                                  padding:"5px 10px",
+                                  borderRadius:14,
+                                  border:`1px solid ${city === fc ? C.terracotta : C.border}`,
+                                  background: city === fc ? `${C.terracotta}22` : C.bg3,
+                                  color: city === fc ? C.terracotta : C.text,
+                                  fontSize:11,
+                                  fontFamily:"'DM Sans',sans-serif",
+                                  fontWeight: city === fc ? 600 : 400,
+                                  cursor:"pointer",
+                                  maxWidth:"100%",
+                                  whiteSpace:"nowrap",
+                                  overflow:"hidden",
+                                  textOverflow:"ellipsis",
+                                }}
+                              >
+                                {fc}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                       {[
                         { label:"", cities:["All"] },
                         { label:"North America", cities:["Los Angeles","New York","Chicago","San Francisco","Miami","Austin","Nashville","Dallas","Malibu","San Diego","Las Vegas","Napa","Portland","Scottsdale","Maui","Mexico City","Toronto","Ventura County"] },
@@ -2132,11 +2211,50 @@ export default function Discover({ tasteProfile, initialTab }) {
                       ].map((group, gi) => (
                         <div key={gi}>
                           {group.label ? <div style={{ padding: gi===1 ? "8px 16px 4px" : "10px 16px 4px", fontFamily:"'DM Mono',monospace", fontSize:8, color:C.dim, letterSpacing:"1.8px", textTransform:"uppercase", borderTop: gi===1 ? `1px solid ${C.border2}` : "none" }}>{group.label}</div> : null}
-                          {group.cities.map(c => (
-                            <button key={c} onClick={() => { setCity(c); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
-                              style={{ width:"100%", padding:"8px 16px", textAlign:"left", background: city===c ? `${C.terracotta}18` : "transparent", border:"none", color: city===c ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", fontWeight: city===c ? 600 : 400, cursor:"pointer", letterSpacing:"-0.1px", lineHeight:1.3 }}>
-                              {c === "All" ? "All Cities" : c}
-                            </button>
+                          {group.cities.map((c) => (
+                            <div key={c} style={{ display:"flex", alignItems:"stretch", width:"100%" }}>
+                              <button
+                                type="button"
+                                onClick={() => { setCity(c); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
+                                style={{
+                                  flex:1,
+                                  minWidth:0,
+                                  padding:"8px 8px 8px 14px",
+                                  textAlign:"left",
+                                  background: city===c ? `${C.terracotta}18` : "transparent",
+                                  border:"none",
+                                  color: city===c ? C.terracotta : C.text,
+                                  fontSize:14,
+                                  fontFamily:"'DM Sans',sans-serif",
+                                  fontWeight: city===c ? 600 : 400,
+                                  cursor:"pointer",
+                                  letterSpacing:"-0.1px",
+                                  lineHeight:1.3,
+                                }}
+                              >
+                                {c === "All" ? "All Cities" : c}
+                              </button>
+                              {c !== "All" && user?.id ? (
+                                <button
+                                  type="button"
+                                  aria-label={followedCities.includes(c) ? `Unfollow ${c}` : `Follow ${c}`}
+                                  onClick={(e) => toggleCityFollow(c, e)}
+                                  style={{
+                                    flexShrink:0,
+                                    width:38,
+                                    display:"flex",
+                                    alignItems:"center",
+                                    justifyContent:"center",
+                                    border:"none",
+                                    background:"transparent",
+                                    cursor:"pointer",
+                                    padding:0,
+                                  }}
+                                >
+                                  <CityFollowPinIcon followed={followedCities.includes(c)} />
+                                </button>
+                              ) : null}
+                            </div>
                           ))}
                         </div>
                       ))}
