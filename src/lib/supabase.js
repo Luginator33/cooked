@@ -27,6 +27,28 @@ export async function saveUserData(clerkUserId, updates) {
   if (error) console.error(error)
 }
 
+// Save photo cache (both preview + confirmed) to Supabase `user_data.photos`.
+export async function saveUserPhotos(clerkUserId, photos) {
+  if (!clerkUserId) return;
+  const { error } = await supabase
+    .from('user_data')
+    .update({ photos })
+    .eq('clerk_user_id', clerkUserId);
+  if (error) console.error('saveUserPhotos error:', error);
+}
+
+// Load photo cache from Supabase `user_data.photos`.
+export async function loadUserPhotos(clerkUserId) {
+  if (!clerkUserId) return {};
+  const { data, error } = await supabase
+    .from('user_data')
+    .select('photos')
+    .eq('clerk_user_id', clerkUserId)
+    .single();
+  if (error || !data) return {};
+  return data.photos || {};
+}
+
 // Save a community restaurant so other users can see it.
 export async function addCommunityRestaurant(restaurantObject) {
   const payload = { ...restaurantObject, description: restaurantObject.desc, updated_at: new Date().toISOString() }

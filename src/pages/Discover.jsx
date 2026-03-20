@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -7,7 +7,7 @@ import { RESTAURANTS, CITIES, ALL_TAGS } from "../data/restaurants";
 import ChatBot from "../components/ChatBot";
 import Profile from "./Profile";
 import UserProfile from "./UserProfile";
-import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadUserData, saveUserData, supabase, unfollowCity, unfollowUser } from "../lib/supabase";
+import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadUserData, loadUserPhotos, saveUserData, saveUserPhotos, supabase, unfollowCity, unfollowUser } from "../lib/supabase";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -462,10 +462,12 @@ function RestCard({ r, loved, watched, onLove, onWatch, onShare, onOpenDetail, o
   useEffect(() => {
     if (!r.img || !r.img.includes('picsum')) return; // already has a real photo
     try {
-      const vault = JSON.parse(safeLocalStorageGetItem('cooked_photos') || '{}');
-      if (vault[r.id]) { touchPhotoCacheAccess(r.id); return; }
-      const preview = JSON.parse(safeLocalStorageGetItem('cooked_photos_preview') || '{}');
-      if (preview[r.id]) { touchPhotoCacheAccess(r.id); return; }
+      const cached = getAnyCachedPhotoForId(r.id);
+      if (cached) {
+        if (!usingSupabasePhotoCache) touchPhotoCacheAccess(r.id);
+        setImgSrc(cached);
+        return;
+      }
     } catch {}
     const el = cardRef.current;
     if (!el) return;
@@ -639,15 +641,26 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [allRestaurants, setAllRestaurants] = useState(() => {
     try {
       let allVaultPhotos = {};
-      try { allVaultPhotos = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}"); } catch {}
+      // When signed in, Supabase is the source of truth for photos (no localStorage reads for vault).
+      if (!user?.id) {
+        try {
+          allVaultPhotos = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}");
+        } catch {}
+      }
       let resolvedIds = new Set();
-      try { resolvedIds = new Set(JSON.parse(safeLocalStorageGetItem("cooked_photo_resolved") || "[]")); } catch {}
+      if (!user?.id) {
+        try {
+          resolvedIds = new Set(JSON.parse(safeLocalStorageGetItem("cooked_photo_resolved") || "[]"));
+        } catch {}
+      }
       const savedPhotos = {};
       Object.keys(allVaultPhotos).forEach((id) => {
         if (resolvedIds.has(Number(id)) || resolvedIds.has(id)) savedPhotos[id] = allVaultPhotos[id];
       });
       let previewPhotos = {};
-      try { previewPhotos = JSON.parse(safeLocalStorageGetItem("cooked_photos_preview") || "{}"); } catch {}
+      if (!user?.id) {
+        try { previewPhotos = JSON.parse(safeLocalStorageGetItem("cooked_photos_preview") || "{}"); } catch {}
+      }
       const baseMerged = RESTAURANTS.map((r) => {
         const freshHeat = r.heat;
         const vaultImg = savedPhotos[r.id];
@@ -669,6 +682,84 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [photoResolved, setPhotoResolved] = useState(() => {
     try { return JSON.parse(safeLocalStorageGetItem("cooked_photo_resolved") || "[]"); } catch { return []; }
   });
+
+  // Photo cache source-of-truth.
+  // - Signed-in + Supabase `user_data.photos` with keys: use `photoCacheRef` (no localStorage reads for photos).
+  // - Otherwise: fall back to localStorage (`cooked_photos` + `cooked_photos_preview`).
+  const photoCacheRef = useRef({});
+  const [usingSupabasePhotoCache, setUsingSupabasePhotoCache] = useState(() => !!user?.id);
+  const [photoCacheVersion, setPhotoCacheVersion] = useState(0);
+
+  const resolvedIdSet = useMemo(() => {
+    const s = new Set();
+    for (const id of photoResolved || []) {
+      s.add(id);
+      s.add(Number(id));
+      s.add(String(id));
+    }
+    return s;
+  }, [photoResolved]);
+
+  const getVaultPhotoForId = (id) => {
+    if (usingSupabasePhotoCache) {
+      if (!resolvedIdSet.has(id) && !resolvedIdSet.has(Number(id)) && !resolvedIdSet.has(String(id))) return null;
+      return photoCacheRef.current?.[id] || photoCacheRef.current?.[Number(id)] || photoCacheRef.current?.[String(id)] || null;
+    }
+    try {
+      const vault = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}");
+      return vault?.[id] || vault?.[Number(id)] || vault?.[String(id)] || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const getPreviewPhotoForId = (id) => {
+    if (usingSupabasePhotoCache) {
+      if (resolvedIdSet.has(id) || resolvedIdSet.has(Number(id)) || resolvedIdSet.has(String(id))) return null;
+      return photoCacheRef.current?.[id] || photoCacheRef.current?.[Number(id)] || photoCacheRef.current?.[String(id)] || null;
+    }
+    try {
+      const preview = JSON.parse(safeLocalStorageGetItem("cooked_photos_preview") || "{}");
+      return preview?.[id] || preview?.[Number(id)] || preview?.[String(id)] || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const getAnyCachedPhotoForId = (id) => getVaultPhotoForId(id) || getPreviewPhotoForId(id);
+
+  // When the photo cache source switches (initial sign-in load), re-apply cached photo URIs to restaurant cards.
+  useEffect(() => {
+    if (!user?.id) return;
+    if (usingSupabasePhotoCache) {
+      const photos = photoCacheRef.current || {};
+      setAllRestaurants((prev) =>
+        prev.map((r) => {
+          const uri = photos?.[r.id] || photos?.[Number(r.id)] || photos?.[String(r.id)];
+          return uri ? { ...r, img: uri, img2: uri, heat: r.heat } : r;
+        })
+      );
+    } else {
+      let vault = {};
+      let preview = {};
+      try {
+        vault = JSON.parse(safeLocalStorageGetItem(COOKED_PHOTOS_KEY) || "{}") || {};
+      } catch {}
+      try {
+        preview = JSON.parse(safeLocalStorageGetItem(COOKED_PHOTOS_PREVIEW_KEY) || "{}") || {};
+      } catch {}
+      setAllRestaurants((prev) =>
+        prev.map((r) => {
+          const vaultImg = vault?.[r.id] || vault?.[Number(r.id)] || vault?.[String(r.id)];
+          if (vaultImg) return { ...r, img: vaultImg, img2: vaultImg, heat: r.heat };
+          const previewImg = preview?.[r.id] || preview?.[Number(r.id)] || preview?.[String(r.id)];
+          if (previewImg) return { ...r, img: previewImg, img2: previewImg, heat: r.heat };
+          return r;
+        })
+      );
+    }
+  }, [user?.id, usingSupabasePhotoCache, photoCacheVersion]);
+
   const [detailRestaurant, setDetailRestaurant] = useState(null);
   const [placeDetails, setPlaceDetails] = useState({});
   const [userRatings, setUserRatings] = useState(() => {
@@ -757,9 +848,8 @@ export default function Discover({ tasteProfile, initialTab }) {
     if (!detailRestaurant?.id) return;
     try {
       const id = detailRestaurant.id;
-      const vault = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}");
-      const preview = JSON.parse(safeLocalStorageGetItem("cooked_photos_preview") || "{}");
-      if (vault[id] || preview[id]) touchPhotoCacheAccess(id);
+      const cached = getAnyCachedPhotoForId(id);
+      if (cached && !usingSupabasePhotoCache) touchPhotoCacheAccess(id);
     } catch {}
   }, [detailRestaurant?.id]);
 
@@ -1076,8 +1166,16 @@ export default function Discover({ tasteProfile, initialTab }) {
         safeSetItem("cooked_watchlist", JSON.stringify(remoteWatchlist));
         safeSetItem("cooked_ratings", JSON.stringify(remoteRatings));
         safeSetItem("cooked_photo_resolved", JSON.stringify(remotePhotoResolved));
-        if (remotePhotos) {
-          safeSetItem("cooked_photos", JSON.stringify(remotePhotos));
+        const hasSupabasePhotos = remotePhotos && Object.keys(remotePhotos).length > 0;
+        if (hasSupabasePhotos) {
+          photoCacheRef.current = remotePhotos;
+          setUsingSupabasePhotoCache(true);
+          setPhotoCacheVersion((v) => v + 1);
+        } else {
+          setUsingSupabasePhotoCache(false);
+          photoCacheRef.current = {};
+          // Signed-in but no Supabase photo cache: fall back to localStorage photos.
+          setPhotoCacheVersion((v) => v + 1);
         }
         if (remote.profile_photo) {
           safeSetItem("cooked_profile_photo", remote.profile_photo);
@@ -1138,6 +1236,8 @@ export default function Discover({ tasteProfile, initialTab }) {
         }
       }
 
+      // Apply local photo caches now that we know Supabase initialization is done.
+      setPhotoCacheVersion((v) => v + 1);
       supabaseLoadedRef.current = true;
     })();
 
@@ -1151,7 +1251,11 @@ export default function Discover({ tasteProfile, initialTab }) {
     if (!user?.id || !supabaseLoadedRef.current) return;
     const timeoutId = setTimeout(() => {
       let localPhotos = {};
-      try { localPhotos = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}"); } catch {}
+      if (usingSupabasePhotoCache) {
+        localPhotos = photoCacheRef.current || {};
+      } else {
+        try { localPhotos = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}"); } catch {}
+      }
       const profilePhoto = safeLocalStorageGetItem("cooked_profile_photo") || null;
       const bannerPhoto = safeLocalStorageGetItem("cooked_banner_photo") || null;
       saveUserData(user.id, {
@@ -1169,7 +1273,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       });
     }, 2000);
     return () => clearTimeout(timeoutId);
-  }, [user?.id, heatResults, watchlist, userRatings, photoResolved]);
+  }, [user?.id, heatResults, watchlist, userRatings, photoResolved, usingSupabasePhotoCache]);
 
   const exportBackup = () => {
     const data = {};
@@ -1233,10 +1337,12 @@ export default function Discover({ tasteProfile, initialTab }) {
     if (!googleKey) return;
     // Check vault + preview first
     try {
-      const vault = JSON.parse(safeLocalStorageGetItem('cooked_photos') || '{}');
-      if (vault[restaurant.id]) { touchPhotoCacheAccess(restaurant.id); setImgSrc(vault[restaurant.id]); return; }
-      const preview = JSON.parse(safeLocalStorageGetItem('cooked_photos_preview') || '{}');
-      if (preview[restaurant.id]) { touchPhotoCacheAccess(restaurant.id); setImgSrc(preview[restaurant.id]); return; }
+      const cached = getAnyCachedPhotoForId(restaurant.id);
+      if (cached) {
+        if (!usingSupabasePhotoCache) touchPhotoCacheAccess(restaurant.id);
+        setImgSrc(cached);
+        return;
+      }
     } catch {}
 
     const normName = s => s.toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -1301,15 +1407,31 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
 
     if (photoUri) {
-      // Save to preview cache (not vault — stays unresolved for user to confirm)
-      try {
-        const preview = JSON.parse(safeLocalStorageGetItem('cooked_photos_preview') || '{}');
-        preview[restaurant.id] = photoUri;
-        safeSetItem('cooked_photos_preview', JSON.stringify(preview));
-        touchPhotoCacheAccess(restaurant.id);
-      } catch {}
       setImgSrc(photoUri);
-      setAllRestaurants(prev => prev.map(r => r.id === restaurant.id ? {...r, img: photoUri} : r));
+      setAllRestaurants(prev => prev.map(r => r.id === restaurant.id ? { ...r, img: photoUri, img2: photoUri } : r));
+
+      // Persist to the primary photo cache.
+      if (usingSupabasePhotoCache) {
+        const updatedPhotos = { ...(photoCacheRef.current || {}), [restaurant.id]: photoUri };
+        photoCacheRef.current = updatedPhotos;
+        if (user?.id) void saveUserPhotos(user.id, updatedPhotos);
+      } else {
+        // Save to preview cache (not vault — stays unresolved for user to confirm)
+        try {
+          const preview = JSON.parse(safeLocalStorageGetItem("cooked_photos_preview") || "{}");
+          preview[restaurant.id] = photoUri;
+          safeSetItem("cooked_photos_preview", JSON.stringify(preview));
+          touchPhotoCacheAccess(restaurant.id);
+
+          // Fire-and-forget: also push the updated photo cache to Supabase (when signed in).
+          if (user?.id) {
+            let vault = {};
+            try { vault = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}"); } catch {}
+            const updatedPhotos = { ...(vault || {}), ...(preview || {}), [restaurant.id]: photoUri };
+            void saveUserPhotos(user.id, updatedPhotos);
+          }
+        } catch {}
+      }
     }
   };
 
@@ -1319,11 +1441,9 @@ export default function Discover({ tasteProfile, initialTab }) {
 
     useEffect(() => {
       try {
-        const vault = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}");
-        const preview = JSON.parse(safeLocalStorageGetItem("cooked_photos_preview") || "{}");
-        const cached = vault[r.id] || preview[r.id];
+        const cached = getAnyCachedPhotoForId(r.id);
         if (cached) {
-          touchPhotoCacheAccess(r.id);
+          if (!usingSupabasePhotoCache) touchPhotoCacheAccess(r.id);
           setImgSrc(cached);
           r.img = cached;
           return;
@@ -1333,7 +1453,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       if (!imgSrc || imgSrc.includes("picsum")) {
         fetchAndCachePhoto(r, setImgSrc);
       }
-    }, [r.id]);
+    }, [r.id, r.img, imgSrc, usingSupabasePhotoCache, photoCacheVersion]);
 
     return (
       <div
@@ -1945,14 +2065,33 @@ export default function Discover({ tasteProfile, initialTab }) {
     setPhotoResolved((prev) => [...new Set([...prev, ...confirmedIds])]);
     // Write to permanent photo vault — this key is NEVER overwritten by merges or updates
     try {
-      const vault = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}");
-      igPhotoPicker.forEach(item => {
-        if (item.userSelected && item.photoOptions[item.selectedIndex]?.photoUri) {
-          vault[item.restaurant.id] = item.photoOptions[item.selectedIndex].photoUri;
-          touchPhotoCacheAccess(item.restaurant.id);
+      if (usingSupabasePhotoCache) {
+        const updatedPhotos = { ...(photoCacheRef.current || {}) };
+        igPhotoPicker.forEach((item) => {
+          if (item.userSelected && item.photoOptions[item.selectedIndex]?.photoUri) {
+            updatedPhotos[item.restaurant.id] = item.photoOptions[item.selectedIndex].photoUri;
+          }
+        });
+        photoCacheRef.current = updatedPhotos;
+        if (user?.id) void saveUserPhotos(user.id, updatedPhotos);
+      } else {
+        const vault = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}");
+        igPhotoPicker.forEach((item) => {
+          if (item.userSelected && item.photoOptions[item.selectedIndex]?.photoUri) {
+            vault[item.restaurant.id] = item.photoOptions[item.selectedIndex].photoUri;
+            touchPhotoCacheAccess(item.restaurant.id);
+          }
+        });
+        safeSetItem("cooked_photos", JSON.stringify(vault));
+
+        // Fire-and-forget: also update Supabase photo cache when signed in.
+        if (user?.id) {
+          let preview = {};
+          try { preview = JSON.parse(safeLocalStorageGetItem("cooked_photos_preview") || "{}"); } catch {}
+          const updatedPhotos = { ...(vault || {}), ...(preview || {}) };
+          void saveUserPhotos(user.id, updatedPhotos);
         }
-      });
-      safeSetItem("cooked_photos", JSON.stringify(vault));
+      }
     } catch {}
     const updated = igPhotoPicker
       .map(({ restaurant, photoOptions, selectedIndex }) => {
@@ -3644,8 +3783,8 @@ export default function Discover({ tasteProfile, initialTab }) {
         const detail = detailRestaurant;
         const place = placeDetails[detail.id];
         // Priority: 1) vault (user-confirmed), 2) preview (auto-fetched, unresolved), 3) non-picsum img, 4) Places API, 5) picsum
-        const vaultPhoto = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}")[detail.id]; } catch { return null; } })();
-        const previewPhoto = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_photos_preview") || "{}")[detail.id]; } catch { return null; } })();
+        const vaultPhoto = getVaultPhotoForId(detail.id);
+        const previewPhoto = getPreviewPhotoForId(detail.id);
         const liveImg = (allRestaurants.find(r => r.id === detail.id) || detail).img;
         const isPicsum = !vaultPhoto && !previewPhoto && liveImg && String(liveImg).includes("picsum.photos");
         const detailPhoto = vaultPhoto

@@ -76,6 +76,7 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
     NOTIFICATION_TYPES.reduce((acc, n) => ({ ...acc, [n.key]: true }), {})
   );
   const fileRef = useRef();
+  const [photoCache, setPhotoCache] = useState({});
 
   useEffect(() => {
     if (!clerkName) return;
@@ -113,6 +114,13 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
       } else {
         const b = localStorage.getItem("cooked_banner_photo") || null;
         setCustomBanner(b);
+      }
+
+      // Prefer Supabase photos (Discover uses Supabase as the photo cache source of truth).
+      if (data?.photos && typeof data.photos === "object" && Object.keys(data.photos).length > 0) {
+        setPhotoCache(data.photos);
+      } else {
+        setPhotoCache({});
       }
     })();
     return () => { cancelled = true; };
@@ -163,6 +171,14 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
   // Banner rotates through loved photos
   const lovedPhotos = lovedRestaurants.map(r => {
     try {
+      if (photoCache && Object.keys(photoCache).length > 0) {
+        return (
+          photoCache?.[r.id] ||
+          photoCache?.[String(r.id)] ||
+          photoCache?.[Number(r.id)] ||
+          r.img
+        );
+      }
       const cached = JSON.parse(localStorage.getItem("cooked_photos") || "{}");
       return cached[r.id] || r.img;
     } catch { return r.img; }
