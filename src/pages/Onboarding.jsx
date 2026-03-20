@@ -151,12 +151,27 @@ export default function Onboarding({ onComplete }) {
   const content = useMemo(() => {
     if (slide === 0) {
       return (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginTop: 40 }}>
-          <Wordmark size={52} />
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100vh",
+            padding: "40px 32px",
+            textAlign: "center",
+          }}
+        >
+          <Wordmark size={64} />
           <div style={{ marginTop: 14, fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: C.muted }}>your table is waiting</div>
           <div style={{ marginTop: 22, width: "100%", height: 1, background: C.border }} />
-          <div style={{ marginTop: 22, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 18, color: C.text }}>The restaurant app for people who care.</div>
-          <div style={{ marginTop: 10, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted }}>
+          <div style={{ marginTop: 40, marginBottom: 40, display: "flex", alignItems: "center", gap: 24, opacity: 0.6 }}>
+            <FlameIcon size={32} filled color={C.terracotta} />
+            <FlameIcon size={32} filled color={C.terracotta} />
+            <FlameIcon size={32} filled color={C.terracotta} />
+          </div>
+          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 22, fontWeight: 700, fontStyle: "italic", color: C.text }}>The restaurant app for people who care.</div>
+          <div style={{ marginTop: 12, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted }}>
             Not crowd-sourced. Not algorithmic. <span style={{ color: C.terracotta }}>Curated by taste.</span>
           </div>
         </div>
