@@ -236,7 +236,14 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
 
   const syncPhotosToSharedLibrary = async () => {
     if (!user?.id) return;
-    const entries = Object.entries(photoCache || {}).filter(([, url]) => !!url);
+    let localPhotos = {};
+    try {
+      localPhotos = JSON.parse(localStorage.getItem("cooked_photos") || "{}");
+    } catch {
+      localPhotos = {};
+    }
+    const merged = { ...(localPhotos || {}), ...(photoCache || {}) };
+    const entries = Object.entries(merged).filter(([, url]) => !!url);
     const total = entries.length;
     if (total === 0) {
       setPhotoSyncMessage("No photos found.");
