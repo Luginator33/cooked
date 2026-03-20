@@ -401,11 +401,12 @@ export default function Onboarding({ onComplete }) {
                 fontFamily: "'Cormorant Garamond', Georgia, serif",
                 fontStyle: "italic",
                 fontWeight: 700,
-                fontSize: 32,
+                fontSize: 24,
                 lineHeight: 1.3,
                 color: "#f0ebe2",
                 textAlign: "center",
                 margin: 0,
+                maxWidth: 320,
               }}
             >
               The restaurant app for people who care.
