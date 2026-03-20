@@ -49,6 +49,16 @@ export async function loadUserPhotos(clerkUserId) {
   return data.photos || {};
 }
 
+export async function loadSharedPhotos() {
+  const { data, error } = await supabase
+    .from('restaurant_photos')
+    .select('restaurant_id, photo_url');
+  if (error || !data) return {};
+  const map = {};
+  data.forEach(row => { map[String(row.restaurant_id)] = row.photo_url; });
+  return map;
+}
+
 // Save a single photo into the shared library (admin-only action).
 export async function saveSharedPhoto(restaurantId, photoUrl) {
   if (!restaurantId || !photoUrl) return;
