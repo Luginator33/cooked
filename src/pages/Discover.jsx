@@ -7,7 +7,7 @@ import { RESTAURANTS, CITIES, ALL_TAGS } from "../data/restaurants";
 import ChatBot from "../components/ChatBot";
 import Profile from "./Profile";
 import UserProfile from "./UserProfile";
-import { addCommunityRestaurant, followUser, getCommunityRestaurants, getFollowing, loadUserData, saveUserData, supabase } from "../lib/supabase";
+import { addCommunityRestaurant, followUser, getCommunityRestaurants, getFollowing, isFollowing as checkUserIsFollowing, loadUserData, saveUserData, supabase, unfollowUser } from "../lib/supabase";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -179,6 +179,25 @@ function NotificationTypeIcon({ type, size = 18 }) {
         </svg>
       );
   }
+}
+
+/** Unique cities from loved restaurant IDs (user_data.heat.loved or loved). */
+function countCitiesVisitedFromUserRow(userRow, restaurants) {
+  const loved = userRow?.heat?.loved ?? userRow?.loved;
+  if (!Array.isArray(loved) || loved.length === 0) return 0;
+  const byId = new Map(restaurants.map((r) => [r.id, r]));
+  const cities = new Set();
+  loved.forEach((id) => {
+    const r = byId.get(id) ?? byId.get(Number(id));
+    if (r?.city) cities.add(r.city);
+  });
+  return cities.size;
+}
+
+function formatUsernameForDisplay(raw) {
+  const s = (raw || "").trim();
+  if (!s) return "@";
+  return s.startsWith("@") ? s : `@${s}`;
 }
 
 function formatNotificationTime(iso) {
@@ -499,6 +518,15 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [activeFilter, setActiveFilter] = useState(null);
   const [showTagPicker, setShowTagPicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [discoverSearchMode, setDiscoverSearchMode] = useState("restaurants"); // "restaurants" | "people"
+  const [peopleSearchInput, setPeopleSearchInput] = useState("");
+  const [peopleDebouncedQuery, setPeopleDebouncedQuery] = useState("");
+  const [peopleSearchResults, setPeopleSearchResults] = useState([]);
+  const [peopleSearchLoading, setPeopleSearchLoading] = useState(false);
+  const [peopleFollowingMap, setPeopleFollowingMap] = useState({});
+  const [followingPicksLoading, setFollowingPicksLoading] = useState(false);
+  const [followingPicksRestaurants, setFollowingPicksRestaurants] = useState([]);
+  const [followingPicksNoFollows, setFollowingPicksNoFollows] = useState(false);
   const [venueType, setVenueType] = useState("all"); // "all" | "restaurants" | "bars" | "coffee"
   const [secondaryCuisine, setSecondaryCuisine] = useState(null); // dropdown selection when restaurants or bars
   const [chatInput, setChatInput] = useState("");
@@ -510,7 +538,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     if (headerRef.current) {
       setHeaderHeight(headerRef.current.getBoundingClientRect().height);
     }
-  }, []);
+  }, [tab, discoverSearchMode]);
   const [heatIndex, setHeatIndex] = useState(0);
   const [heatResults, setHeatResults] = useState(() => {
     try { return JSON.parse(localStorage.getItem("cooked_heat") || '{"loved":[],"noped":[],"skipped":[],"votes":{}}'); } catch { return { loved: [], noped: [], skipped: [], votes: {} }; }
@@ -532,6 +560,127 @@ export default function Discover({ tasteProfile, initialTab }) {
     const t = setTimeout(() => document.addEventListener("click", close), 0);
     return () => { clearTimeout(t); document.removeEventListener("click", close); };
   }, [cityPickerOpen]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setPeopleDebouncedQuery(peopleSearchInput), 300);
+    return () => clearTimeout(t);
+  }, [peopleSearchInput]);
+
+  useEffect(() => {
+    if (discoverSearchMode !== "people") return;
+    const q = peopleDebouncedQuery.trim();
+    if (!q) {
+      setPeopleSearchResults([]);
+      setPeopleSearchLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setPeopleSearchLoading(true);
+    (async () => {
+      const esc = q.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_").replace(/,/g, "").replace(/"/g, '\\"');
+      const pattern = `%${esc}%`;
+      let req = supabase
+        .from("user_data")
+        .select("*")
+        .or(`profile_username.ilike."${pattern}",profile_name.ilike."${pattern}"`)
+        .limit(20);
+      if (user?.id) req = req.neq("clerk_user_id", user.id);
+      const { data, error } = await req;
+      if (cancelled) return;
+      if (error) {
+        console.error("people search:", error);
+        setPeopleSearchResults([]);
+      } else {
+        setPeopleSearchResults(data || []);
+      }
+      setPeopleSearchLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [peopleDebouncedQuery, discoverSearchMode, user?.id]);
+
+  useEffect(() => {
+    if (discoverSearchMode !== "people" || !user?.id || peopleSearchResults.length === 0) {
+      setPeopleFollowingMap({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        peopleSearchResults.map(async (row) => {
+          const id = row.clerk_user_id;
+          if (!id || id === user.id) return [id, false];
+          const res = await checkUserIsFollowing(user.id, id);
+          return [id, !!res?.isFollowing];
+        })
+      );
+      if (cancelled) return;
+      setPeopleFollowingMap(Object.fromEntries(entries.filter(([id]) => id)));
+    })();
+    return () => { cancelled = true; };
+  }, [discoverSearchMode, peopleSearchResults, user?.id]);
+
+  useEffect(() => {
+    if (discoverSearchMode !== "people") return;
+    let cancelled = false;
+    (async () => {
+      setFollowingPicksLoading(true);
+      if (!user?.id) {
+        if (!cancelled) {
+          setFollowingPicksNoFollows(true);
+          setFollowingPicksRestaurants([]);
+          setFollowingPicksLoading(false);
+        }
+        return;
+      }
+      const { data: followRows } = await getFollowing(user.id);
+      const followingIds = (followRows || []).map((r) => r.following_id).filter(Boolean);
+      if (cancelled) return;
+      if (followingIds.length === 0) {
+        setFollowingPicksNoFollows(true);
+        setFollowingPicksRestaurants([]);
+        setFollowingPicksLoading(false);
+        return;
+      }
+      setFollowingPicksNoFollows(false);
+      const { data: userRows, error } = await supabase
+        .from("user_data")
+        .select("loved,watchlist,heat,clerk_user_id")
+        .in("clerk_user_id", followingIds);
+      if (cancelled) return;
+      if (error) {
+        console.error("following picks:", error);
+        setFollowingPicksRestaurants([]);
+        setFollowingPicksLoading(false);
+        return;
+      }
+      const byRestaurantId = new Map();
+      allRestaurants.forEach((r) => {
+        byRestaurantId.set(r.id, r);
+        byRestaurantId.set(Number(r.id), r);
+        byRestaurantId.set(String(r.id), r);
+      });
+      const ordered = [];
+      const seen = new Set();
+      for (const row of userRows || []) {
+        const loved = row?.heat?.loved ?? row?.loved;
+        const lovedArr = Array.isArray(loved) ? loved : [];
+        const wl = row?.watchlist;
+        const wlArr = Array.isArray(wl) ? wl : [];
+        for (const rawId of [...lovedArr, ...wlArr]) {
+          const nid = Number(rawId);
+          if (Number.isNaN(nid) || seen.has(nid) || ordered.length >= 20) continue;
+          const r = byRestaurantId.get(nid) ?? byRestaurantId.get(rawId) ?? byRestaurantId.get(String(rawId));
+          if (r) {
+            seen.add(nid);
+            ordered.push(r);
+          }
+        }
+      }
+      setFollowingPicksRestaurants(ordered);
+      setFollowingPicksLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [discoverSearchMode, user?.id, allRestaurants]);
 
   useEffect(() => {
     setHeaderProfilePhoto(typeof window !== "undefined" ? localStorage.getItem("cooked_profile_photo") : null);
@@ -1885,6 +2034,37 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
   };
 
+  const discoverModeSegmented = (
+    <div style={{ display: "flex", gap: 8, padding: "6px 16px 8px" }}>
+      {[
+        { id: "restaurants", label: "Restaurants" },
+        { id: "people", label: "People" },
+      ].map(({ id, label }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => setDiscoverSearchMode(id)}
+          style={{
+            flex: 1,
+            padding: "8px 12px",
+            borderRadius: 20,
+            border: `1px solid ${discoverSearchMode === id ? C.terracotta : C.border}`,
+            background: discoverSearchMode === id ? C.terracotta : C.bg2,
+            color: discoverSearchMode === id ? "#fff" : C.muted,
+            fontSize: 11,
+            fontFamily: "'DM Mono',monospace",
+            letterSpacing: "0.4px",
+            textTransform: "uppercase",
+            cursor: "pointer",
+            transition: "all 0.15s",
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <>
     <SignedOut>
@@ -2144,6 +2324,7 @@ export default function Discover({ tasteProfile, initialTab }) {
 
       {/* Discover Tab */}
       {tab === "discover" && (
+        discoverSearchMode === "restaurants" ? (
         <div style={{ paddingTop: headerHeight }}>
           {/* Tier 1: venue type pills */}
           <div style={{ display:"flex", gap:6, overflowX:"auto", padding:"10px 16px 4px", scrollbarWidth:"none" }} className="city-row">
@@ -2212,8 +2393,10 @@ export default function Discover({ tasteProfile, initialTab }) {
             </div>
           )}
 
+          {discoverModeSegmented}
+
           {/* Search bar — small, under cuisine */}
-          <div style={{ margin:"6px 16px 8px", position:"relative" }}>
+          <div style={{ margin:"0 16px 8px", position:"relative" }}>
             <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", fontSize:11, color:C.muted, pointerEvents:"none" }}>🔍</span>
             <input
               type="text"
@@ -2340,6 +2523,185 @@ export default function Discover({ tasteProfile, initialTab }) {
           ))}
           {filteredSorted.length === 0 && <div style={{ textAlign:"center", padding:"48px 20px", color:C.muted }}><div style={{ fontSize:40, marginBottom:10 }}>🍽️</div><div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:20, fontStyle:"italic" }}>No spots yet for this city.</div></div>}
         </div>
+        ) : (
+          <div style={{ paddingTop: headerHeight }}>
+            {discoverModeSegmented}
+              <div style={{ margin: "0 16px 12px", position: "relative" }}>
+                <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: C.muted, pointerEvents: "none" }}>🔍</span>
+                <input
+                  type="text"
+                  value={peopleSearchInput}
+                  onChange={(e) => setPeopleSearchInput(e.target.value)}
+                  placeholder="Search by username or name..."
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "7px 28px 7px 26px",
+                    borderRadius: 10,
+                    border: `1px solid ${peopleSearchInput ? C.terracotta : C.border}`,
+                    background: C.bg2,
+                    fontSize: 12,
+                    color: C.text,
+                    fontFamily: "Cormorant Garamond,Georgia,serif",
+                    fontStyle: "italic",
+                    outline: "none",
+                    transition: "border-color 0.2s",
+                  }}
+                />
+                {peopleSearchInput ? (
+                  <button
+                    type="button"
+                    onClick={() => setPeopleSearchInput("")}
+                    style={{
+                      position: "absolute",
+                      right: 9,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: C.muted,
+                      fontSize: 15,
+                      lineHeight: 1,
+                      padding: 2,
+                    }}
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+
+              {!peopleSearchInput.trim() ? (
+                followingPicksLoading ? (
+                  <div style={{ textAlign: "center", padding: "40px 20px", color: C.muted, fontSize: 12, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em" }}>LOADING PICKS…</div>
+                ) : followingPicksNoFollows ? (
+                  <div style={{ textAlign: "center", padding: "48px 24px", color: C.muted, fontSize: 14, fontFamily: "-apple-system,sans-serif" }}>Follow people to see their picks here</div>
+                ) : followingPicksRestaurants.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "48px 24px", color: C.muted, fontSize: 14, fontFamily: "-apple-system,sans-serif" }}>No picks from people you follow yet</div>
+                ) : (
+                  <div style={{ paddingBottom: 24 }}>
+                    <div
+                      style={{
+                        fontSize: 9,
+                        fontFamily: "'DM Mono',monospace",
+                        letterSpacing: "0.16em",
+                        textTransform: "uppercase",
+                        color: C.muted,
+                        padding: "4px 16px 10px",
+                      }}
+                    >
+                      FROM PEOPLE YOU FOLLOW
+                    </div>
+                    {followingPicksRestaurants.map((r, index) => (
+                      <RestCard
+                        key={`follow-pick-${r.id}-${index}`}
+                        r={r}
+                        loved={heatResults.loved.includes(r.id)}
+                        watched={watchlist.includes(r.id)}
+                        onLove={() => toggleLove(r.id)}
+                        onWatch={() => toggleWatch(r.id)}
+                        onShare={share}
+                        onOpenDetail={setDetailRestaurant}
+                        onPhotoFetched={fetchAndCachePhoto}
+                      />
+                    ))}
+                  </div>
+                )
+              ) : peopleSearchLoading || peopleSearchInput.trim() !== peopleDebouncedQuery.trim() ? (
+                <div style={{ textAlign: "center", padding: "32px 20px", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Searching…</div>
+              ) : peopleSearchResults.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "48px 24px", color: C.muted, fontSize: 14, fontFamily: "-apple-system,sans-serif" }}>No people found</div>
+              ) : (
+                <div style={{ padding: "0 0 24px" }}>
+                  {peopleSearchResults.map((row) => {
+                    const uid = row.clerk_user_id;
+                    const following = !!peopleFollowingMap[uid];
+                    const cityCount = countCitiesVisitedFromUserRow(row, allRestaurants);
+                    const displayName = row.profile_name?.trim() || "User";
+                    const uname = formatUsernameForDisplay(row.profile_username);
+                    return (
+                      <div
+                        key={uid || displayName}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => uid && setViewingUserId(uid)}
+                        onKeyDown={(e) => {
+                          if ((e.key === "Enter" || e.key === " ") && uid) {
+                            e.preventDefault();
+                            setViewingUserId(uid);
+                          }
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12,
+                          padding: "12px 16px",
+                          borderBottom: `1px solid ${C.border}`,
+                          cursor: uid ? "pointer" : "default",
+                          background: "transparent",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: "50%",
+                            overflow: "hidden",
+                            flexShrink: 0,
+                            border: `2px solid ${C.terracotta}`,
+                            background: C.bg3,
+                          }}
+                        >
+                          {row.profile_photo ? (
+                            <img src={row.profile_photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : null}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: "Georgia,serif", fontWeight: 700, fontStyle: "italic", fontSize: 14, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{displayName}</div>
+                          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.muted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{uname}</div>
+                          <div style={{ fontSize: 11, color: C.dim, fontFamily: "'DM Mono',monospace", marginTop: 3 }}>
+                            {cityCount} {cityCount === 1 ? "city" : "cities"} visited
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!user?.id || !uid || uid === user?.id}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!user?.id || !uid || uid === user.id) return;
+                            if (following) {
+                              await unfollowUser(user.id, uid);
+                              setPeopleFollowingMap((prev) => ({ ...prev, [uid]: false }));
+                            } else {
+                              await followUser(user.id, uid);
+                              setPeopleFollowingMap((prev) => ({ ...prev, [uid]: true }));
+                            }
+                          }}
+                          style={{
+                            flexShrink: 0,
+                            height: 28,
+                            padding: "0 12px",
+                            borderRadius: 8,
+                            border: `1px solid ${following ? C.border : C.terracotta}`,
+                            background: "transparent",
+                            color: following ? C.muted : C.terracotta,
+                            fontSize: 11,
+                            fontFamily: "'DM Mono',monospace",
+                            letterSpacing: "0.2px",
+                            textTransform: "uppercase",
+                            cursor: !user?.id || !uid || uid === user?.id ? "default" : "pointer",
+                            opacity: !user?.id || !uid || uid === user?.id ? 0.45 : 1,
+                          }}
+                        >
+                          {following ? "Unfollow" : "Follow"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+          </div>
+        )
       )}
 
       {/* Heat Tab */}
