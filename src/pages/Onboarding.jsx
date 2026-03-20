@@ -375,6 +375,7 @@ export default function Onboarding({ onComplete }) {
               gap: 12,
               alignItems: "center",
               width: "100%",
+              marginTop: -80,
             }}
           >
             <div
@@ -393,15 +394,7 @@ export default function Onboarding({ onComplete }) {
             <div className="dm-mono" style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", color: "#5a3a20" }}>
               YOUR TABLE IS WAITING
             </div>
-            <div
-              style={{
-                width: "100%",
-                height: 1,
-                background: "linear-gradient(90deg, transparent 0%, #2e1f0e 50%, transparent 100%)",
-                display: "block",
-                border: "none",
-              }}
-            />
+            <div style={{ width: "100%", height: "1px", background: "linear-gradient(to right, transparent, #3d2a18 50%, transparent)", margin: "4px 0" }} />
             <p
               className="cormorant"
               style={{
