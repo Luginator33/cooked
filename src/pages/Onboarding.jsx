@@ -13,7 +13,7 @@ const C = {
 const FLAME_PATH =
   "M91.583336,1 C94.858902,4.038088 94.189636,6.998662 92.316727,10.376994 C86.895416,20.155888 85.394997,30.387159 91.844238,40.137669 C94.758018,44.542976 99.042587,48.235645 103.260361,51.543896 C111.956841,58.365055 117.641266,67.217140 120.816948,77.480293 C122.970314,84.439537 123.615982,91.865288 124.990936,99.383125 C125.884773,97.697456 127.039993,95.775894 127.944977,93.742935 C128.933945,91.521332 129.326263,88.947304 130.661072,86.992996 C131.803146,85.320847 133.925720,83.260689 135.585968,83.285553 C137.393021,83.312607 140.050140,85.157921 140.808014,86.882332 C144.849472,96.078102 149.743393,104.919754 151.119156,115.202736 C152.871628,128.301437 152.701294,141.175125 147.925400,153.556519 C139.636047,175.046417 124.719681,190.729568 102.956436,198.024307 C93.917976,201.053894 83.325455,199.328156 73.460648,200.051529 C66.457748,200.565033 60.038956,198.566650 54.104954,195.470612 C35.696693,185.866180 23.564285,170.592270 20.351917,150.306000 C17.271206,130.851151 16.262779,110.901123 26.722290,92.532166 C29.376348,87.871117 31.035656,82.643089 33.696789,77.986916 C34.711685,76.211151 37.195370,74.463982 39.125217,74.326584 C40.279823,74.244370 42.065300,77.132980 42.850647,78.989388 C44.449970,82.769890 45.564117,86.755646 47.322094,90.502388 C43.896488,53.348236 54.672562,22.806646 86.900139,1.333229 Z";
 
-function FlameIcon({ size = 16, filled = true, color = C.terracotta }) {
+function FlameIcon({ size = 14, filled = true, color = C.terracotta }) {
   return (
     <svg
       width={size}
@@ -29,6 +29,23 @@ function FlameIcon({ size = 16, filled = true, color = C.terracotta }) {
   );
 }
 
+function Wordmark({ size = 22 }) {
+  return (
+    <span
+      style={{
+        fontFamily: "'Cormorant Garamond', Georgia, serif",
+        fontStyle: "italic",
+        fontWeight: 700,
+        fontSize: size,
+        lineHeight: 1,
+      }}
+    >
+      <span style={{ color: C.text }}>cook</span>
+      <span style={{ color: C.terracotta }}>ed</span>
+    </span>
+  );
+}
+
 function GraphCanvas({ active }) {
   const canvasRef = useRef(null);
 
@@ -38,70 +55,71 @@ function GraphCanvas({ active }) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const nodes = [
-      { id: "you", x: 120, y: 26, r: 17, fill: C.terracotta, stroke: C.terracotta },
-      { id: "NYC", x: 46, y: 76, r: 14, fill: C.bg2, stroke: C.terracotta },
-      { id: "Bestia", x: 193, y: 78, r: 16, fill: C.bg2, stroke: C.terracotta },
-      { id: "Madison", x: 72, y: 142, r: 15, fill: C.bg2, stroke: C.terracotta },
-      { id: "London", x: 160, y: 144, r: 14, fill: C.bg2, stroke: C.terracotta },
-      { id: "Nobu", x: 120, y: 184, r: 15, fill: C.bg2, stroke: C.terracotta },
+    const center = { id: "Bestia", x: 120, y: 96, r: 20, fill: C.terracotta, stroke: C.terracotta };
+    const others = [
+      { id: "you", x: 120, y: 28, r: 15 },
+      { id: "NYC", x: 44, y: 74, r: 13 },
+      { id: "Madison", x: 60, y: 164, r: 14 },
+      { id: "London", x: 184, y: 154, r: 14 },
+      { id: "Nobu", x: 196, y: 74, r: 13 },
     ];
-    const edges = [
-      ["you", "NYC"],
-      ["you", "Bestia"],
-      ["you", "Madison"],
-      ["NYC", "Madison"],
-      ["Bestia", "London"],
-      ["London", "Nobu"],
-      ["Madison", "Nobu"],
-    ];
-    const nodeById = Object.fromEntries(nodes.map((n) => [n.id, n]));
     let raf = 0;
     const start = performance.now();
 
-    const draw = (t) => {
-      const elapsed = (t - start) / 1000;
+    const draw = (now) => {
+      const elapsed = (now - start) / 1000;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      edges.forEach(([a, b], i) => {
-        const na = nodeById[a];
-        const nb = nodeById[b];
-        const edgeAppear = 0.45 + i * 0.14;
-        const prog = Math.max(0, Math.min(1, (elapsed - edgeAppear) / 0.42));
-        if (prog <= 0) return;
-        const x2 = na.x + (nb.x - na.x) * prog;
-        const y2 = na.y + (nb.y - na.y) * prog;
-        const linkedToYou = a === "you" || b === "you";
-        const pulse = linkedToYou ? 0.55 + 0.35 * Math.sin(elapsed * 2.8) : 0.45;
-        ctx.strokeStyle = linkedToYou ? C.terracotta : C.border;
-        ctx.globalAlpha = pulse;
-        ctx.lineWidth = linkedToYou ? 1.8 : 1.2;
-        ctx.beginPath();
-        ctx.moveTo(na.x, na.y);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-      });
+      const centerScale = Math.min(1, elapsed / 0.3);
+      ctx.save();
+      ctx.translate(center.x, center.y);
+      ctx.scale(centerScale, centerScale);
+      ctx.beginPath();
+      ctx.arc(0, 0, center.r * (1 + 0.04 * Math.sin(elapsed * 3.2)), 0, Math.PI * 2);
+      ctx.fillStyle = center.fill;
+      ctx.fill();
+      ctx.strokeStyle = center.stroke;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      ctx.fillStyle = "#fff";
+      ctx.font = "400 8px 'DM Mono', monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(center.id, 0, 0.5);
+      ctx.restore();
 
-      nodes.forEach((n, i) => {
-        const appear = i * 0.14;
-        const p = Math.max(0, Math.min(1, (elapsed - appear) / 0.35));
+      others.forEach((n, i) => {
+        const delay = 0.2 + i * 0.12;
+        const p = Math.max(0, Math.min(1, (elapsed - delay) / 0.45));
         if (p <= 0) return;
         const eased = 1 - Math.pow(1 - p, 3);
-        const pulse = n.id === "you" ? 1 + 0.07 * Math.sin(elapsed * 3.5) : 1;
-        const scale = eased * pulse;
+        const sx = center.x + (n.x - center.x) * eased;
+        const sy = center.y + (n.y - center.y) * eased;
+
+        const edgeProg = Math.max(0, Math.min(1, (elapsed - delay + 0.08) / 0.38));
+        const ex = center.x + (sx - center.x) * edgeProg;
+        const ey = center.y + (sy - center.y) * edgeProg;
+        ctx.strokeStyle = C.terracotta;
+        ctx.globalAlpha = 0.45 + 0.3 * Math.sin(elapsed * 2.7 + i);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(center.x, center.y);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
         ctx.save();
-        ctx.translate(n.x, n.y);
-        ctx.scale(scale, scale);
+        ctx.translate(sx, sy);
+        ctx.scale(eased, eased);
         ctx.beginPath();
         ctx.arc(0, 0, n.r, 0, Math.PI * 2);
-        ctx.fillStyle = n.fill;
+        ctx.fillStyle = C.bg2;
         ctx.fill();
-        ctx.strokeStyle = n.stroke;
+        ctx.strokeStyle = C.terracotta;
         ctx.lineWidth = 1.5;
         ctx.stroke();
-        ctx.fillStyle = n.id === "you" ? "#fff" : C.text;
-        ctx.font = "500 8px 'DM Mono', monospace";
+        ctx.fillStyle = C.text;
+        ctx.font = "400 8px 'DM Mono', monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(n.id, 0, 0.5);
@@ -118,25 +136,119 @@ function GraphCanvas({ active }) {
   return <canvas ref={canvasRef} width={240} height={200} style={{ width: 240, height: 200, display: "block" }} />;
 }
 
-function Wordmark({ size = 22 }) {
+function SwipeDemoCard() {
+  const [step, setStep] = useState(0);
+  const restaurants = [
+    { name: "Nobu Malibu", meta: "JAPANESE · MALIBU" },
+    { name: "Bestia", meta: "ITALIAN · ARTS DISTRICT" },
+    { name: "Republique", meta: "FRENCH · MID-CITY" },
+  ];
+
+  useEffect(() => {
+    const durations = [1000, 400, 100, 1000, 400, 100, 1000, 400, 100];
+    const timer = setTimeout(() => setStep((s) => (s + 1) % durations.length), durations[step]);
+    return () => clearTimeout(timer);
+  }, [step]);
+
+  const phase = step;
+  const cardStyle = {
+    transform:
+      phase === 1
+        ? "translateX(120%) rotate(8deg)"
+        : phase === 4
+          ? "translateX(-120%) rotate(-8deg)"
+          : phase === 7
+            ? "translateY(-120%)"
+            : "translateX(0) translateY(0) rotate(0deg)",
+    transition: phase === 2 || phase === 5 || phase === 8 ? "none" : "transform 0.4s ease",
+  };
+  const idx = phase <= 2 ? 0 : phase <= 5 ? 1 : 2;
+  const labelHeat = phase === 1;
+  const labelPass = phase === 4;
+  const labelBeen = phase === 7;
+
   return (
-    <span style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: size, fontWeight: 700, fontStyle: "italic", lineHeight: 1 }}>
-      <span style={{ color: C.text }}>cook</span>
-      <span style={{ color: C.terracotta }}>ed</span>
-    </span>
+    <div style={{ position: "relative", height: 280 }}>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          borderRadius: 20,
+          background: C.bg2,
+          border: `1px solid ${C.border}`,
+          overflow: "hidden",
+          ...cardStyle,
+        }}
+      >
+        <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, opacity: 0.18 }}>
+          <circle cx="62" cy="72" r="44" fill="none" stroke={C.border} />
+          <circle cx="232" cy="128" r="58" fill="none" stroke={C.border} />
+        </svg>
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(15,12,9,0.05) 40%, rgba(15,12,9,0.95) 100%)" }} />
+        <div
+          style={{
+            position: "absolute",
+            top: 16,
+            left: 16,
+            borderRadius: 14,
+            padding: "4px 8px",
+            border: `1px solid ${C.terracotta}`,
+            background: `${C.terracotta}1f`,
+            color: C.terracotta,
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 8,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+          }}
+        >
+          Eater LA
+        </div>
+
+        {labelHeat && (
+          <div style={{ position: "absolute", top: 14, left: 14, color: C.terracotta, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 1 }}>
+            HEAT
+          </div>
+        )}
+        {labelPass && (
+          <div style={{ position: "absolute", top: 14, right: 14, color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 1 }}>
+            PASS
+          </div>
+        )}
+        {labelBeen && (
+          <div style={{ position: "absolute", top: 14, left: 14, color: "#4a7aab", fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 1 }}>
+            BEEN HERE
+          </div>
+        )}
+
+        <div style={{ position: "absolute", bottom: 20, left: 18, right: 18 }}>
+          <div style={{ fontFamily: "'DM Mono', monospace", color: C.muted, fontSize: 8, letterSpacing: "0.14em", textTransform: "uppercase" }}>{restaurants[idx].meta}</div>
+          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, color: C.text, fontSize: 28, lineHeight: 1 }}>
+            {restaurants[idx].name}
+          </div>
+          <div style={{ display: "flex", gap: 2, marginTop: 6 }}>
+            {[0, 1, 2, 3, 4].map((i) => <FlameIcon key={i} size={12} filled={i < 4} color={i < 4 ? C.terracotta : C.dim} />)}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
 export default function Onboarding({ onComplete }) {
   const [slide, setSlide] = useState(0);
-  const [visible, setVisible] = useState(false);
-  const totalSlides = 5;
+  const [phase, setPhase] = useState("in");
+  const totalSlides = 4;
 
   useEffect(() => {
-    setVisible(false);
-    const t = setTimeout(() => setVisible(true), 15);
-    return () => clearTimeout(t);
-  }, [slide]);
+    const style = document.createElement("style");
+    style.setAttribute("data-onboarding-fonts", "true");
+    style.textContent =
+      "@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400&display=swap');";
+    document.head.appendChild(style);
+    return () => {
+      style.remove();
+    };
+  }, []);
 
   const finish = () => {
     try {
@@ -145,181 +257,210 @@ export default function Onboarding({ onComplete }) {
     onComplete?.();
   };
 
-  const buttonText = ["Let's go", "Next", "Next", "Next", "Start swiping"][slide];
-  const progressIndex = Math.min(slide, 3);
+  const goTo = (next) => {
+    setPhase("out");
+    setTimeout(() => {
+      setSlide(next);
+      setPhase("in");
+    }, 180);
+  };
 
+  const buttonText = ["Let's go", "Next", "Next", "Start swiping"][slide];
   const content = useMemo(() => {
     if (slide === 0) {
       return (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "100vh",
-            padding: "40px 32px",
-            textAlign: "center",
-          }}
-        >
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", textAlign: "center" }}>
           <Wordmark size={64} />
-          <div style={{ marginTop: 14, fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: C.muted }}>your table is waiting</div>
-          <div style={{ marginTop: 22, width: "100%", height: 1, background: C.border }} />
-          <div style={{ marginTop: 40, marginBottom: 40, display: "flex", alignItems: "center", gap: 24, opacity: 0.6 }}>
-            <FlameIcon size={32} filled color={C.terracotta} />
-            <FlameIcon size={32} filled color={C.terracotta} />
-            <FlameIcon size={32} filled color={C.terracotta} />
+          <div style={{ marginTop: 14, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase", color: C.muted }}>
+            YOUR TABLE IS WAITING
           </div>
-          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 22, fontWeight: 700, fontStyle: "italic", color: C.text }}>The restaurant app for people who care.</div>
+          <div style={{ width: "100%", height: 1, background: C.border, marginTop: 28, marginBottom: 28 }} />
+          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 26, color: C.text }}>
+            The restaurant app for people who care.
+          </div>
           <div style={{ marginTop: 12, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted }}>
             Not crowd-sourced. Not algorithmic. <span style={{ color: C.terracotta }}>Curated by taste.</span>
           </div>
         </div>
       );
     }
+
     if (slide === 1) {
       return (
-        <div style={{ marginTop: 10 }}>
-          <div style={{ background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 18, height: 360, position: "relative", overflow: "hidden" }}>
-            <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, opacity: 0.15 }}>
-              <circle cx="70" cy="70" r="42" fill="none" stroke={C.border} />
-              <circle cx="230" cy="130" r="58" fill="none" stroke={C.border} />
-            </svg>
-            <div style={{ position: "absolute", top: 16, left: 16, background: `${C.terracotta}20`, border: `1px solid ${C.terracotta}`, borderRadius: 14, padding: "4px 8px", color: C.terracotta, fontFamily: "'DM Mono', monospace", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Eater LA
-            </div>
-            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(15,12,9,0.08) 35%, rgba(15,12,9,0.95) 100%)" }} />
-            <div style={{ position: "absolute", bottom: 24, left: 18, right: 18 }}>
-              <div style={{ color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase" }}>Japanese • Malibu</div>
-              <div style={{ color: C.text, fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 700, fontStyle: "italic", fontSize: 32, lineHeight: 1 }}>Nobu Malibu</div>
-              <div style={{ marginTop: 8, display: "flex", gap: 3 }}>
-                {[0, 1, 2, 3, 4].map((i) => <FlameIcon key={i} size={14} filled={i < 4} color={i < 4 ? C.terracotta : C.dim} />)}
+        <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+          <SwipeDemoCard />
+          <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ width: 52, height: 52, borderRadius: "50%", border: `1.5px solid ${C.border}`, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
               </div>
+              <div style={{ marginTop: 6, color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase" }}>Pass</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ width: 52, height: 52, borderRadius: "50%", border: "1.5px solid #4a7aab", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4a7aab" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+              </div>
+              <div style={{ marginTop: 6, color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase" }}>Watch</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ width: 52, height: 52, borderRadius: "50%", background: C.terracotta, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
+                <FlameIcon size={18} filled color="#fff" />
+              </div>
+              <div style={{ marginTop: 6, color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase" }}>Heat</div>
             </div>
           </div>
-          <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ width: 56, height: 56, borderRadius: "50%", border: `1.5px solid ${C.border}`, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>✕</div>
-              <div style={{ marginTop: 6, fontFamily: "'DM Mono', monospace", fontSize: 9, color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Pass</div>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ width: 56, height: 56, borderRadius: "50%", border: "1.5px solid #4a90d9", color: "#7ca8dc", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7ca8dc" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              </div>
-              <div style={{ marginTop: 6, fontFamily: "'DM Mono', monospace", fontSize: 9, color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Watch</div>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ width: 56, height: 56, borderRadius: "50%", background: C.terracotta, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
-                <FlameIcon size={20} filled color="#fff" />
-              </div>
-              <div style={{ marginTop: 6, fontFamily: "'DM Mono', monospace", fontSize: 9, color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Heat</div>
-            </div>
+          <div style={{ marginTop: 18, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
+            Swipe to build your taste
           </div>
-          <div style={{ marginTop: 16, textAlign: "center", fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 20, fontStyle: "italic", color: C.text }}>Swipe with conviction</div>
+          <div style={{ marginTop: 8, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
+            Heat it, watch it, pass, or mark it as been. Your stack gets smarter every swipe.
+          </div>
         </div>
       );
     }
+
     if (slide === 2) {
       return (
-        <div style={{ marginTop: 30, textAlign: "center" }}>
-          <div style={{ display: "flex", justifyContent: "center", gap: 26, marginBottom: 12 }}>
-            {["L", "M", "D"].map((k) => (
-              <div key={k} style={{ position: "relative" }}>
-                <div style={{ width: 44, height: 44, borderRadius: "50%", border: `1.5px solid ${C.terracotta}`, display: "flex", alignItems: "center", justifyContent: "center", color: C.text, fontFamily: "'DM Mono', monospace", fontSize: 14, background: C.bg2 }}>{k}</div>
-                <div style={{ position: "absolute", left: "50%", top: 44, width: 1, height: 28, background: C.border }} />
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", textAlign: "center" }}>
+          <div style={{ position: "relative", width: 280, height: 210, marginTop: 10 }}>
+            <div style={{ position: "absolute", left: "50%", top: 86, transform: "translateX(-50%)", width: 250, background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px" }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", color: C.muted, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>BESTIA · ARTS DISTRICT</div>
+              <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, color: C.text, fontSize: 26, lineHeight: 1 }}>Bestia</div>
+            </div>
+            {[
+              { k: "L", x: 46, y: 36, d: "0ms" },
+              { k: "M", x: 138, y: 10, d: "150ms" },
+              { k: "D", x: 228, y: 36, d: "300ms" },
+            ].map((a) => (
+              <div key={a.k}>
+                <div style={{ position: "absolute", left: a.x, top: a.y + 44, width: 1, height: 38, background: C.border }} />
+                <div
+                  style={{
+                    position: "absolute",
+                    left: a.x - 22,
+                    top: a.y - 22,
+                    width: 44,
+                    height: 44,
+                    borderRadius: "50%",
+                    border: `1.5px solid ${C.terracotta}`,
+                    background: C.bg2,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: C.terracotta,
+                    fontFamily: "'Cormorant Garamond', Georgia, serif",
+                    fontStyle: "italic",
+                    fontWeight: 700,
+                    fontSize: 18,
+                    animation: `avatarPop 0.5s ease forwards`,
+                    animationDelay: a.d,
+                    opacity: 0,
+                    transform: "scale(0)",
+                  }}
+                >
+                  {a.k}
+                </div>
               </div>
             ))}
           </div>
-          <div style={{ width: 250, margin: "0 auto", background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px" }}>
-            <div style={{ color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: "0.12em", textTransform: "uppercase" }}>3 friends loved</div>
-            <div style={{ color: C.text, fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 20, fontStyle: "italic", fontWeight: 700 }}>Bestia</div>
+          <div style={{ marginTop: 4, background: `${C.terracotta}1f`, border: `1px solid ${C.terracotta}`, borderRadius: 999, padding: "4px 10px", color: C.terracotta, fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            3 friends loved this
           </div>
-          <div style={{ marginTop: 22, color: C.text, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 30 }}>Follow friends. Trust their taste.</div>
-          <div style={{ marginTop: 10, color: C.muted, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, lineHeight: 1.5 }}>
+          <div style={{ marginTop: 16, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
+            Follow friends. Trust their taste.
+          </div>
+          <div style={{ marginTop: 8, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
             See exactly where people you trust have been - and what they <span style={{ color: C.terracotta }}>actually thought</span>. Yelp reviews are a fever dream.
           </div>
         </div>
       );
     }
-    if (slide === 3) {
-      return (
-        <div style={{ marginTop: 18, textAlign: "center" }}>
-          <div style={{ display: "flex", justifyContent: "center" }}>
-            <GraphCanvas active />
-          </div>
-          <div style={{ marginTop: 10, color: C.text, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 30 }}>The restaurant graph</div>
-          <div style={{ marginTop: 8, color: C.muted, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, lineHeight: 1.5 }}>
-            People, places, cities - all connected. Powers <span style={{ color: C.terracotta }}>friends who've been here</span>, <span style={{ color: C.terracotta }}>trending near you</span>, and eventually six degrees of any restaurant on earth.
-          </div>
-        </div>
-      );
-    }
+
     return (
-      <div style={{ marginTop: 10 }}>
-        <div style={{ background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 18, height: 250, position: "relative", overflow: "hidden", marginBottom: 16 }}>
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(15,12,9,0.08) 35%, rgba(15,12,9,0.95) 100%)" }} />
-          <div style={{ position: "absolute", bottom: 22, left: 18, right: 18 }}>
-            <div style={{ color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase" }}>Japanese • Malibu</div>
-            <div style={{ color: C.text, fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 700, fontStyle: "italic", fontSize: 30, lineHeight: 1 }}>Nobu Malibu</div>
-          </div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", textAlign: "center" }}>
+        <GraphCanvas active />
+        <div style={{ marginTop: 8, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
+          The restaurant graph
         </div>
-        <div style={{ marginBottom: 8, color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: "0.14em", textTransform: "uppercase" }}>now build your taste</div>
-        <div style={{ background: C.terracotta, borderRadius: 12, padding: "14px 14px 12px", color: "#fff", fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 13, lineHeight: 1.5 }}>
-          <div>🔥 Heat - you've been or want to go</div>
-          <div>👁 Watch - on your radar</div>
-          <div>✕ Pass - not your thing</div>
-          <div>↑ Swipe up - already been</div>
+        <div style={{ marginTop: 8, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
+          People, places, cities - all connected. Powers <span style={{ color: C.terracotta }}>friends who've been here</span>, <span style={{ color: C.terracotta }}>trending near you</span>, and six degrees of any restaurant on earth.
         </div>
       </div>
     );
   }, [slide]);
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, maxWidth: 480, margin: "0 auto", padding: "16px 18px 24px", position: "relative", overflow: "hidden" }}>
+    <div style={{ width: "100%", minHeight: "100vh", background: C.bg, color: C.text }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,700&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+        @keyframes avatarPop {
+          0% { opacity: 0; transform: scale(0) translateY(0); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
       `}</style>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <Wordmark size={22} />
-        {slide < totalSlides - 1 ? (
-          <button type="button" onClick={() => setSlide(totalSlides - 1)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.13em", textTransform: "uppercase" }}>
-            skip
-          </button>
-        ) : <div style={{ width: 34 }} />}
-      </div>
-
-      <div
-        key={slide}
-        style={{
-          transition: "opacity 0.35s ease, transform 0.35s ease",
-          opacity: visible ? 1 : 0,
-          transform: visible ? "translateX(0px)" : "translateX(30px)",
-          minHeight: 510,
-        }}
-      >
-        {content}
-      </div>
-
-      <div style={{ position: "absolute", left: 18, right: 18, bottom: 22 }}>
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginBottom: 14 }}>
-          {Array.from({ length: 4 }).map((_, i) =>
-            i === progressIndex ? (
-              <div key={i} style={{ width: 20, height: 8, borderRadius: 999, background: C.terracotta }} />
-            ) : (
-              <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: C.border }} />
-            )
+      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", minHeight: "100vh", position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: 20, left: 28, right: 28, display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 5 }}>
+          <Wordmark size={22} />
+          {slide < totalSlides - 1 ? (
+            <button
+              type="button"
+              onClick={() => goTo(totalSlides - 1)}
+              style={{ background: "none", border: "none", color: C.dim, fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase", cursor: "pointer" }}
+            >
+              skip
+            </button>
+          ) : (
+            <div style={{ width: 30 }} />
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            if (slide === totalSlides - 1) finish();
-            else setSlide((s) => Math.min(totalSlides - 1, s + 1));
+
+        <div
+          key={slide}
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            padding: "70px 28px 120px",
+            transition: "transform 0.35s ease, opacity 0.35s ease",
+            opacity: phase === "in" ? 1 : 0,
+            transform: phase === "in" ? "translateX(0px)" : "translateX(-30px)",
           }}
-          style={{ width: "100%", background: C.terracotta, color: "#fff", border: "none", borderRadius: 14, padding: "14px 16px", fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer" }}
         >
-          {buttonText}
-        </button>
+          {content}
+        </div>
+
+        <div style={{ position: "absolute", left: 28, right: 28, bottom: 34, zIndex: 6 }}>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 14 }}>
+            {Array.from({ length: 4 }).map((_, i) =>
+              i === slide ? (
+                <div key={i} style={{ width: 20, height: 8, borderRadius: 999, background: C.terracotta }} />
+              ) : (
+                <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: C.border }} />
+              )
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (slide === totalSlides - 1) finish();
+              else goTo(slide + 1);
+            }}
+            style={{
+              width: "100%",
+              background: C.terracotta,
+              color: "#fff",
+              border: "none",
+              borderRadius: 14,
+              padding: "14px 16px",
+              fontFamily: "'DM Sans', -apple-system, sans-serif",
+              fontWeight: 500,
+              fontSize: 15,
+              cursor: "pointer",
+            }}
+          >
+            {buttonText}
+          </button>
+        </div>
       </div>
     </div>
   );

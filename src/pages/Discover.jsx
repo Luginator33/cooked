@@ -712,7 +712,8 @@ export default function Discover({ tasteProfile, initialTab }) {
 
   const getVaultPhotoForId = (id) => {
     if (usingSupabasePhotoCache) {
-      return photoCacheRef.current?.[id] || photoCacheRef.current?.[Number(id)] || photoCacheRef.current?.[String(id)] || null;
+      const cache = photoCacheRef.current || {};
+      return cache[id] || cache[String(id)] || cache[Number(id)] || null;
     }
     try {
       const vault = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}");
@@ -735,7 +736,11 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
   };
 
-  const getAnyCachedPhotoForId = (id) => getVaultPhotoForId(id) || getPreviewPhotoForId(id);
+  const getAnyCachedPhotoForId = (id) => {
+    const direct = photoCacheRef.current || {};
+    const shared = direct[id] || direct[String(id)] || direct[Number(id)] || null;
+    return shared || getVaultPhotoForId(id) || getPreviewPhotoForId(id);
+  };
 
   // When the photo cache source switches (initial sign-in load), re-apply cached photo URIs to restaurant cards.
   useEffect(() => {
@@ -1484,8 +1489,13 @@ export default function Discover({ tasteProfile, initialTab }) {
   };
 
   function HomePhotoCard({ r, style, children, onClick }) {
-    const [imgSrc, setImgSrc] = useState(r.img || "");
+    const photoSrc = getAnyCachedPhotoForId(r.id) || r.img || "";
+    const [imgSrc, setImgSrc] = useState(photoSrc);
     const cardRef = useRef(null);
+
+    useEffect(() => {
+      setImgSrc(photoSrc);
+    }, [photoSrc, r.id, r.img, photoCacheVersion]);
 
     useEffect(() => {
       try {
@@ -2721,7 +2731,7 @@ export default function Discover({ tasteProfile, initialTab }) {
 
       {/* Home Tab */}
       {tab === "home" && (() => {
-        const getPhoto = (r) => r.img || "";
+        const getPhoto = (r) => getAnyCachedPhotoForId(r.id) || r.img || "";
         const getCity = (r) => r.city || r.location || r.region || "";
         const cityName = (city || "Los Angeles").toLowerCase();
         const allSorted = [...RESTAURANTS].sort((a, b) => (b.rating || 0) - (a.rating || 0));
@@ -2808,7 +2818,8 @@ export default function Discover({ tasteProfile, initialTab }) {
             </div>
             {featuredRestaurant ? (
               <HomePhotoCard
-                r={featuredRestaurant}
+                key={`${featuredRestaurant.id}-${photoCacheVersion}`}
+                r={{ ...featuredRestaurant, img: getPhoto(featuredRestaurant) }}
                 onClick={() => setDetailRestaurant(featuredRestaurant)}
                 style={{ margin: "0 16px", borderRadius: 16, height: 200 }}
               >
@@ -2834,8 +2845,8 @@ export default function Discover({ tasteProfile, initialTab }) {
             <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingLeft: 16, paddingRight: 16, paddingBottom: 8 }}>
               {hotNow.map(r => (
                 <HomePhotoCard
-                  key={r.id}
-                  r={r}
+                  key={`${r.id}-${photoCacheVersion}`}
+                  r={{ ...r, img: getPhoto(r) }}
                   onClick={() => setDetailRestaurant(r)}
                   style={{ minWidth: 150, maxWidth: 150, height: 200, borderRadius: 14, flexShrink: 0 }}
                 >
