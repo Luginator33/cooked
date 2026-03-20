@@ -139,9 +139,21 @@ function GraphCanvas({ active }) {
 function SwipeDemoCard() {
   const [step, setStep] = useState(0);
   const restaurants = [
-    { name: "Nobu Malibu", meta: "JAPANESE · MALIBU" },
-    { name: "Bestia", meta: "ITALIAN · ARTS DISTRICT" },
-    { name: "Republique", meta: "FRENCH · MID-CITY" },
+    {
+      name: "Nobu Malibu",
+      meta: "JAPANESE · MALIBU",
+      img: "https://lh3.googleusercontent.com/places/ANXAkqFb-Sy4KjQqFn41w9FdRk-qRwiVdsQSfio9Z0Sr_KpSJCHF030lxrOklxmAQydwGy0IOjiULp5y2zmD0Jwqb6h1UleMeWS2xK8=s4800-w800",
+    },
+    {
+      name: "Bestia",
+      meta: "ITALIAN · ARTS DISTRICT",
+      img: "https://lh3.googleusercontent.com/places/ANXAkqGq6FcrvIKJMmHXJxLDnBwWQU_iNRUbBAT5yWuaf-H_h86pHW4SVUUJtVQn9HI0iPxrYshTvxMBmbNvI54Sl5W1RM_7JXI18JA=s4800-w800",
+    },
+    {
+      name: "Republique",
+      meta: "FRENCH · MID-CITY",
+      img: "https://lh3.googleusercontent.com/places/ANXAkqG32fnvcCWL3_hHS5Pt4ea_BiMQSovPUdJ2p27xeEz97H0vI4NNBfrQPLLlxRdVgZaUItE3UcRnqsBqOaOkgAjfIfRsAQOJ9o0=s4800-w800",
+    },
   ];
 
   useEffect(() => {
@@ -166,9 +178,10 @@ function SwipeDemoCard() {
   const labelHeat = phase === 1;
   const labelPass = phase === 4;
   const labelBeen = phase === 7;
+  const labelOpacity = phase === 1 || phase === 4 || phase === 7 ? 1 : 0;
 
   return (
-    <div style={{ position: "relative", height: 280 }}>
+    <div style={{ position: "relative", height: "55%" }}>
       <div
         style={{
           position: "absolute",
@@ -180,11 +193,16 @@ function SwipeDemoCard() {
           ...cardStyle,
         }}
       >
-        <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, opacity: 0.18 }}>
+        <img
+          src={restaurants[idx].img}
+          alt={restaurants[idx].name}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+        />
+        <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, opacity: 0.16 }}>
           <circle cx="62" cy="72" r="44" fill="none" stroke={C.border} />
           <circle cx="232" cy="128" r="58" fill="none" stroke={C.border} />
         </svg>
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(15,12,9,0.05) 40%, rgba(15,12,9,0.95) 100%)" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(14,8,4,0.95) 0%, rgba(14,8,4,0.3) 60%, transparent 100%)" }} />
         <div
           style={{
             position: "absolute",
@@ -205,18 +223,63 @@ function SwipeDemoCard() {
         </div>
 
         {labelHeat && (
-          <div style={{ position: "absolute", top: 14, left: 14, color: C.terracotta, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 1 }}>
-            HEAT
+          <div
+            style={{
+              position: "absolute",
+              top: 14,
+              left: 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              background: "rgba(196,96,58,0.15)",
+              border: "1.5px solid #c4603a",
+              borderRadius: 20,
+              padding: "5px 14px",
+              opacity: labelOpacity,
+              transition: "opacity 0.2s ease",
+            }}
+          >
+            <FlameIcon size={14} filled color="#c4603a" />
+            <span style={{ color: "#c4603a", fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase" }}>HEAT</span>
           </div>
         )}
         {labelPass && (
-          <div style={{ position: "absolute", top: 14, right: 14, color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 1 }}>
+          <div
+            style={{
+              position: "absolute",
+              top: 14,
+              right: 14,
+              background: "rgba(90,58,32,0.15)",
+              border: "1.5px solid #5a3a20",
+              borderRadius: 20,
+              padding: "5px 14px",
+              opacity: labelOpacity,
+              transition: "opacity 0.2s ease",
+            }}
+          >
+            <span style={{ color: "#5a3a20", fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase" }}>
             PASS
+            </span>
           </div>
         )}
         {labelBeen && (
-          <div style={{ position: "absolute", top: 14, left: 14, color: "#4a7aab", fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 1 }}>
-            BEEN HERE
+          <div
+            style={{
+              position: "absolute",
+              top: 14,
+              left: "50%",
+              transform: "translateX(-50%)",
+              background: "rgba(74,122,171,0.15)",
+              border: "1.5px solid #4a7aab",
+              borderRadius: 20,
+              padding: "5px 14px",
+              opacity: labelOpacity,
+              transition: "opacity 0.2s ease",
+            }}
+          >
+            <span style={{ color: "#4a7aab", fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              BEEN HERE
+            </span>
           </div>
         )}
 
@@ -269,16 +332,16 @@ export default function Onboarding({ onComplete }) {
   const content = useMemo(() => {
     if (slide === 0) {
       return (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", textAlign: "center" }}>
-          <Wordmark size={64} />
-          <div style={{ marginTop: 14, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase", color: C.muted }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", textAlign: "center", padding: "0 32px" }}>
+          <Wordmark size={72} />
+          <div style={{ marginTop: 12, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: C.muted }}>
             YOUR TABLE IS WAITING
           </div>
           <div style={{ width: "100%", height: 1, background: C.border, marginTop: 28, marginBottom: 28 }} />
-          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 26, color: C.text }}>
+          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, lineHeight: 1.3, color: C.text, marginBottom: 14 }}>
             The restaurant app for people who care.
           </div>
-          <div style={{ marginTop: 12, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted }}>
+          <div style={{ fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 15, lineHeight: 1.6, color: C.muted }}>
             Not crowd-sourced. Not algorithmic. <span style={{ color: C.terracotta }}>Curated by taste.</span>
           </div>
         </div>
@@ -289,7 +352,7 @@ export default function Onboarding({ onComplete }) {
       return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
           <SwipeDemoCard />
-          <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
             <div style={{ textAlign: "center" }}>
               <div style={{ width: 52, height: 52, borderRadius: "50%", border: `1.5px solid ${C.border}`, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
@@ -309,10 +372,10 @@ export default function Onboarding({ onComplete }) {
               <div style={{ marginTop: 6, color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase" }}>Heat</div>
             </div>
           </div>
-          <div style={{ marginTop: 18, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
+          <div style={{ marginTop: 14, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
             Swipe to build your taste
           </div>
-          <div style={{ marginTop: 8, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
+          <div style={{ marginTop: 6, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
             Heat it, watch it, pass, or mark it as been. Your stack gets smarter every swipe.
           </div>
         </div>
@@ -404,7 +467,7 @@ export default function Onboarding({ onComplete }) {
             <button
               type="button"
               onClick={() => goTo(totalSlides - 1)}
-              style={{ background: "none", border: "none", color: C.dim, fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: "uppercase", cursor: "pointer" }}
+              style={{ background: "none", border: "none", color: C.dim, fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer" }}
             >
               skip
             </button>
