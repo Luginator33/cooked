@@ -369,27 +369,57 @@ export default function Onboarding({ onComplete }) {
           }}
         >
           <div
-            className="cormorant"
             style={{
-              fontSize: 76,
-              fontFamily: "'Cormorant Garamond', Georgia, serif",
-              fontStyle: "italic",
-              fontWeight: 700,
-              lineHeight: 1,
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+              alignItems: "center",
+              width: "100%",
             }}
           >
-            <span style={{ color: "#f0ebe2" }}>cook</span>
-            <span style={{ color: "#c4603a" }}>ed</span>
-          </div>
-          <div className="dm-mono" style={{ marginTop: 10, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", color: "#5a3a20" }}>
-            YOUR TABLE IS WAITING
-          </div>
-          <div style={{ width: 48, height: 2, background: "#c4603a", borderRadius: 2, margin: "20px auto", display: "block", border: "none" }} />
-          <p className="cormorant" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 26, lineHeight: 1.3, color: "#f0ebe2", marginBottom: 12, textAlign: "center", margin: "0 0 12px 0" }}>
-            The restaurant app for people who care.
-          </p>
-          <div className="dm-sans" style={{ fontSize: 14, fontFamily: "'DM Sans', -apple-system, sans-serif", color: "#5a3a20", lineHeight: 1.6 }}>
-            Not crowd-sourced. Not algorithmic. <span style={{ color: "#c4603a" }}>Curated by taste.</span>
+            <div
+              className="cormorant"
+              style={{
+                fontSize: 76,
+                fontFamily: "'Cormorant Garamond', Georgia, serif",
+                fontStyle: "italic",
+                fontWeight: 700,
+                lineHeight: 1,
+              }}
+            >
+              <span style={{ color: "#f0ebe2" }}>cook</span>
+              <span style={{ color: "#c4603a" }}>ed</span>
+            </div>
+            <div className="dm-mono" style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", color: "#5a3a20" }}>
+              YOUR TABLE IS WAITING
+            </div>
+            <div
+              style={{
+                width: "100%",
+                height: 1,
+                background: "linear-gradient(90deg, transparent 0%, #2e1f0e 50%, transparent 100%)",
+                display: "block",
+                border: "none",
+              }}
+            />
+            <p
+              className="cormorant"
+              style={{
+                fontFamily: "'Cormorant Garamond', Georgia, serif",
+                fontStyle: "italic",
+                fontWeight: 700,
+                fontSize: 32,
+                lineHeight: 1.3,
+                color: "#f0ebe2",
+                textAlign: "center",
+                margin: 0,
+              }}
+            >
+              The restaurant app for people who care.
+            </p>
+            <div className="dm-sans" style={{ fontSize: 14, fontFamily: "'DM Sans', -apple-system, sans-serif", color: "#5a3a20", lineHeight: 1.6 }}>
+              Not crowd-sourced. Not algorithmic. <span style={{ color: "#c4603a" }}>Curated by taste.</span>
+            </div>
           </div>
         </div>
       );
