@@ -486,7 +486,6 @@ export default function Onboarding({ onComplete }) {
 
   return (
     <div style={{ width: "100%", minHeight: "100vh", background: C.bg, color: C.text }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400&display=swap');`}</style>
       <style>{`
         @keyframes avatarPop {
           0% { opacity: 0; transform: scale(0) translateY(0); }
@@ -500,7 +499,7 @@ export default function Onboarding({ onComplete }) {
             <button
               type="button"
               onClick={() => goTo(totalSlides - 1)}
-              style={{ background: "none", border: "none", outline: "none", boxShadow: "none", color: C.dim, fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer" }}
+              style={{ border: "1px solid #2e1f0e", borderRadius: 8, padding: "6px 14px", background: "none", color: "#3d2a18", fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer" }}
             >
               skip
             </button>
@@ -543,14 +542,14 @@ export default function Onboarding({ onComplete }) {
             }}
             style={{
               width: "100%",
-              background: C.terracotta,
+              background: "#c4603a",
               color: "#fff",
               border: "none",
               borderRadius: 14,
-              padding: "14px 16px",
-              fontFamily: "'DM Sans', -apple-system, sans-serif",
+              padding: "16px",
+              fontFamily: "'DM Sans', sans-serif",
               fontWeight: 500,
-              fontSize: 15,
+              fontSize: 16,
               cursor: "pointer",
             }}
           >
