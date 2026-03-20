@@ -138,6 +138,7 @@ function GraphCanvas({ active }) {
 
 function SwipeDemoCard() {
   const [step, setStep] = useState(0);
+  const [cardIndex, setCardIndex] = useState(0);
   const restaurants = [
     {
       name: "Nobu Malibu",
@@ -150,17 +151,37 @@ function SwipeDemoCard() {
       img: "https://lh3.googleusercontent.com/places/ANXAkqGq6FcrvIKJMmHXJxLDnBwWQU_iNRUbBAT5yWuaf-H_h86pHW4SVUUJtVQn9HI0iPxrYshTvxMBmbNvI54Sl5W1RM_7JXI18JA=s4800-w800",
     },
     {
-      name: "Republique",
+      name: "République",
       meta: "FRENCH · MID-CITY",
       img: "https://lh3.googleusercontent.com/places/ANXAkqG32fnvcCWL3_hHS5Pt4ea_BiMQSovPUdJ2p27xeEz97H0vI4NNBfrQPLLlxRdVgZaUItE3UcRnqsBqOaOkgAjfIfRsAQOJ9o0=s4800-w800",
+    },
+    {
+      name: "Sqirl",
+      meta: "CALIFORNIA · SILVER LAKE",
+      img: "https://lh3.googleusercontent.com/places/ANXAkqEYbgJ0fDVWQIfNZr0XHjQ8Te5Se0NOdDSiIM53H_1hGJbpUvStJrHyn_SS1kXU47CyBNKMh69LD9RAf8ndqenu5Q_SV3XLtA8=s4800-w800",
+    },
+    {
+      name: "Kismet",
+      meta: "MIDDLE EASTERN · LOS FELIZ",
+      img: "https://lh3.googleusercontent.com/place-photos/AL8-SNEXP-2aYXQk0qbqjdR1aeSsC6I5zWAuCUad2i1kx-poWpcCgJkxOJMZriMC3XnjtTKoR6oybgqsN_v_p_pg5ojS7yvDrzya2pINSDSxN6ED0EWxkudD4DfyN5nRcBckmJCpBJxaU1A21_rVcg=s4800-w800",
+    },
+    {
+      name: "Guelaguetza",
+      meta: "OAXACAN · MID-CITY",
+      img: "https://lh3.googleusercontent.com/place-photos/AL8-SNFEolRLj9P0lhEbfgemsDrLr5h6SNsR1r3FkVfcMOy7qT835X1uXrIZWBcPg7naQkJoYjgSCgXo3G1LCRw5mpXTgzf_AtCkIOJKrAlUHOmRH-qNI3AEQNZ-tcWyOmOKMTF54HCGg8uX0l-l1-1ZUawj=s4800-w800",
     },
   ];
 
   useEffect(() => {
     const durations = [1000, 400, 100, 1000, 400, 100, 1000, 400, 100];
-    const timer = setTimeout(() => setStep((s) => (s + 1) % durations.length), durations[step]);
+    const timer = setTimeout(() => {
+      if (step === 1 || step === 4 || step === 7) {
+        setCardIndex((i) => (i + 1) % restaurants.length);
+      }
+      setStep((s) => (s + 1) % durations.length);
+    }, durations[step]);
     return () => clearTimeout(timer);
-  }, [step]);
+  }, [step, restaurants.length]);
 
   const phase = step;
   const cardStyle = {
@@ -174,7 +195,7 @@ function SwipeDemoCard() {
             : "translateX(0) translateY(0) rotate(0deg)",
     transition: phase === 2 || phase === 5 || phase === 8 ? "none" : "transform 0.4s ease",
   };
-  const idx = phase <= 2 ? 0 : phase <= 5 ? 1 : 2;
+  const idx = cardIndex % restaurants.length;
   const labelHeat = phase === 1;
   const labelPass = phase === 4;
   const labelBeen = phase === 7;
@@ -301,17 +322,6 @@ export default function Onboarding({ onComplete }) {
   const [slide, setSlide] = useState(0);
   const [phase, setPhase] = useState("in");
   const totalSlides = 4;
-
-  useEffect(() => {
-    const style = document.createElement("style");
-    style.setAttribute("data-onboarding-fonts", "true");
-    style.textContent =
-      "@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400&display=swap');";
-    document.head.appendChild(style);
-    return () => {
-      style.remove();
-    };
-  }, []);
 
   const finish = () => {
     try {
@@ -454,6 +464,7 @@ export default function Onboarding({ onComplete }) {
 
   return (
     <div style={{ width: "100%", minHeight: "100vh", background: C.bg, color: C.text }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400&display=swap');`}</style>
       <style>{`
         @keyframes avatarPop {
           0% { opacity: 0; transform: scale(0) translateY(0); }
@@ -498,7 +509,7 @@ export default function Onboarding({ onComplete }) {
               i === slide ? (
                 <div key={i} style={{ width: 20, height: 8, borderRadius: 999, background: C.terracotta }} />
               ) : (
-                <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: C.border }} />
+                <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: C.border, fontFamily: "'DM Mono', monospace" }} />
               )
             )}
           </div>
