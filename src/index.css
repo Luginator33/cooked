@@ -64,3 +64,7 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.cormorant { font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-weight: 700; }
+.dm-mono { font-family: 'DM Mono', monospace; }
+.dm-sans { font-family: 'DM Sans', -apple-system, sans-serif; }
