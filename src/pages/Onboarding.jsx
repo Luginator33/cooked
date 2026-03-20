@@ -40,8 +40,8 @@ function Wordmark({ size = 22 }) {
         lineHeight: 1,
       }}
     >
-      <span style={{ color: C.text }}>cook</span>
-      <span style={{ color: C.terracotta }}>ed</span>
+      <span style={{ color: "#f0ebe2" }}>cook</span>
+      <span style={{ color: "#c4603a" }}>ed</span>
     </span>
   );
 }
@@ -342,17 +342,19 @@ export default function Onboarding({ onComplete }) {
   const content = useMemo(() => {
     if (slide === 0) {
       return (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", textAlign: "center", padding: "0 32px" }}>
-          <Wordmark size={72} />
-          <div style={{ marginTop: 12, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: C.muted }}>
-            YOUR TABLE IS WAITING
-          </div>
-          <div style={{ width: "100%", height: 1, background: C.border, marginTop: 28, marginBottom: 28 }} />
-          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, lineHeight: 1.3, color: C.text, marginBottom: 14 }}>
-            The restaurant app for people who care.
-          </div>
-          <div style={{ fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 15, lineHeight: 1.6, color: C.muted }}>
-            Not crowd-sourced. Not algorithmic. <span style={{ color: C.terracotta }}>Curated by taste.</span>
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, textAlign: "center", padding: "0 32px" }}>
+            <Wordmark size={80} />
+            <div style={{ marginTop: 12, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: C.muted }}>
+              YOUR TABLE IS WAITING
+            </div>
+            <div style={{ width: 60, height: 2, background: C.terracotta, borderRadius: 2, margin: "24px auto" }} />
+            <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, lineHeight: 1.3, color: "#f0ebe2", marginBottom: 14 }}>
+              The restaurant app for people who care.
+            </div>
+            <div style={{ fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 15, lineHeight: 1.6, color: C.muted }}>
+              Not crowd-sourced. Not algorithmic. <span style={{ color: C.terracotta }}>Curated by taste.</span>
+            </div>
           </div>
         </div>
       );
@@ -478,7 +480,7 @@ export default function Onboarding({ onComplete }) {
             <button
               type="button"
               onClick={() => goTo(totalSlides - 1)}
-              style={{ background: "none", border: "none", color: C.dim, fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer" }}
+              style={{ background: "none", border: "none", outline: "none", boxShadow: "none", color: C.dim, fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer" }}
             >
               skip
             </button>
