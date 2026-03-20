@@ -7,6 +7,7 @@ import { RESTAURANTS, CITIES, ALL_TAGS } from "../data/restaurants";
 import ChatBot from "../components/ChatBot";
 import Profile from "./Profile";
 import UserProfile from "./UserProfile";
+import Onboarding from "./Onboarding";
 import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser } from "../lib/supabase";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -608,6 +609,15 @@ function LazyPhotoRow({ item, pickerIndex, onLoad, onSelect, onRefresh, C }) {
 export default function Discover({ tasteProfile, initialTab }) {
   const { user } = useUser();
   const [tab, setTab] = useState(initialTab || "home");
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    try { return !safeLocalStorageGetItem("cooked_onboarding_done"); } catch { return true; }
+  });
+  const [showHeatTip, setShowHeatTip] = useState(false);
+  const [heatTipFading, setHeatTipFading] = useState(false);
+  const [setupGateOpen, setSetupGateOpen] = useState(false);
+  const [setupName, setSetupName] = useState("");
+  const [setupUsername, setSetupUsername] = useState("");
+  const [setupSaving, setSetupSaving] = useState(false);
   const [city, setCity] = useState("Los Angeles");
   const [followedCities, setFollowedCities] = useState([]);
   const [watchlist, setWatchlist] = useState(() => {
@@ -999,6 +1009,42 @@ export default function Discover({ tasteProfile, initialTab }) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!showHeatTip) {
+      setHeatTipFading(false);
+      return;
+    }
+    const fadeTimer = setTimeout(() => setHeatTipFading(true), 5400);
+    const closeTimer = setTimeout(() => setShowHeatTip(false), 6000);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(closeTimer);
+    };
+  }, [showHeatTip]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.id) {
+      setSetupGateOpen(false);
+      return;
+    }
+    (async () => {
+      const profile = await loadUserData(user.id);
+      if (cancelled) return;
+      const profileName = String(profile?.profile_name || "").trim();
+      const profileUsername = String(profile?.profile_username || "").trim();
+      const needsSetup = !profileName || profileName.toLowerCase() === "user";
+      if (needsSetup) {
+        setSetupName(profileName && profileName.toLowerCase() !== "user" ? profileName : (user.fullName || user.firstName || ""));
+        setSetupUsername(profileUsername || user.username || user.primaryEmailAddress?.emailAddress?.split("@")[0] || "");
+        setSetupGateOpen(true);
+      } else {
+        setSetupGateOpen(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -2425,6 +2471,64 @@ export default function Discover({ tasteProfile, initialTab }) {
     </div>
   );
 
+  if (showOnboarding) {
+    return (
+      <Onboarding
+        onComplete={() => {
+          setShowOnboarding(false);
+          setTab("heat");
+          setShowHeatTip(true);
+        }}
+      />
+    );
+  }
+
+  if (user?.id && setupGateOpen) {
+    return (
+      <div style={{ width: "100%", minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ width: "100%", maxWidth: 460, background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
+          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 34, color: C.text, marginBottom: 4 }}>One last thing.</div>
+          <div style={{ color: C.muted, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, marginBottom: 16 }}>What should we call you?</div>
+          <input
+            value={setupName}
+            onChange={(e) => setSetupName(e.target.value)}
+            placeholder="Your name"
+            style={{ width: "100%", background: C.bg2, border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px 16px", marginBottom: 10, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, outline: "none" }}
+          />
+          <input
+            value={setupUsername}
+            onChange={(e) => setSetupUsername(e.target.value)}
+            placeholder="@handle"
+            style={{ width: "100%", background: C.bg2, border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px 16px", marginBottom: 14, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, outline: "none" }}
+          />
+          <button
+            type="button"
+            disabled={setupSaving || !setupName.trim() || !setupUsername.trim()}
+            onClick={async () => {
+              if (!user?.id || !setupName.trim() || !setupUsername.trim()) return;
+              setSetupSaving(true);
+              try {
+                const username = setupUsername.trim().replace(/^@+/, "");
+                await saveUserData(user.id, {
+                  profile_name: setupName.trim(),
+                  profile_username: username,
+                });
+                safeSetItem("cooked_profile_name", setupName.trim());
+                safeSetItem("cooked_profile_username", username);
+                setSetupGateOpen(false);
+              } finally {
+                setSetupSaving(false);
+              }
+            }}
+            style={{ width: "100%", background: C.terracotta, color: "#fff", border: "none", borderRadius: 12, padding: "12px 16px", fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, fontWeight: 600, cursor: setupSaving ? "default" : "pointer", opacity: setupSaving ? 0.7 : 1 }}
+          >
+            Let's eat
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
     <SignedOut>
@@ -3792,6 +3896,40 @@ export default function Discover({ tasteProfile, initialTab }) {
 
       </div>
       {/* End main content (zIndex:10) */}
+
+      {tab === "heat" && showHeatTip && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            left: "50%",
+            transform: "translateX(-50%)",
+            bottom: 98,
+            width: "min(calc(100vw - 24px), 420px)",
+            zIndex: 99998,
+            opacity: heatTipFading ? 0 : 1,
+            transition: "opacity 0.6s ease",
+            pointerEvents: heatTipFading ? "none" : "auto",
+          }}
+        >
+          <div style={{ position: "relative", background: C.terracotta, borderRadius: 12, padding: "14px 16px 12px", color: "#fff", boxShadow: "0 8px 28px rgba(0,0,0,0.35)" }}>
+            <button
+              type="button"
+              aria-label="Dismiss swipe help"
+              onClick={() => setShowHeatTip(false)}
+              style={{ position: "absolute", top: 8, right: 8, width: 22, height: 22, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.18)", color: "#fff", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}
+            >
+              ×
+            </button>
+            <div style={{ paddingRight: 18, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 13, lineHeight: 1.5 }}>
+              <div>🔥 Heat - you've been or want to go</div>
+              <div>👁 Watch - on your radar</div>
+              <div>✕ Pass - not your thing</div>
+              <div>↑ Swipe up - already been</div>
+            </div>
+          </div>
+        </div>,
+        document.getElementById("root") || document.body
+      )}
 
       {/* Restaurant detail overlay — above main content */}
       {detailRestaurant && (() => {
