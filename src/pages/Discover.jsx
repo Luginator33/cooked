@@ -13,6 +13,28 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const DATA_VERSION = "v5-2920";
 
+/** Session cache: `${viewerClerkId}:${restaurantId}` → friends who loved this spot (avoids refetch on reopen). */
+const friendsBeenHereCache = new Map();
+
+function lovedIdsFromUserRow(row) {
+  if (Array.isArray(row?.loved)) return row.loved;
+  if (Array.isArray(row?.heat?.loved)) return row.heat.loved;
+  return [];
+}
+
+function restaurantIdInLovedList(restId, loved) {
+  if (!Array.isArray(loved)) return false;
+  return loved.includes(restId) || loved.includes(Number(restId));
+}
+
+function flameRatingFromUserData(ratings, restId) {
+  if (!ratings || typeof ratings !== "object") return null;
+  const raw = ratings[restId] ?? ratings[String(restId)] ?? ratings[Number(restId)];
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(5, Math.max(1, Math.round(n)));
+}
+
 const BACKUP_KEYS = [
   "cooked_photos",
   "cooked_photo_resolved",
@@ -25,12 +47,159 @@ const BACKUP_KEYS = [
   "cooked_profile_username",
 ];
 
+const COOKED_PHOTOS_KEY = "cooked_photos";
+const COOKED_PHOTOS_PREVIEW_KEY = "cooked_photos_preview";
+const COOKED_PHOTOS_LRU_KEY = "cooked_photos_lru";
+const PHOTO_CACHE_MAX_BYTES = 3 * 1024 * 1024;
+const PHOTO_CACHE_KEEP_COUNT = 50;
+
+function isQuotaExceededError(e) {
+  return (
+    (e instanceof DOMException && (e.name === "QuotaExceededError" || e.code === 22)) ||
+    (e && e.name === "QuotaExceededError")
+  );
+}
+
+/** Safe localStorage read — catches quota / access errors */
+function safeLocalStorageGetItem(key) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch (e) {
+    if (isQuotaExceededError(e)) console.warn("[cooked] localStorage.getItem QuotaExceededError:", key);
+    return null;
+  }
+}
+
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    if (e.name === "QuotaExceededError" || e.code === 22) {
+      // Clear the photo vault (largest offender) and retry once
+      console.warn("localStorage quota exceeded, clearing photo cache");
+      localStorage.removeItem("cooked_photos");
+      localStorage.removeItem("cooked_photos_preview");
+      localStorage.removeItem("cooked_photos_lru");
+      try {
+        localStorage.setItem(key, value);
+      } catch (e2) {
+        console.error("localStorage still full after clearing photos:", e2);
+      }
+    }
+  }
+}
+
+/** Track photo cache access for LRU trimming (call when a cached photo is used). */
+function touchPhotoCacheAccess(restaurantId) {
+  if (typeof window === "undefined" || restaurantId == null) return;
+  const id = String(restaurantId);
+  try {
+    let lru = [];
+    try {
+      lru = JSON.parse(safeLocalStorageGetItem(COOKED_PHOTOS_LRU_KEY) || "[]");
+    } catch {
+      lru = [];
+    }
+    if (!Array.isArray(lru)) lru = [];
+    const next = lru.filter((x) => String(x) !== id);
+    next.push(id);
+    safeSetItem(COOKED_PHOTOS_LRU_KEY, JSON.stringify(next));
+  } catch (e) {
+    if (isQuotaExceededError(e)) console.warn("[cooked] touchPhotoCacheAccess QuotaExceededError");
+  }
+}
+
+/**
+ * If cooked_photos + cooked_photos_preview exceed 3MB, keep only the 50 most recently
+ * accessed entries (via cooked_photos_lru). Call once on startup before other reads.
+ */
+function clearOldPhotoCache() {
+  if (typeof window === "undefined") return;
+  try {
+    const photosRaw = safeLocalStorageGetItem(COOKED_PHOTOS_KEY) || "{}";
+    const previewRaw = safeLocalStorageGetItem(COOKED_PHOTOS_PREVIEW_KEY) || "{}";
+    let sizeBytes = 0;
+    try {
+      sizeBytes = new Blob([photosRaw, previewRaw]).size;
+    } catch {
+      sizeBytes = photosRaw.length + previewRaw.length;
+    }
+    if (sizeBytes <= PHOTO_CACHE_MAX_BYTES) return;
+
+    let photos = {};
+    let preview = {};
+    try {
+      photos = JSON.parse(photosRaw) || {};
+    } catch {
+      photos = {};
+    }
+    try {
+      preview = JSON.parse(previewRaw) || {};
+    } catch {
+      preview = {};
+    }
+
+    const idStr = (k) => String(k);
+    const allIdSet = new Set([
+      ...Object.keys(photos).map(idStr),
+      ...Object.keys(preview).map(idStr),
+    ]);
+
+    let lru = [];
+    try {
+      lru = JSON.parse(safeLocalStorageGetItem(COOKED_PHOTOS_LRU_KEY) || "[]");
+    } catch {
+      lru = [];
+    }
+    if (!Array.isArray(lru)) lru = [];
+    const lruStr = lru.map(idStr).filter((id) => allIdSet.has(id));
+
+    const inLru = new Set(lruStr);
+    const notInLru = [...allIdSet].filter((id) => !inLru.has(id));
+    const ordered = [...notInLru, ...lruStr];
+    const keepList = ordered.slice(-PHOTO_CACHE_KEEP_COUNT);
+    const keep = new Set(keepList);
+
+    const nextPhotos = {};
+    const nextPreview = {};
+    for (const id of keep) {
+      if (Object.prototype.hasOwnProperty.call(photos, id)) nextPhotos[id] = photos[id];
+      if (Object.prototype.hasOwnProperty.call(preview, id)) nextPreview[id] = preview[id];
+    }
+
+    const lruOrdered = keepList.filter((id) => keep.has(id));
+
+    try {
+      safeSetItem(COOKED_PHOTOS_KEY, JSON.stringify(nextPhotos));
+      safeSetItem(COOKED_PHOTOS_PREVIEW_KEY, JSON.stringify(nextPreview));
+      safeSetItem(COOKED_PHOTOS_LRU_KEY, JSON.stringify(lruOrdered));
+    } catch (e) {
+      if (isQuotaExceededError(e)) {
+        console.warn("[cooked] clearOldPhotoCache write QuotaExceededError");
+      } else {
+        console.warn("[cooked] clearOldPhotoCache write failed", e);
+      }
+    }
+  } catch (e) {
+    if (isQuotaExceededError(e)) console.warn("[cooked] clearOldPhotoCache QuotaExceededError");
+    else console.warn("[cooked] clearOldPhotoCache", e);
+  }
+}
+
 // Bust stale localStorage if version mismatch
 if (typeof window !== "undefined") {
-  const storedVersion = localStorage.getItem("cooked_data_version");
-  if (storedVersion !== DATA_VERSION) {
-    localStorage.removeItem("cooked_restaurants");
-    localStorage.setItem("cooked_data_version", DATA_VERSION);
+  clearOldPhotoCache();
+  try {
+    const storedVersion = safeLocalStorageGetItem("cooked_data_version");
+    if (storedVersion !== DATA_VERSION) {
+      try {
+        safeSetItem("cooked_data_version", DATA_VERSION);
+      } catch (e) {
+        if (isQuotaExceededError(e)) console.warn("[cooked] version migration QuotaExceededError");
+      }
+    }
+  } catch (e) {
+    if (isQuotaExceededError(e)) console.warn("[cooked] startup version read QuotaExceededError");
   }
 }
 
@@ -293,10 +462,10 @@ function RestCard({ r, loved, watched, onLove, onWatch, onShare, onOpenDetail, o
   useEffect(() => {
     if (!r.img || !r.img.includes('picsum')) return; // already has a real photo
     try {
-      const vault = JSON.parse(localStorage.getItem('cooked_photos') || '{}');
-      if (vault[r.id]) return;
-      const preview = JSON.parse(localStorage.getItem('cooked_photos_preview') || '{}');
-      if (preview[r.id]) return;
+      const vault = JSON.parse(safeLocalStorageGetItem('cooked_photos') || '{}');
+      if (vault[r.id]) { touchPhotoCacheAccess(r.id); return; }
+      const preview = JSON.parse(safeLocalStorageGetItem('cooked_photos_preview') || '{}');
+      if (preview[r.id]) { touchPhotoCacheAccess(r.id); return; }
     } catch {}
     const el = cardRef.current;
     if (!el) return;
@@ -440,7 +609,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [city, setCity] = useState("Los Angeles");
   const [followedCities, setFollowedCities] = useState([]);
   const [watchlist, setWatchlist] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("cooked_watchlist") || "[]"); } catch { return []; }
+    try { return JSON.parse(safeLocalStorageGetItem("cooked_watchlist") || "[]"); } catch { return []; }
   });
   const [toast, setToast] = useState(null);
   const [detailShareCopied, setDetailShareCopied] = useState(false);
@@ -463,75 +632,50 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [mapsReady, setMapsReady] = useState(false);
   const [selectedRest, setSelectedRest] = useState(null);
   const [viewingUserId, setViewingUserId] = useState(null);
-  const [friendsLovedCount, setFriendsLovedCount] = useState(0);
+  /** Friends (following) who have this restaurant in loved — loaded when detail opens; see friendsBeenHereCache. */
+  const [friendsBeenHere, setFriendsBeenHere] = useState({ loading: false, list: [] });
+  const [friendsBeenHereSheetOpen, setFriendsBeenHereSheetOpen] = useState(false);
+  // Restaurants: static RESTAURANTS + community (Supabase) merged in useEffect below — never persisted in localStorage (Safari quota).
   const [allRestaurants, setAllRestaurants] = useState(() => {
     try {
-      const stored = localStorage.getItem("cooked_restaurants");
-      if (!stored) return RESTAURANTS;
-      const parsed = JSON.parse(stored);
-      const seen = new Set();
-      const deduped = parsed.filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; });
-      // Also dedup by name+city (keeps first occurrence, preserving photos on the kept entry)
-      const seenNameCity = new Set();
-      const dedupedFull = deduped.filter(r => {
-        const key = (r.name || '').toLowerCase() + '|' + (r.city || '').toLowerCase();
-        if (seenNameCity.has(key)) return false;
-        seenNameCity.add(key);
-        return true;
-      });
-      const dedupedForMerge = dedupedFull;
-      const baseIds = new Set(RESTAURANTS.map(r => r.id));
-      const storedById = {};
-      dedupedForMerge.forEach(r => { storedById[r.id] = r; });
-      const igImports = dedupedForMerge.filter(r => !baseIds.has(r.id));
-      // Photo priority on init: vault (user-confirmed only) > preview (auto-fetched) > source
-      // vault = cooked_photos, but only IDs in cooked_photo_resolved are truly confirmed
       let allVaultPhotos = {};
-      try { allVaultPhotos = JSON.parse(localStorage.getItem("cooked_photos") || "{}"); } catch {}
+      try { allVaultPhotos = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}"); } catch {}
       let resolvedIds = new Set();
-      try { resolvedIds = new Set(JSON.parse(localStorage.getItem("cooked_photo_resolved") || "[]")); } catch {}
-      // savedPhotos = only confirmed entries
+      try { resolvedIds = new Set(JSON.parse(safeLocalStorageGetItem("cooked_photo_resolved") || "[]")); } catch {}
       const savedPhotos = {};
-      Object.keys(allVaultPhotos).forEach(id => {
+      Object.keys(allVaultPhotos).forEach((id) => {
         if (resolvedIds.has(Number(id)) || resolvedIds.has(id)) savedPhotos[id] = allVaultPhotos[id];
       });
       let previewPhotos = {};
-      try { previewPhotos = JSON.parse(localStorage.getItem("cooked_photos_preview") || "{}"); } catch {}
-      const baseMerged = RESTAURANTS.map(r => {
-        const s = storedById[r.id];
-        const freshHeat = r.heat; // always from source file
+      try { previewPhotos = JSON.parse(safeLocalStorageGetItem("cooked_photos_preview") || "{}"); } catch {}
+      const baseMerged = RESTAURANTS.map((r) => {
+        const freshHeat = r.heat;
         const vaultImg = savedPhotos[r.id];
         const previewImg = previewPhotos[r.id];
         if (vaultImg) return { ...r, img: vaultImg, img2: vaultImg, heat: freshHeat };
         if (previewImg) return { ...r, img: previewImg, img2: previewImg, heat: freshHeat };
-        if (s && s.img && !s.img.includes('picsum')) return { ...r, img: s.img, img2: s.img2 || s.img, heat: freshHeat };
         return r;
       });
-      // Apply vault + preview to igImports too
-      const igMerged = igImports.map(r => {
-        const vaultImg = savedPhotos[r.id];
-        const previewImg = previewPhotos[r.id];
-        if (vaultImg) return { ...r, img: vaultImg, img2: vaultImg };
-        if (previewImg) return { ...r, img: previewImg, img2: previewImg };
-        return r;
-      });
-      // Safety: filter out any malformed entries
-      const valid = [...baseMerged, ...igMerged].filter(r => 
-        r && typeof r.id === 'number' && typeof r.name === 'string' && r.name
+      const valid = baseMerged.filter(
+        (r) => r && typeof r.id === "number" && typeof r.name === "string" && r.name
       );
       return valid.length > 0 ? valid : RESTAURANTS;
-    } catch { return RESTAURANTS; }
+    } catch {
+      return RESTAURANTS;
+    }
   });
+  const allRestaurantsRef = useRef(RESTAURANTS);
+  allRestaurantsRef.current = allRestaurants;
   const [photoResolved, setPhotoResolved] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("cooked_photo_resolved") || "[]"); } catch { return []; }
+    try { return JSON.parse(safeLocalStorageGetItem("cooked_photo_resolved") || "[]"); } catch { return []; }
   });
   const [detailRestaurant, setDetailRestaurant] = useState(null);
   const [placeDetails, setPlaceDetails] = useState({});
   const [userRatings, setUserRatings] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("cooked_ratings") || "{}"); } catch { return {}; }
+    try { return JSON.parse(safeLocalStorageGetItem("cooked_ratings") || "{}"); } catch { return {}; }
   });
   const [userNotes, setUserNotes] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("cooked_notes") || "{}"); } catch { return {}; }
+    try { return JSON.parse(safeLocalStorageGetItem("cooked_notes") || "{}"); } catch { return {}; }
   });
   const [noteInput, setNoteInput] = useState("");
   const [activeFilter, setActiveFilter] = useState(null);
@@ -560,7 +704,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   }, [tab, discoverSearchMode]);
   const [heatIndex, setHeatIndex] = useState(0);
   const [heatResults, setHeatResults] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("cooked_heat") || '{"loved":[],"noped":[],"skipped":[],"votes":{}}'); } catch { return { loved: [], noped: [], skipped: [], votes: {} }; }
+    try { return JSON.parse(safeLocalStorageGetItem("cooked_heat") || '{"loved":[],"noped":[],"skipped":[],"votes":{}}'); } catch { return { loved: [], noped: [], skipped: [], votes: {} }; }
   });
   const [heatCity, setHeatCity] = useState("All");
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
@@ -569,7 +713,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [notifList, setNotifList] = useState([]);
   const [notifLoading, setNotifLoading] = useState(false);
   const [headerProfilePhoto, setHeaderProfilePhoto] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("cooked_profile_photo") : null
+    typeof window !== "undefined" ? safeLocalStorageGetItem("cooked_profile_photo") : null
   );
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState({ done: 0, total: 0 });
@@ -608,6 +752,16 @@ export default function Discover({ tasteProfile, initialTab }) {
       if (!error) setFollowedCities((prev) => (prev.includes(cityName) ? prev : [...prev, cityName]));
     }
   };
+
+  useEffect(() => {
+    if (!detailRestaurant?.id) return;
+    try {
+      const id = detailRestaurant.id;
+      const vault = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}");
+      const preview = JSON.parse(safeLocalStorageGetItem("cooked_photos_preview") || "{}");
+      if (vault[id] || preview[id]) touchPhotoCacheAccess(id);
+    } catch {}
+  }, [detailRestaurant?.id]);
 
   useEffect(() => {
     const t = setTimeout(() => setPeopleDebouncedQuery(peopleSearchInput), 300);
@@ -731,7 +885,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   }, [discoverSearchMode, user?.id, allRestaurants]);
 
   useEffect(() => {
-    setHeaderProfilePhoto(typeof window !== "undefined" ? localStorage.getItem("cooked_profile_photo") : null);
+    setHeaderProfilePhoto(typeof window !== "undefined" ? safeLocalStorageGetItem("cooked_profile_photo") : null);
   }, [tab]);
 
   useEffect(() => {
@@ -788,12 +942,9 @@ export default function Discover({ tasteProfile, initialTab }) {
   const backupInputRef = useRef(null);
 
   const [userLists, setUserLists] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("cooked_lists") || "{\"Breakfast/Brunch\":[],\"Lunch\":[],\"Dinner\":[],\"Bar\":[],\"Coffee\":[]}"); } catch { return { "Breakfast/Brunch": [], "Lunch": [], "Dinner": [], "Bar": [], "Coffee": [] }; }
+    try { return JSON.parse(safeLocalStorageGetItem("cooked_lists") || "{\"Breakfast/Brunch\":[],\"Lunch\":[],\"Dinner\":[],\"Bar\":[],\"Coffee\":[]}"); } catch { return { "Breakfast/Brunch": [], "Lunch": [], "Dinner": [], "Bar": [], "Coffee": [] }; }
   });
   const supabaseLoadedRef = useRef(false);
-  useEffect(() => {
-    localStorage.setItem("cooked_restaurants", JSON.stringify(allRestaurants));
-  }, [allRestaurants]);
 
   // Merge in community restaurants from Supabase so all users can see them.
   useEffect(() => {
@@ -811,11 +962,11 @@ export default function Discover({ tasteProfile, initialTab }) {
     })();
     return () => { cancelled = true; };
   }, []);
-  useEffect(() => { localStorage.setItem("cooked_ratings", JSON.stringify(userRatings)); }, [userRatings]);
-  useEffect(() => { localStorage.setItem("cooked_notes", JSON.stringify(userNotes)); }, [userNotes]);
-  useEffect(() => { localStorage.setItem("cooked_lists", JSON.stringify(userLists)); }, [userLists]);
-  useEffect(() => { localStorage.setItem("cooked_photo_resolved", JSON.stringify(photoResolved)); }, [photoResolved]);
-  useEffect(() => { localStorage.setItem("cooked_watchlist", JSON.stringify(watchlist)); }, [watchlist]);
+  useEffect(() => { safeSetItem("cooked_ratings", JSON.stringify(userRatings)); }, [userRatings]);
+  useEffect(() => { safeSetItem("cooked_notes", JSON.stringify(userNotes)); }, [userNotes]);
+  useEffect(() => { safeSetItem("cooked_lists", JSON.stringify(userLists)); }, [userLists]);
+  useEffect(() => { safeSetItem("cooked_photo_resolved", JSON.stringify(photoResolved)); }, [photoResolved]);
+  useEffect(() => { safeSetItem("cooked_watchlist", JSON.stringify(watchlist)); }, [watchlist]);
 
   const prevInitialTabRef = useRef(initialTab);
   useEffect(() => {
@@ -825,41 +976,71 @@ export default function Discover({ tasteProfile, initialTab }) {
     prevInitialTabRef.current = initialTab;
     setTab(initialTab);
   }, [initialTab]);
-  useEffect(() => { localStorage.setItem("cooked_heat", JSON.stringify(heatResults)); }, [heatResults]);
+  useEffect(() => { safeSetItem("cooked_heat", JSON.stringify(heatResults)); }, [heatResults]);
 
   useEffect(() => {
-    let cancelled = false;
-    if (!user?.id || !detailRestaurant?.id) {
-      setFriendsLovedCount(0);
+    if (!detailRestaurant?.id) {
+      setFriendsBeenHere({ loading: false, list: [] });
       return;
     }
+    if (!user?.id) {
+      setFriendsBeenHere({ loading: false, list: [] });
+      return;
+    }
+    const restId = detailRestaurant.id;
+    const cacheKey = `${user.id}:${restId}`;
+    if (friendsBeenHereCache.has(cacheKey)) {
+      setFriendsBeenHere({ loading: false, list: friendsBeenHereCache.get(cacheKey) });
+      return;
+    }
+    let cancelled = false;
+    setFriendsBeenHere({ loading: true, list: [] });
     (async () => {
       try {
         const { data: followingRows } = await getFollowing(user.id);
         const followingIds = (followingRows || []).map((row) => row.following_id).filter(Boolean);
         if (!followingIds.length) {
-          if (!cancelled) setFriendsLovedCount(0);
+          if (!cancelled) {
+            friendsBeenHereCache.set(cacheKey, []);
+            setFriendsBeenHere({ loading: false, list: [] });
+          }
           return;
         }
         const { data, error } = await supabase
           .from("user_data")
-          .select("clerk_user_id,loved,heat")
+          .select("clerk_user_id,loved,heat,profile_photo,profile_name,ratings")
           .in("clerk_user_id", followingIds);
+        if (cancelled) return;
         if (error) {
-          if (!cancelled) setFriendsLovedCount(0);
+          setFriendsBeenHere({ loading: false, list: [] });
           return;
         }
-        const count = (data || []).reduce((acc, row) => {
-          const loved = Array.isArray(row?.loved) ? row.loved : (Array.isArray(row?.heat?.loved) ? row.heat.loved : []);
-          return loved.includes(detailRestaurant.id) || loved.includes(Number(detailRestaurant.id)) ? acc + 1 : acc;
-        }, 0);
-        if (!cancelled) setFriendsLovedCount(count);
+        const list = [];
+        for (const row of data || []) {
+          const loved = lovedIdsFromUserRow(row);
+          if (!restaurantIdInLovedList(restId, loved)) continue;
+          const uid = row.clerk_user_id;
+          if (!uid) continue;
+          list.push({
+            clerkUserId: uid,
+            profileName: String(row.profile_name || "User").trim() || "User",
+            profilePhoto: row.profile_photo || null,
+            flameRating: flameRatingFromUserData(row.ratings, restId),
+          });
+        }
+        list.sort((a, b) => a.profileName.localeCompare(b.profileName, undefined, { sensitivity: "base" }));
+        friendsBeenHereCache.set(cacheKey, list);
+        setFriendsBeenHere({ loading: false, list });
       } catch {
-        if (!cancelled) setFriendsLovedCount(0);
+        if (!cancelled) setFriendsBeenHere({ loading: false, list: [] });
       }
     })();
     return () => { cancelled = true; };
   }, [user?.id, detailRestaurant?.id]);
+
+  useEffect(() => {
+    if (!detailRestaurant) setFriendsBeenHereSheetOpen(false);
+  }, [detailRestaurant]);
 
   // Load user data from Supabase on sign-in; migrate local data if no remote row yet.
   useEffect(() => {
@@ -891,18 +1072,18 @@ export default function Discover({ tasteProfile, initialTab }) {
         setUserRatings(remoteRatings);
         setPhotoResolved(remotePhotoResolved);
 
-        localStorage.setItem("cooked_heat", JSON.stringify(remoteHeat));
-        localStorage.setItem("cooked_watchlist", JSON.stringify(remoteWatchlist));
-        localStorage.setItem("cooked_ratings", JSON.stringify(remoteRatings));
-        localStorage.setItem("cooked_photo_resolved", JSON.stringify(remotePhotoResolved));
+        safeSetItem("cooked_heat", JSON.stringify(remoteHeat));
+        safeSetItem("cooked_watchlist", JSON.stringify(remoteWatchlist));
+        safeSetItem("cooked_ratings", JSON.stringify(remoteRatings));
+        safeSetItem("cooked_photo_resolved", JSON.stringify(remotePhotoResolved));
         if (remotePhotos) {
-          localStorage.setItem("cooked_photos", JSON.stringify(remotePhotos));
+          safeSetItem("cooked_photos", JSON.stringify(remotePhotos));
         }
         if (remote.profile_photo) {
-          localStorage.setItem("cooked_profile_photo", remote.profile_photo);
+          safeSetItem("cooked_profile_photo", remote.profile_photo);
         }
         if (remote.banner_photo) {
-          localStorage.setItem("cooked_banner_photo", remote.banner_photo);
+          safeSetItem("cooked_banner_photo", remote.banner_photo);
         }
         if (!remote.profile_name || !String(remote.profile_name).trim()) {
           await saveUserData(user.id, {
@@ -921,9 +1102,9 @@ export default function Discover({ tasteProfile, initialTab }) {
         ]);
 
         let localPhotos = {};
-        try { localPhotos = JSON.parse(localStorage.getItem("cooked_photos") || "{}"); } catch {}
-        const profilePhoto = localStorage.getItem("cooked_profile_photo") || null;
-        const bannerPhoto = localStorage.getItem("cooked_banner_photo") || null;
+        try { localPhotos = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}"); } catch {}
+        const profilePhoto = safeLocalStorageGetItem("cooked_profile_photo") || null;
+        const bannerPhoto = safeLocalStorageGetItem("cooked_banner_photo") || null;
         const clerkProfileName = user.fullName || user.firstName || "User";
         const clerkProfileUsername = user.username || user.primaryEmailAddress?.emailAddress?.split("@")[0] || "";
         const hasLocalData =
@@ -970,9 +1151,9 @@ export default function Discover({ tasteProfile, initialTab }) {
     if (!user?.id || !supabaseLoadedRef.current) return;
     const timeoutId = setTimeout(() => {
       let localPhotos = {};
-      try { localPhotos = JSON.parse(localStorage.getItem("cooked_photos") || "{}"); } catch {}
-      const profilePhoto = localStorage.getItem("cooked_profile_photo") || null;
-      const bannerPhoto = localStorage.getItem("cooked_banner_photo") || null;
+      try { localPhotos = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}"); } catch {}
+      const profilePhoto = safeLocalStorageGetItem("cooked_profile_photo") || null;
+      const bannerPhoto = safeLocalStorageGetItem("cooked_banner_photo") || null;
       saveUserData(user.id, {
         loved: heatResults?.loved || [],
         noped: heatResults?.noped || [],
@@ -993,7 +1174,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const exportBackup = () => {
     const data = {};
     BACKUP_KEYS.forEach((key) => {
-      const raw = localStorage.getItem(key);
+      const raw = safeLocalStorageGetItem(key);
       if (raw != null) {
         try {
           data[key] = JSON.parse(raw);
@@ -1021,7 +1202,7 @@ export default function Discover({ tasteProfile, initialTab }) {
         BACKUP_KEYS.forEach((key) => {
           if (data[key] !== undefined) {
             const value = typeof data[key] === "string" ? data[key] : JSON.stringify(data[key]);
-            localStorage.setItem(key, value);
+            safeSetItem(key, value);
           }
         });
         window.location.reload();
@@ -1052,10 +1233,10 @@ export default function Discover({ tasteProfile, initialTab }) {
     if (!googleKey) return;
     // Check vault + preview first
     try {
-      const vault = JSON.parse(localStorage.getItem('cooked_photos') || '{}');
-      if (vault[restaurant.id]) { setImgSrc(vault[restaurant.id]); return; }
-      const preview = JSON.parse(localStorage.getItem('cooked_photos_preview') || '{}');
-      if (preview[restaurant.id]) { setImgSrc(preview[restaurant.id]); return; }
+      const vault = JSON.parse(safeLocalStorageGetItem('cooked_photos') || '{}');
+      if (vault[restaurant.id]) { touchPhotoCacheAccess(restaurant.id); setImgSrc(vault[restaurant.id]); return; }
+      const preview = JSON.parse(safeLocalStorageGetItem('cooked_photos_preview') || '{}');
+      if (preview[restaurant.id]) { touchPhotoCacheAccess(restaurant.id); setImgSrc(preview[restaurant.id]); return; }
     } catch {}
 
     const normName = s => s.toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -1122,9 +1303,10 @@ export default function Discover({ tasteProfile, initialTab }) {
     if (photoUri) {
       // Save to preview cache (not vault — stays unresolved for user to confirm)
       try {
-        const preview = JSON.parse(localStorage.getItem('cooked_photos_preview') || '{}');
+        const preview = JSON.parse(safeLocalStorageGetItem('cooked_photos_preview') || '{}');
         preview[restaurant.id] = photoUri;
-        localStorage.setItem('cooked_photos_preview', JSON.stringify(preview));
+        safeSetItem('cooked_photos_preview', JSON.stringify(preview));
+        touchPhotoCacheAccess(restaurant.id);
       } catch {}
       setImgSrc(photoUri);
       setAllRestaurants(prev => prev.map(r => r.id === restaurant.id ? {...r, img: photoUri} : r));
@@ -1137,10 +1319,11 @@ export default function Discover({ tasteProfile, initialTab }) {
 
     useEffect(() => {
       try {
-        const vault = JSON.parse(localStorage.getItem("cooked_photos") || "{}");
-        const preview = JSON.parse(localStorage.getItem("cooked_photos_preview") || "{}");
+        const vault = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}");
+        const preview = JSON.parse(safeLocalStorageGetItem("cooked_photos_preview") || "{}");
         const cached = vault[r.id] || preview[r.id];
         if (cached) {
+          touchPhotoCacheAccess(r.id);
           setImgSrc(cached);
           r.img = cached;
           return;
@@ -1380,9 +1563,9 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
   }, [tab, city, allRestaurants]);
 
-  const findsIds = (() => { try { return JSON.parse(localStorage.getItem("cooked_finds") || "[]"); } catch { return []; } })();
+  const findsIds = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_finds") || "[]"); } catch { return []; } })();
   const findsList = findsIds.map((id) => allRestaurants.find((r) => r.id === id || r.id === Number(id))).filter(Boolean);
-  const explicitLovedIds = (() => { try { return JSON.parse(localStorage.getItem("cooked_loved") || "[]"); } catch { return []; } })();
+  const explicitLovedIds = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_loved") || "[]"); } catch { return []; } })();
   const lovedList = allRestaurants.filter(r => explicitLovedIds.includes(r.id) || explicitLovedIds.includes(Number(r.id)));
   const watchList = allRestaurants.filter(r => watchlist.includes(r.id));
   const lovedFromSwipe = lovedList;
@@ -1392,7 +1575,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       const isLoved = prev.loved.includes(id);
       const nextLoved = isLoved ? prev.loved.filter(x => x !== id) : [...prev.loved, id];
       try {
-        const raw = localStorage.getItem("cooked_loved");
+        const raw = safeLocalStorageGetItem("cooked_loved");
         const arr = raw ? JSON.parse(raw) : [];
         const set = new Set(arr);
         if (isLoved) {
@@ -1401,7 +1584,7 @@ export default function Discover({ tasteProfile, initialTab }) {
         } else {
           set.add(id);
         }
-        localStorage.setItem("cooked_loved", JSON.stringify([...set]));
+        safeSetItem("cooked_loved", JSON.stringify([...set]));
       } catch {}
       return {
         ...prev,
@@ -1414,12 +1597,12 @@ export default function Discover({ tasteProfile, initialTab }) {
 
   const addToCookedFinds = (ids) => {
     try {
-      const raw = localStorage.getItem("cooked_finds");
+      const raw = safeLocalStorageGetItem("cooked_finds");
       const arr = raw ? JSON.parse(raw) : [];
       const set = new Set(arr);
       ids.forEach((id) => set.add(id));
       console.log('FINDS SAVE:', ids);
-      localStorage.setItem("cooked_finds", JSON.stringify([...set]));
+      safeSetItem("cooked_finds", JSON.stringify([...set]));
     } catch {}
   };
 
@@ -1450,22 +1633,14 @@ export default function Discover({ tasteProfile, initialTab }) {
 
   const processScreenshot = async (base64Data, mediaType) => {
     if (igImporting) return;
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      setIgError("Missing VITE_ANTHROPIC_API_KEY. Add it to your .env file.");
-      return;
-    }
     setIgError(null);
     setIgImporting(true);
     try {
       console.log("Starting Claude API call with image size:", base64Data?.length);
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("https://cooked-proxy.luga-podesta.workers.dev/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
         },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
@@ -1611,18 +1786,19 @@ export default function Discover({ tasteProfile, initialTab }) {
         setIgPhotoPicker(pickerItems);
       } else {
         console.log("[processScreenshot] No VITE_GOOGLE_PLACES_KEY — not setting igPhotoPicker, adding restaurants directly");
-        let current = [];
-        try { current = JSON.parse(localStorage.getItem("cooked_restaurants") || "[]"); } catch {}
-        const existingIds = new Set(current.map((r) => r.id));
+        const existingIds = new Set(allRestaurantsRef.current.map((r) => r.id));
         const toAdd = baseRestaurants.filter((x) => !existingIds.has(x.id));
-        setAllRestaurants((prev) => (toAdd.length ? [...toAdd, ...prev] : prev));
+        setAllRestaurants((prev) => {
+          const ids = new Set(prev.map((r) => r.id));
+          const newOnes = baseRestaurants.filter((x) => !ids.has(x.id));
+          return newOnes.length ? [...newOnes, ...prev] : prev;
+        });
         if (toAdd.length) {
           for (const restaurantObject of toAdd) {
             console.log('Saving to community:', restaurantObject);
             const result = await addCommunityRestaurant(restaurantObject);
             console.log('Community save result:', result);
           }
-          try { localStorage.setItem("cooked_restaurants", JSON.stringify([...toAdd, ...current])); } catch {}
         }
         setIgAddedRestaurants(baseRestaurants);
         setIgDone(true);
@@ -1766,35 +1942,17 @@ export default function Discover({ tasteProfile, initialTab }) {
 
     console.log('Adding to finds:', confirmedIds);
     addToCookedFinds(confirmedIds);
-    try {
-      let current = [];
-      try { current = JSON.parse(localStorage.getItem("cooked_restaurants") || "[]"); } catch {}
-      const existingIds = new Set(current.map((r) => r.id));
-      const toAdd = igPhotoPicker
-        .filter((item) => !existingIds.has(item.restaurant.id))
-        .map((item) => {
-          const chosen = item.photoOptions[item.selectedIndex]?.photoUri;
-          return { ...item.restaurant, img: chosen || item.restaurant.img, img2: chosen || item.restaurant.img2 };
-        });
-      const updatedCurrent = current.map((r) => {
-        const match = igPhotoPicker.find((item) => item.restaurant.id === r.id);
-        if (!match || !match.userSelected) return r;
-        const chosen = match.photoOptions[match.selectedIndex]?.photoUri;
-        if (!chosen) return r;
-        return { ...r, img: chosen, img2: chosen };
-      });
-      localStorage.setItem("cooked_restaurants", JSON.stringify([...toAdd, ...updatedCurrent]));
-    } catch {}
     setPhotoResolved((prev) => [...new Set([...prev, ...confirmedIds])]);
     // Write to permanent photo vault — this key is NEVER overwritten by merges or updates
     try {
-      const vault = JSON.parse(localStorage.getItem("cooked_photos") || "{}");
+      const vault = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}");
       igPhotoPicker.forEach(item => {
         if (item.userSelected && item.photoOptions[item.selectedIndex]?.photoUri) {
           vault[item.restaurant.id] = item.photoOptions[item.selectedIndex].photoUri;
+          touchPhotoCacheAccess(item.restaurant.id);
         }
       });
-      localStorage.setItem("cooked_photos", JSON.stringify(vault));
+      safeSetItem("cooked_photos", JSON.stringify(vault));
     } catch {}
     const updated = igPhotoPicker
       .map(({ restaurant, photoOptions, selectedIndex }) => {
@@ -2327,7 +2485,7 @@ export default function Discover({ tasteProfile, initialTab }) {
           {(() => {
             let recentChats = [];
             try {
-              recentChats = JSON.parse(localStorage.getItem("cooked_chat_history") || "[]").reverse();
+              recentChats = JSON.parse(safeLocalStorageGetItem("cooked_chat_history") || "[]").reverse();
             } catch (e) {}
 
             const getRelativeTime = (entry) => {
@@ -2347,9 +2505,9 @@ export default function Discover({ tasteProfile, initialTab }) {
 
             const deleteChat = (index) => {
               try {
-                const hist = JSON.parse(localStorage.getItem("cooked_chat_history") || "[]");
+                const hist = JSON.parse(safeLocalStorageGetItem("cooked_chat_history") || "[]");
                 hist.splice(hist.length - 1 - index, 1);
-                localStorage.setItem("cooked_chat_history", JSON.stringify(hist));
+                safeSetItem("cooked_chat_history", JSON.stringify(hist));
                 setHomeChatKey((k) => k + 1);
               } catch (e) {}
             };
@@ -3282,9 +3440,9 @@ export default function Discover({ tasteProfile, initialTab }) {
                   : `1.5px solid ${C.dim}`,
             }}
           >
-            {localStorage.getItem("cooked_profile_photo") ? (
+            {safeLocalStorageGetItem("cooked_profile_photo") ? (
               <img
-                src={localStorage.getItem("cooked_profile_photo") || ""}
+                src={safeLocalStorageGetItem("cooked_profile_photo") || ""}
                 alt=""
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 onError={(e) => {
@@ -3486,8 +3644,8 @@ export default function Discover({ tasteProfile, initialTab }) {
         const detail = detailRestaurant;
         const place = placeDetails[detail.id];
         // Priority: 1) vault (user-confirmed), 2) preview (auto-fetched, unresolved), 3) non-picsum img, 4) Places API, 5) picsum
-        const vaultPhoto = (() => { try { return JSON.parse(localStorage.getItem("cooked_photos") || "{}")[detail.id]; } catch { return null; } })();
-        const previewPhoto = (() => { try { return JSON.parse(localStorage.getItem("cooked_photos_preview") || "{}")[detail.id]; } catch { return null; } })();
+        const vaultPhoto = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}")[detail.id]; } catch { return null; } })();
+        const previewPhoto = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_photos_preview") || "{}")[detail.id]; } catch { return null; } })();
         const liveImg = (allRestaurants.find(r => r.id === detail.id) || detail).img;
         const isPicsum = !vaultPhoto && !previewPhoto && liveImg && String(liveImg).includes("picsum.photos");
         const detailPhoto = vaultPhoto
@@ -3517,6 +3675,7 @@ export default function Discover({ tasteProfile, initialTab }) {
           .replace(/\s+/g, '-');
         const openTableDirectUrl = `https://www.opentable.com/${openTableSlug}`;
         return createPortal(
+        <>
         <div style={{ position:"fixed", top:0, left:"50%", transform:"translateX(-50%)", width:"min(100vw, 480px)", bottom:0, zIndex:99999, height:"100%", background:"#0e0804", overflow:"hidden" }}>
           <div style={{ height:"100%", overflowY:"auto", paddingBottom:60 }}>
 
@@ -3589,17 +3748,84 @@ export default function Discover({ tasteProfile, initialTab }) {
               </div>
             </div>
 
+            {/* Friends have been here — between actions and description */}
+            {!friendsBeenHere.loading && friendsBeenHere.list.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setFriendsBeenHereSheetOpen(true)}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 14,
+                  background: "#130d06",
+                  padding: "12px 18px",
+                  border: "none",
+                  borderBottom: "1px solid #2e1f0e",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  WebkitTapHighlightColor: "transparent",
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+                  {friendsBeenHere.list.slice(0, 3).map((f, i) => (
+                    <div
+                      key={f.clerkUserId}
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: "50%",
+                        border: "1.5px solid #c4603a",
+                        marginLeft: i === 0 ? 0 : -8,
+                        overflow: "hidden",
+                        background: "#c4603a",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                        zIndex: 3 - i,
+                        position: "relative",
+                      }}
+                    >
+                      {f.profilePhoto ? (
+                        <img src={f.profilePhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: "#f0ebe2",
+                            fontFamily: "-apple-system,sans-serif",
+                            lineHeight: 1,
+                          }}
+                        >
+                          {(f.profileName || "?").charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: C.muted,
+                    fontFamily: "-apple-system,sans-serif",
+                    flex: 1,
+                    textAlign: "right",
+                  }}
+                >
+                  {friendsBeenHere.list.length === 1
+                    ? "1 friend has been here"
+                    : `${friendsBeenHere.list.length} friends have been here`}
+                </div>
+              </button>
+            )}
+
             {/* SECTION 4 — DESCRIPTION */}
             {detail.desc && (
               <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"16px 18px" }}>
                 <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:16, color:"#e8e0d4", lineHeight:1.65 }}>{detail.desc}</div>
-              </div>
-            )}
-            {friendsLovedCount > 0 && (
-              <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"10px 18px" }}>
-                <div style={{ fontSize:12, color:"#c4603a", fontFamily:"-apple-system,sans-serif" }}>
-                  {friendsLovedCount} friend{friendsLovedCount !== 1 ? "s" : ""} have been here
-                </div>
               </div>
             )}
 
@@ -3759,7 +3985,119 @@ export default function Discover({ tasteProfile, initialTab }) {
             })()}
 
           </div>
-        </div>,
+        </div>
+        {friendsBeenHereSheetOpen && friendsBeenHere.list.length > 0 && (
+          <div
+            role="presentation"
+            onClick={() => setFriendsBeenHereSheetOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 100000,
+              background: "rgba(0,0,0,0.45)",
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "center",
+            }}
+          >
+            <div
+              role="dialog"
+              aria-label="Friends who have been here"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "min(100vw, 480px)",
+                maxHeight: "50vh",
+                overflowY: "auto",
+                background: "#0e0804",
+                borderTopLeftRadius: 18,
+                borderTopRightRadius: 18,
+                borderTop: "1px solid #2e1f0e",
+                borderLeft: "1px solid #2e1f0e",
+                borderRight: "1px solid #2e1f0e",
+                padding: "18px 18px max(20px, env(safe-area-inset-bottom))",
+                boxSizing: "border-box",
+              }}
+            >
+              <div
+                style={{
+                  width: 36,
+                  height: 4,
+                  borderRadius: 2,
+                  background: "#3d2a18",
+                  margin: "0 auto 14px",
+                }}
+              />
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "#5a3a20",
+                  marginBottom: 10,
+                  fontFamily: "-apple-system,sans-serif",
+                }}
+              >
+                Friends here
+              </div>
+              {friendsBeenHere.list.map((f, idx) => (
+                <div
+                  key={f.clerkUserId}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "12px 0",
+                    borderBottom: idx === friendsBeenHere.list.length - 1 ? "none" : "1px solid #2e1f0e",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: "50%",
+                      border: "1.5px solid #c4603a",
+                      overflow: "hidden",
+                      background: "#c4603a",
+                      flexShrink: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {f.profilePhoto ? (
+                      <img src={f.profilePhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 700,
+                          color: "#f0ebe2",
+                          fontFamily: "-apple-system,sans-serif",
+                        }}
+                      >
+                        {(f.profileName || "?").charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 15,
+                        color: "#e8e0d4",
+                        fontFamily: "-apple-system,sans-serif",
+                        marginBottom: f.flameRating != null ? 6 : 0,
+                      }}
+                    >
+                      {f.profileName}
+                    </div>
+                    {f.flameRating != null && <FlameRating score={f.flameRating} size={10} />}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        </>,
         document.getElementById('root') || document.body
         );
       })()}

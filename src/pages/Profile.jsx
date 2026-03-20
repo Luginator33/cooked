@@ -2,6 +2,25 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { getFollowers, getFollowing, getUserProfile, saveUserData, supabase } from "../lib/supabase";
 
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    if (e.name === "QuotaExceededError" || e.code === 22) {
+      // Clear the photo vault (largest offender) and retry once
+      console.warn("localStorage quota exceeded, clearing photo cache");
+      localStorage.removeItem("cooked_photos");
+      localStorage.removeItem("cooked_photos_preview");
+      localStorage.removeItem("cooked_photos_lru");
+      try {
+        localStorage.setItem(key, value);
+      } catch (e2) {
+        console.error("localStorage still full after clearing photos:", e2);
+      }
+    }
+  }
+}
+
 const C = {
   bg: "#0f0c09", bg2: "#1a1208", bg3: "#2e1f0e",
   border: "#2e1f0e", border2: "#1e1208",
@@ -83,14 +102,14 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
       if (cancelled) return;
       if (data?.profile_photo) {
         setPhoto(data.profile_photo);
-        localStorage.setItem("cooked_profile_photo", data.profile_photo);
+        safeSetItem("cooked_profile_photo", data.profile_photo);
       } else {
         const p = clerkImageUrl || localStorage.getItem("cooked_profile_photo") || null;
         setPhoto(p);
       }
       if (data?.banner_photo) {
         setCustomBanner(data.banner_photo);
-        localStorage.setItem("cooked_banner_photo", data.banner_photo);
+        safeSetItem("cooked_banner_photo", data.banner_photo);
       } else {
         const b = localStorage.getItem("cooked_banner_photo") || null;
         setCustomBanner(b);
@@ -165,7 +184,7 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
     reader.onload = (ev) => {
       const base64DataUrl = ev.target.result;
       setPhoto(base64DataUrl);
-      localStorage.setItem("cooked_profile_photo", base64DataUrl);
+      safeSetItem("cooked_profile_photo", base64DataUrl);
       if (user?.id) saveUserData(user.id, { profile_photo: base64DataUrl });
       input.value = "";
     };
@@ -179,7 +198,7 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
     reader.onload = (ev) => {
       const base64DataUrl = ev.target.result;
       setCustomBanner(base64DataUrl);
-      localStorage.setItem("cooked_banner_photo", base64DataUrl);
+      safeSetItem("cooked_banner_photo", base64DataUrl);
       if (user?.id) saveUserData(user.id, { banner_photo: base64DataUrl });
       input.value = "";
     };
@@ -188,13 +207,13 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
 
   const saveEdit = () => {
     setName(editName); setUsername(editUsername);
-    localStorage.setItem("cooked_profile_name", editName);
-    localStorage.setItem("cooked_profile_username", editUsername);
+    safeSetItem("cooked_profile_name", editName);
+    safeSetItem("cooked_profile_username", editUsername);
     setEditing(false);
   };
 
   const exportBackup = () => {
-    const keys = ["cooked_restaurants","cooked_photos","cooked_photo_resolved","cooked_heat","cooked_hidden","cooked_watchlist","cooked_finds","cooked_profile_photo","cooked_banner_photo","cooked_profile_name","cooked_profile_username","cooked_data_version"];
+    const keys = ["cooked_photos","cooked_photo_resolved","cooked_heat","cooked_hidden","cooked_watchlist","cooked_finds","cooked_profile_photo","cooked_banner_photo","cooked_profile_name","cooked_profile_username","cooked_data_version"];
     const backup = {};
     keys.forEach(k => { const v = localStorage.getItem(k); if (v) backup[k] = v; });
     const blob = new Blob([JSON.stringify(backup)], { type: "application/json" });
@@ -213,7 +232,10 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
       reader.onload = (ev) => {
         try {
           const data = JSON.parse(ev.target.result);
-          Object.entries(data).forEach(([k,v]) => localStorage.setItem(k, v));
+          Object.entries(data).forEach(([k, v]) => {
+            if (k === "cooked_restaurants") return; // legacy key — never restore (Safari quota)
+            safeSetItem(k, v);
+          });
           alert("Backup restored! Reloading…");
           window.location.reload();
         } catch { alert("Invalid backup file."); }

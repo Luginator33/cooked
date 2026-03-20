@@ -1,5 +1,24 @@
 import { useState, useRef, useEffect } from "react"
 
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    if (e.name === "QuotaExceededError" || e.code === 22) {
+      // Clear the photo vault (largest offender) and retry once
+      console.warn("localStorage quota exceeded, clearing photo cache");
+      localStorage.removeItem("cooked_photos");
+      localStorage.removeItem("cooked_photos_preview");
+      localStorage.removeItem("cooked_photos_lru");
+      try {
+        localStorage.setItem(key, value);
+      } catch (e2) {
+        console.error("localStorage still full after clearing photos:", e2);
+      }
+    }
+  }
+}
+
 // ============================================================
 // COOKED KNOWLEDGE BASE — embedded for chatbot system prompt
 // ============================================================
@@ -4852,7 +4871,7 @@ export default function ChatBot({ onClose, allRestaurants = [], initialInput = "
       }
       hist.push(entry)
       if (hist.length > 20) hist.splice(0, hist.length - 20)
-      localStorage.setItem("cooked_chat_history", JSON.stringify(hist))
+      safeSetItem("cooked_chat_history", JSON.stringify(hist))
       conversationIdRef.current = entry.id
     } catch (e) {}
 
@@ -4888,13 +4907,10 @@ export default function ChatBot({ onClose, allRestaurants = [], initialInput = "
         return parts + (extra.length ? `\n  ${extra.join(' | ')}` : '') + (r.desc ? `\n  ${r.desc}` : '');
       }).join('\n') : '';
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("https://cooked-proxy.luga-podesta.workers.dev/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true"
         },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
@@ -4914,7 +4930,7 @@ export default function ChatBot({ onClose, allRestaurants = [], initialInput = "
         const idx = hist.findIndex((e) => e.id === conversationIdRef.current)
         if (idx !== -1) {
           hist[idx].messages = updatedMessages
-          localStorage.setItem("cooked_chat_history", JSON.stringify(hist))
+          safeSetItem("cooked_chat_history", JSON.stringify(hist))
         }
       } catch (e) {}
     } catch (err) {
@@ -4928,7 +4944,7 @@ export default function ChatBot({ onClose, allRestaurants = [], initialInput = "
         const idx = hist.findIndex((e) => e.id === conversationIdRef.current)
         if (idx !== -1) {
           hist[idx].messages = fallbackMessages
-          localStorage.setItem("cooked_chat_history", JSON.stringify(hist))
+          safeSetItem("cooked_chat_history", JSON.stringify(hist))
         }
       } catch (e) {}
     } finally {
