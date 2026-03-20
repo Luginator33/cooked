@@ -49,6 +49,17 @@ export async function loadUserPhotos(clerkUserId) {
   return data.photos || {};
 }
 
+// Save a single photo into the shared library (admin-only action).
+export async function saveSharedPhoto(restaurantId, photoUrl) {
+  if (!restaurantId || !photoUrl) return;
+  await supabase
+    .from('restaurant_photos')
+    .upsert(
+      { restaurant_id: String(restaurantId), photo_url: photoUrl },
+      { onConflict: 'restaurant_id' }
+    );
+}
+
 // Save a community restaurant so other users can see it.
 export async function addCommunityRestaurant(restaurantObject) {
   const payload = { ...restaurantObject, description: restaurantObject.desc, updated_at: new Date().toISOString() }

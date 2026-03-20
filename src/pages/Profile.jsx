@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
-import { getFollowers, getFollowing, getUserProfile, saveUserData, saveUserPhotos, supabase } from "../lib/supabase";
+import { getFollowers, getFollowing, getUserProfile, saveSharedPhoto, saveUserData, saveUserPhotos, supabase } from "../lib/supabase";
 
 function safeSetItem(key, value) {
   try {
@@ -77,6 +77,11 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
   );
   const fileRef = useRef();
   const [photoCache, setPhotoCache] = useState({});
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [photoSyncRunning, setPhotoSyncRunning] = useState(false);
+  const [photoSyncCount, setPhotoSyncCount] = useState(0);
+  const [photoSyncTotal, setPhotoSyncTotal] = useState(0);
+  const [photoSyncMessage, setPhotoSyncMessage] = useState(null);
 
   useEffect(() => {
     if (!clerkName) return;
@@ -101,6 +106,7 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
       }
       const { data } = await getUserProfile(user.id);
       if (cancelled) return;
+      setIsAdmin(data?.is_admin === true);
       if (data?.profile_photo) {
         setPhoto(data.profile_photo);
         safeSetItem("cooked_profile_photo", data.profile_photo);
@@ -226,6 +232,39 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
     safeSetItem("cooked_profile_name", editName);
     safeSetItem("cooked_profile_username", editUsername);
     setEditing(false);
+  };
+
+  const syncPhotosToSharedLibrary = async () => {
+    if (!user?.id) return;
+    const entries = Object.entries(photoCache || {}).filter(([, url]) => !!url);
+    const total = entries.length;
+    if (total === 0) {
+      setPhotoSyncMessage("No photos found.");
+      return;
+    }
+
+    setPhotoSyncRunning(true);
+    setPhotoSyncCount(0);
+    setPhotoSyncTotal(total);
+    setPhotoSyncMessage(null);
+
+    let synced = 0;
+    try {
+      for (const [restaurantId, photoUrl] of entries) {
+        await saveSharedPhoto(restaurantId, photoUrl);
+        synced += 1;
+        if (synced === total || synced % 25 === 0) {
+          setPhotoSyncCount(synced);
+        }
+      }
+      setPhotoSyncCount(total);
+      setPhotoSyncMessage(`Synced ${total.toLocaleString()} photos to shared library`);
+    } catch (e) {
+      console.error("syncPhotosToSharedLibrary error:", e);
+      setPhotoSyncMessage("Sync failed. Please try again.");
+    } finally {
+      setPhotoSyncRunning(false);
+    }
   };
 
   const exportBackup = () => {
@@ -632,6 +671,30 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
                 style={{ width: "100%", padding: "14px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 10 }}>
                 🖼 Fix Photos
               </button>
+            )}
+
+            {/* Admin: Sync photos to shared library */}
+            {isAdmin && (
+              <>
+                <button
+                  type="button"
+                  onClick={syncPhotosToSharedLibrary}
+                  disabled={photoSyncRunning}
+                  style={{ width: "100%", padding: "14px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14, cursor: photoSyncRunning ? "default" : "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 10, opacity: photoSyncRunning ? 0.8 : 1 }}
+                >
+                  Sync photos to shared library
+                </button>
+                {photoSyncRunning && (
+                  <div style={{ marginTop: -2, marginBottom: 10, color: C.muted, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>
+                    Syncing... {photoSyncCount.toLocaleString()} / {photoSyncTotal.toLocaleString()}
+                  </div>
+                )}
+                {photoSyncMessage && !photoSyncRunning && (
+                  <div style={{ marginTop: -2, marginBottom: 10, color: C.muted, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>
+                    {photoSyncMessage}
+                  </div>
+                )}
+              </>
             )}
 
             <button
