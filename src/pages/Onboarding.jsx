@@ -342,19 +342,39 @@ export default function Onboarding({ onComplete }) {
   const content = useMemo(() => {
     if (slide === 0) {
       return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, textAlign: "center", padding: "0 32px" }}>
-            <Wordmark size={80} />
-            <div style={{ marginTop: 12, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: C.muted }}>
-              YOUR TABLE IS WAITING
-            </div>
-            <div style={{ width: 60, height: 2, background: C.terracotta, borderRadius: 2, margin: "24px auto" }} />
-            <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, lineHeight: 1.3, color: "#f0ebe2", marginBottom: 14 }}>
-              The restaurant app for people who care.
-            </div>
-            <div style={{ fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 15, lineHeight: 1.6, color: C.muted }}>
-              Not crowd-sourced. Not algorithmic. <span style={{ color: C.terracotta }}>Curated by taste.</span>
-            </div>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            textAlign: "center",
+            padding: "0 36px",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 76,
+              fontFamily: "'Cormorant Garamond', Georgia, serif",
+              fontStyle: "italic",
+              fontWeight: 700,
+              lineHeight: 1,
+            }}
+          >
+            <span style={{ color: "#f0ebe2" }}>cook</span>
+            <span style={{ color: "#c4603a" }}>ed</span>
+          </div>
+          <div style={{ marginTop: 10, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", color: "#5a3a20" }}>
+            YOUR TABLE IS WAITING
+          </div>
+          <span style={{ display: "block", width: 48, height: 2, background: "#c4603a", borderRadius: 2, margin: "22px auto" }} />
+          <div style={{ fontSize: 22, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, color: "#f0ebe2", lineHeight: 1.3, marginBottom: 12 }}>
+            The restaurant app for people who care.
+          </div>
+          <div style={{ fontSize: 14, fontFamily: "'DM Sans', -apple-system, sans-serif", color: "#5a3a20", lineHeight: 1.6 }}>
+            Not crowd-sourced. Not algorithmic. <span style={{ color: "#c4603a" }}>Curated by taste.</span>
           </div>
         </div>
       );
