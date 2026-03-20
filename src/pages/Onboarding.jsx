@@ -321,7 +321,15 @@ function SwipeDemoCard() {
 export default function Onboarding({ onComplete }) {
   const [slide, setSlide] = useState(0);
   const [phase, setPhase] = useState("in");
+  const [fontsReady, setFontsReady] = useState(false);
   const totalSlides = 4;
+
+  useEffect(() => {
+    document.fonts.ready.then(() => setFontsReady(true));
+    // Fallback in case fonts.ready never fires
+    const t = setTimeout(() => setFontsReady(true), 2000);
+    return () => clearTimeout(t);
+  }, []);
 
   const finish = () => {
     try {
@@ -492,14 +500,15 @@ export default function Onboarding({ onComplete }) {
   }, [slide]);
 
   return (
-    <div style={{ width: "100%", minHeight: "100vh", background: C.bg, color: C.text }}>
-      <style>{`
+    <div style={{ opacity: fontsReady ? 1 : 0, transition: "opacity 0.3s ease" }}>
+      <div style={{ width: "100%", minHeight: "100vh", background: C.bg, color: C.text }}>
+        <style>{`
         @keyframes avatarPop {
           0% { opacity: 0; transform: scale(0) translateY(0); }
           100% { opacity: 1; transform: scale(1) translateY(0); }
         }
       `}</style>
-      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", minHeight: "100vh", position: "relative", overflow: "hidden" }}>
+        <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", minHeight: "100vh", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", top: 20, left: 28, right: 28, display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 5 }}>
           <Wordmark size={22} />
           {slide < totalSlides - 1 ? (
@@ -564,6 +573,7 @@ export default function Onboarding({ onComplete }) {
           >
             {buttonText}
           </button>
+        </div>
         </div>
       </div>
     </div>
