@@ -369,8 +369,17 @@ export default function Onboarding({ onComplete }) {
           <div style={{ marginTop: 10, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", color: "#5a3a20" }}>
             YOUR TABLE IS WAITING
           </div>
-          <span style={{ display: "block", width: 48, height: 2, background: "#c4603a", borderRadius: 2, margin: "22px auto" }} />
-          <div style={{ fontSize: 22, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, color: "#f0ebe2", lineHeight: 1.3, marginBottom: 12 }}>
+          <div style={{ width: 48, height: 2, background: "#c4603a", borderRadius: 2, margin: "20px auto" }} />
+          <div style={{
+            fontFamily: "'Cormorant Garamond', Georgia, serif",
+            fontStyle: "italic",
+            fontWeight: 700,
+            fontSize: 26,
+            lineHeight: 1.3,
+            color: "#f0ebe2",
+            marginBottom: 12,
+            textAlign: "center"
+          }}>
             The restaurant app for people who care.
           </div>
           <div style={{ fontSize: 14, fontFamily: "'DM Sans', -apple-system, sans-serif", color: "#5a3a20", lineHeight: 1.6 }}>
