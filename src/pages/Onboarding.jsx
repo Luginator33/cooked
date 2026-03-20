@@ -352,6 +352,12 @@ export default function Onboarding({ onComplete }) {
             justifyContent: "center",
             textAlign: "center",
             padding: "0 36px",
+            border: "none",
+            borderTop: "none",
+            borderBottom: "none",
+            outline: "none",
+            boxShadow: "none",
+            background: "transparent",
           }}
         >
           <div
@@ -369,19 +375,10 @@ export default function Onboarding({ onComplete }) {
           <div style={{ marginTop: 10, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", color: "#5a3a20" }}>
             YOUR TABLE IS WAITING
           </div>
-          <div style={{ width: 48, height: 2, background: "#c4603a", borderRadius: 2, margin: "20px auto" }} />
-          <div style={{
-            fontFamily: "'Cormorant Garamond', Georgia, serif",
-            fontStyle: "italic",
-            fontWeight: 700,
-            fontSize: 26,
-            lineHeight: 1.3,
-            color: "#f0ebe2",
-            marginBottom: 12,
-            textAlign: "center"
-          }}>
+          <div style={{ width: 48, height: 2, background: "#c4603a", borderRadius: 2, margin: "20px auto", display: "block", border: "none" }} />
+          <p style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 26, lineHeight: 1.3, color: "#f0ebe2", marginBottom: 12, textAlign: "center", margin: "0 0 12px 0" }}>
             The restaurant app for people who care.
-          </div>
+          </p>
           <div style={{ fontSize: 14, fontFamily: "'DM Sans', -apple-system, sans-serif", color: "#5a3a20", lineHeight: 1.6 }}>
             Not crowd-sourced. Not algorithmic. <span style={{ color: "#c4603a" }}>Curated by taste.</span>
           </div>
