@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
-import { getFollowers, getFollowing, getUserProfile, saveUserData, supabase } from "../lib/supabase";
+import { getFollowers, getFollowing, getUserProfile, saveUserData, saveUserPhotos, supabase } from "../lib/supabase";
 
 function safeSetItem(key, value) {
   try {
@@ -245,14 +245,51 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
     input.onchange = (e) => {
       const file = e.target.files[0]; if (!file) return;
       const reader = new FileReader();
-      reader.onload = (ev) => {
+      reader.onload = async (ev) => {
         try {
           const data = JSON.parse(ev.target.result);
           Object.entries(data).forEach(([k, v]) => {
             if (k === "cooked_restaurants") return; // legacy key — never restore (Safari quota)
             safeSetItem(k, v);
           });
-          alert("Backup restored! Reloading…");
+
+          // Restore photos from legacy `cooked_restaurants` without restoring the full array.
+          let restoredPhotosCount = 0;
+          try {
+            const clerkUserId = user?.id;
+            const raw = data?.cooked_restaurants;
+            const parsedRestaurants = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : [];
+            if (Array.isArray(parsedRestaurants) && parsedRestaurants.length > 0) {
+              const photos = {};
+              parsedRestaurants.forEach((r) => {
+                if (r?.id && r?.img && !String(r.img).includes("picsum.photos")) {
+                  photos[String(r.id)] = r.img;
+                }
+              });
+              const resolved = Object.keys(photos);
+              if (resolved.length > 0) {
+                restoredPhotosCount = resolved.length;
+
+                // Push to Supabase first (primary source of truth).
+                if (clerkUserId) {
+                  await saveUserPhotos(clerkUserId, photos);
+                  await saveUserData(clerkUserId, { photo_resolved: resolved });
+                }
+
+                // Local fallback for offline/unauthenticated mode.
+                safeSetItem("cooked_photos", JSON.stringify(photos));
+                safeSetItem("cooked_photo_resolved", JSON.stringify(resolved));
+              }
+            }
+          } catch {
+            // Ignore legacy photo extraction failures; other keys were already restored.
+          }
+
+          alert(
+            restoredPhotosCount > 0
+              ? `Restored ${restoredPhotosCount.toLocaleString()} photos. Reloading…`
+              : "Backup restored! Reloading…"
+          );
           window.location.reload();
         } catch { alert("Invalid backup file."); }
       };
