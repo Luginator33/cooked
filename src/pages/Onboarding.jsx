@@ -173,7 +173,7 @@ function SwipeDemoCard() {
   ];
 
   useEffect(() => {
-    const durations = [2000, 600, 100, 2000, 600, 100, 2000, 600, 100];
+    const durations = [2000, 600, 600, 2000, 600, 600, 2000, 600, 600];
     const timer = setTimeout(() => {
       if (step === 1 || step === 4 || step === 7) {
         setCardIndex((i) => (i + 1) % restaurants.length);
@@ -183,23 +183,20 @@ function SwipeDemoCard() {
     return () => clearTimeout(timer);
   }, [step, restaurants.length]);
 
-  const phase = step;
+  const animPhase = step;
   const cardStyle = {
     transform:
-      phase === 1
+      animPhase === 1
         ? "translateX(120%) rotate(8deg)"
-        : phase === 4
+        : animPhase === 4
           ? "translateX(-120%) rotate(-8deg)"
-          : phase === 7
+          : animPhase === 7
             ? "translateY(-120%)"
             : "translateX(0) translateY(0) rotate(0deg)",
-    transition: phase === 2 || phase === 5 || phase === 8 ? "none" : "transform 0.6s ease",
+    transition: animPhase === 2 || animPhase === 5 || animPhase === 8 ? "none" : "transform 0.6s ease",
   };
   const idx = cardIndex % restaurants.length;
-  /** Visible for full swipe + reset frame so labels don’t flash off mid-motion */
-  const labelHeat = phase === 1 || phase === 2;
-  const labelPass = phase === 4 || phase === 5;
-  const labelBeen = phase === 7 || phase === 8;
+  const labelOpacity = (a, b) => (animPhase === a || animPhase === b ? 1 : 0);
 
   return (
     <div style={{ position: "relative", height: "55%" }}>
@@ -243,60 +240,74 @@ function SwipeDemoCard() {
           Eater LA
         </div>
 
-        {labelHeat && (
-          <div
-            style={{
-              position: "absolute",
-              top: 14,
-              left: 14,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              background: "rgba(196,96,58,0.25)",
-              border: "2px solid #c4603a",
-              borderRadius: 20,
-              padding: "8px 18px",
-            }}
-          >
-            <FlameIcon size={16} filled color="#c4603a" />
-            <span style={{ color: "#c4603a", fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>HEAT</span>
-          </div>
-        )}
-        {labelPass && (
-          <div
-            style={{
-              position: "absolute",
-              top: 14,
-              right: 14,
-              background: "rgba(90,58,32,0.25)",
-              border: "2px solid #5a3a20",
-              borderRadius: 20,
-              padding: "8px 18px",
-            }}
-          >
-            <span style={{ color: "#5a3a20", fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-            PASS
-            </span>
-          </div>
-        )}
-        {labelBeen && (
-          <div
-            style={{
-              position: "absolute",
-              top: 14,
-              left: "50%",
-              transform: "translateX(-50%)",
-              background: "rgba(74,122,171,0.25)",
-              border: "2px solid #4a7aab",
-              borderRadius: 20,
-              padding: "8px 18px",
-            }}
-          >
-            <span style={{ color: "#4a7aab", fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-              BEEN HERE
-            </span>
-          </div>
-        )}
+        <div
+          style={{
+            position: "absolute",
+            top: 14,
+            left: 14,
+            zIndex: 2,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "rgba(196,96,58,0.25)",
+            border: "2px solid #c4603a",
+            borderRadius: 20,
+            padding: "8px 18px",
+            opacity: labelOpacity(1, 2),
+            transition: "opacity 0.3s ease",
+            pointerEvents: "none",
+          }}
+        >
+          <FlameIcon size={16} filled color="#c4603a" />
+          <span style={{ color: "#c4603a", fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>HEAT</span>
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            top: 16,
+            right: 16,
+            zIndex: 2,
+            background: "rgba(90,58,32,0.3)",
+            border: "2px solid #5a3a20",
+            color: "#5a3a20",
+            fontSize: 13,
+            fontWeight: 600,
+            padding: "8px 18px",
+            borderRadius: 20,
+            fontFamily: "'DM Mono', monospace",
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            opacity: labelOpacity(4, 5),
+            transition: "opacity 0.3s ease",
+            pointerEvents: "none",
+          }}
+        >
+          PASS
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            top: 16,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 2,
+            background: "rgba(74,122,171,0.3)",
+            border: "2px solid #4a7aab",
+            color: "#4a7aab",
+            fontSize: 13,
+            fontWeight: 600,
+            padding: "8px 18px",
+            borderRadius: 20,
+            fontFamily: "'DM Mono', monospace",
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            opacity: labelOpacity(7, 8),
+            transition: "opacity 0.3s ease",
+            pointerEvents: "none",
+          }}
+        >
+          BEEN HERE
+        </div>
 
         <div style={{ position: "absolute", bottom: 20, left: 18, right: 18 }}>
           <div style={{ fontFamily: "'DM Mono', monospace", color: C.muted, fontSize: 8, letterSpacing: "0.14em", textTransform: "uppercase" }}>{restaurants[idx].meta}</div>
