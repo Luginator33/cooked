@@ -67,7 +67,7 @@ function RestCard({ r, onOpen }) {
   );
 }
 
-export default function UserProfile({ clerkUserId, onClose, onOpenDetail }) {
+export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onViewUser }) {
   const { user } = useUser();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
@@ -76,6 +76,9 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail }) {
   const [isFollowingUser, setIsFollowingUser] = useState(false);
   const [activeTab, setActiveTab] = useState("loved");
   const [pendingFollow, setPendingFollow] = useState(false);
+  const [socialSheet, setSocialSheet] = useState(null); // null | "followers" | "following" | "cities"
+  const [socialList, setSocialList] = useState([]);
+  const [socialLoading, setSocialLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,6 +134,40 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail }) {
     { key: "finds", label: "Finds", items: findsRestaurants },
   ];
   const activeItems = tabs.find((t) => t.key === activeTab)?.items || [];
+
+  const openSocialSheet = async (kind) => {
+    if (!clerkUserId) return;
+    if (kind === "cities") {
+      setSocialSheet("cities");
+      setSocialList(cities);
+      setSocialLoading(false);
+      return;
+    }
+    setSocialSheet(kind);
+    setSocialList([]);
+    setSocialLoading(true);
+    try {
+      const res = kind === "following" ? await getFollowing(clerkUserId) : await getFollowers(clerkUserId);
+      const rows = res?.data || [];
+      const ids = rows
+        .map((row) => (kind === "following" ? row.following_id : row.follower_id))
+        .filter(Boolean);
+      const profiles = await Promise.all(
+        ids.map(async (id) => {
+          const { data } = await getUserProfile(id);
+          return {
+            clerk_user_id: id,
+            profile_name: data?.profile_name || "User",
+            profile_username: data?.profile_username || "",
+            profile_photo: data?.profile_photo || null,
+          };
+        })
+      );
+      setSocialList(profiles);
+    } finally {
+      setSocialLoading(false);
+    }
+  };
 
   const doToggleFollow = async () => {
     if (!user?.id || !clerkUserId || user.id === clerkUserId || pendingFollow) return;
@@ -191,11 +228,33 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail }) {
         </div>
 
         <div style={{ display: "flex", padding: "16px 18px 0", alignItems: "center" }}>
-          {[{ val: followingCount, label: "FOLLOWING" }, { val: followersCount, label: "FOLLOWERS" }, { val: cities.length, label: "CITIES" }].map((s, i) => (
-            <div key={s.label} style={{ flex: 1, borderRight: i < 2 ? `1px solid ${C.border}` : "none", textAlign: "center", padding: "0 6px" }}>
+          {[
+            { val: followingCount, label: "FOLLOWING", kind: "following" },
+            { val: followersCount, label: "FOLLOWERS", kind: "followers" },
+            { val: cities.length, label: "CITIES", kind: "cities" },
+          ].map((s, i) => (
+            <button
+              key={s.label}
+              type="button"
+              onClick={() => openSocialSheet(s.kind)}
+              style={{
+                flex: 1,
+                borderRight: i < 2 ? `1px solid ${C.border}` : "none",
+                textAlign: "center",
+                padding: "0 6px",
+                background: "none",
+                border: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderBottom: "none",
+                cursor: "pointer",
+                font: "inherit",
+                color: "inherit",
+              }}
+            >
               <div style={{ fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 26, color: C.text, lineHeight: 1 }}>{s.val}</div>
               <div style={{ fontSize: 9, color: C.muted, marginTop: 4, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "-apple-system,sans-serif" }}>{s.label}</div>
-            </div>
+            </button>
           ))}
         </div>
 
@@ -272,6 +331,87 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail }) {
           </>
         )}
       </div>
+
+      {socialSheet && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 100000, display: "flex", alignItems: "flex-end" }}
+          onClick={() => setSocialSheet(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 480,
+              margin: "0 auto",
+              background: C.bg2,
+              borderRadius: "20px 20px 0 0",
+              maxHeight: "70vh",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <div style={{ padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>
+                {socialSheet === "followers" ? "Followers" : socialSheet === "following" ? "Following" : "Cities"}
+              </div>
+              <button type="button" onClick={() => setSocialSheet(null)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}>
+                ×
+              </button>
+            </div>
+            <div style={{ overflowY: "auto", padding: "8px 18px 24px" }}>
+              {socialLoading ? (
+                <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Loading…</div>
+              ) : socialSheet === "cities" ? (
+                socialList.length === 0 ? (
+                  <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>No cities yet.</div>
+                ) : (
+                  socialList.map((city) => (
+                    <div
+                      key={city}
+                      style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, color: C.text, fontFamily: "-apple-system,sans-serif", fontSize: 14 }}
+                    >
+                      {city}
+                    </div>
+                  ))
+                )
+              ) : socialList.length === 0 ? (
+                <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>No users yet.</div>
+              ) : (
+                socialList.map((u) => (
+                  <button
+                    key={u.clerk_user_id}
+                    type="button"
+                    onClick={() => {
+                      setSocialSheet(null);
+                      onViewUser?.(u.clerk_user_id);
+                    }}
+                    style={{
+                      width: "100%",
+                      background: "none",
+                      border: "none",
+                      borderBottom: `1px solid ${C.border}`,
+                      padding: "12px 0",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    <div style={{ width: 34, height: 34, borderRadius: "50%", overflow: "hidden", border: `1px solid ${C.border}`, background: C.bg3, flexShrink: 0 }}>
+                      {u.profile_photo ? <img src={u.profile_photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: C.text, fontSize: 14, fontFamily: "-apple-system,sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.profile_name}</div>
+                      <div style={{ color: C.muted, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>{u.profile_username}</div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     document.getElementById("root") || document.body
   );

@@ -285,7 +285,7 @@ const Wordmark = ({ size = 22 }) => (
   </div>
 );
 
-const PageHeader = ({ right }) => (
+const PageHeader = ({ right, onLogoClick }) => (
   <div
     style={{
       padding: "6px 18px 8px",
@@ -295,7 +295,9 @@ const PageHeader = ({ right }) => (
       flexShrink: 0,
     }}
   >
-    <Wordmark size={22} />
+    <div onClick={onLogoClick} style={{ cursor: onLogoClick ? "pointer" : "default" }}>
+      <Wordmark size={22} />
+    </div>
     {right}
   </div>
 );
@@ -608,10 +610,18 @@ function LazyPhotoRow({ item, pickerIndex, onLoad, onSelect, onRefresh, C }) {
 
 export default function Discover({ tasteProfile, initialTab }) {
   const { user } = useUser();
-  const [tab, setTab] = useState(initialTab || "home");
-  const [showOnboarding, setShowOnboarding] = useState(() => {
-    try { return !safeLocalStorageGetItem("cooked_onboarding_done"); } catch { return true; }
+  const skipNextTabPersistRef = useRef(false);
+  const [tab, setTab] = useState(() => {
+    try {
+      if (!localStorage.getItem("cooked_onboarding_done")) return "home";
+      return localStorage.getItem("cooked_last_tab") || initialTab || "home";
+    } catch {
+      return initialTab || "home";
+    }
   });
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => !localStorage.getItem("cooked_onboarding_done")
+  );
   const [showHeatTip, setShowHeatTip] = useState(false);
   const [heatTipFading, setHeatTipFading] = useState(false);
   const [setupGateOpen, setSetupGateOpen] = useState(false);
@@ -1139,6 +1149,17 @@ export default function Discover({ tasteProfile, initialTab }) {
     prevInitialTabRef.current = initialTab;
     setTab(initialTab);
   }, [initialTab]);
+
+  useEffect(() => {
+    if (showOnboarding) return;
+    if (skipNextTabPersistRef.current) {
+      skipNextTabPersistRef.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem("cooked_last_tab", tab);
+    } catch {}
+  }, [tab, showOnboarding]);
   useEffect(() => { safeSetItem("cooked_heat", JSON.stringify(heatResults)); }, [heatResults]);
 
   useEffect(() => {
@@ -2485,6 +2506,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     return (
       <Onboarding
         onComplete={() => {
+          skipNextTabPersistRef.current = true;
           setShowOnboarding(false);
           setTab("heat");
           setShowHeatTip(true);
@@ -2585,6 +2607,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       {/* Header */}
       <div ref={headerRef} style={{ background:C.bg, position:"fixed", top:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, zIndex:50, borderBottom:`1px solid ${C.border2}`, paddingTop:6, marginBottom:0, paddingBottom:0, display: tab === "heat" ? "none" : "block" }}>
         <PageHeader
+          onLogoClick={() => setTab("home")}
           right={
             <div style={{ display:"flex", gap:8, alignItems:"center" }}>
               {(tab === "home" || tab === "discover" || tab === "map") && (
@@ -4414,6 +4437,7 @@ export default function Discover({ tasteProfile, initialTab }) {
           clerkUserId={viewingUserId}
           onClose={() => setViewingUserId(null)}
           onOpenDetail={setDetailRestaurant}
+          onViewUser={(id) => setViewingUserId(id)}
         />
       )}
 

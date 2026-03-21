@@ -724,6 +724,18 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
               </button>
             </div>
 
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.removeItem("cooked_onboarding_done");
+                localStorage.removeItem("cooked_last_tab");
+                window.location.reload();
+              }}
+              style={{ width: "100%", padding: "14px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 10 }}
+            >
+              Watch intro again
+            </button>
+
             <button type="button" onClick={() => setSettingsOpen(false)}
               style={{ width: "100%", padding: 14, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 12, color: C.muted, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
               Cancel
