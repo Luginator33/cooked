@@ -173,7 +173,7 @@ function SwipeDemoCard() {
   ];
 
   useEffect(() => {
-    const durations = [1000, 400, 100, 1000, 400, 100, 1000, 400, 100];
+    const durations = [2000, 600, 100, 2000, 600, 100, 2000, 600, 100];
     const timer = setTimeout(() => {
       if (step === 1 || step === 4 || step === 7) {
         setCardIndex((i) => (i + 1) % restaurants.length);
@@ -193,13 +193,13 @@ function SwipeDemoCard() {
           : phase === 7
             ? "translateY(-120%)"
             : "translateX(0) translateY(0) rotate(0deg)",
-    transition: phase === 2 || phase === 5 || phase === 8 ? "none" : "transform 0.4s ease",
+    transition: phase === 2 || phase === 5 || phase === 8 ? "none" : "transform 0.6s ease",
   };
   const idx = cardIndex % restaurants.length;
-  const labelHeat = phase === 1;
-  const labelPass = phase === 4;
-  const labelBeen = phase === 7;
-  const labelOpacity = phase === 1 || phase === 4 || phase === 7 ? 1 : 0;
+  /** Visible for full swipe + reset frame so labels don’t flash off mid-motion */
+  const labelHeat = phase === 1 || phase === 2;
+  const labelPass = phase === 4 || phase === 5;
+  const labelBeen = phase === 7 || phase === 8;
 
   return (
     <div style={{ position: "relative", height: "55%" }}>
@@ -252,16 +252,14 @@ function SwipeDemoCard() {
               display: "flex",
               alignItems: "center",
               gap: 6,
-              background: "rgba(196,96,58,0.15)",
-              border: "1.5px solid #c4603a",
+              background: "rgba(196,96,58,0.25)",
+              border: "2px solid #c4603a",
               borderRadius: 20,
-              padding: "5px 14px",
-              opacity: labelOpacity,
-              transition: "opacity 0.2s ease",
+              padding: "8px 18px",
             }}
           >
-            <FlameIcon size={14} filled color="#c4603a" />
-            <span style={{ color: "#c4603a", fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase" }}>HEAT</span>
+            <FlameIcon size={16} filled color="#c4603a" />
+            <span style={{ color: "#c4603a", fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>HEAT</span>
           </div>
         )}
         {labelPass && (
@@ -270,15 +268,13 @@ function SwipeDemoCard() {
               position: "absolute",
               top: 14,
               right: 14,
-              background: "rgba(90,58,32,0.15)",
-              border: "1.5px solid #5a3a20",
+              background: "rgba(90,58,32,0.25)",
+              border: "2px solid #5a3a20",
               borderRadius: 20,
-              padding: "5px 14px",
-              opacity: labelOpacity,
-              transition: "opacity 0.2s ease",
+              padding: "8px 18px",
             }}
           >
-            <span style={{ color: "#5a3a20", fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            <span style={{ color: "#5a3a20", fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
             PASS
             </span>
           </div>
@@ -290,15 +286,13 @@ function SwipeDemoCard() {
               top: 14,
               left: "50%",
               transform: "translateX(-50%)",
-              background: "rgba(74,122,171,0.15)",
-              border: "1.5px solid #4a7aab",
+              background: "rgba(74,122,171,0.25)",
+              border: "2px solid #4a7aab",
               borderRadius: 20,
-              padding: "5px 14px",
-              opacity: labelOpacity,
-              transition: "opacity 0.2s ease",
+              padding: "8px 18px",
             }}
           >
-            <span style={{ color: "#4a7aab", fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            <span style={{ color: "#4a7aab", fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
               BEEN HERE
             </span>
           </div>
@@ -332,9 +326,7 @@ export default function Onboarding({ onComplete }) {
   }, []);
 
   const finish = () => {
-    try {
-      localStorage.setItem("cooked_onboarding_done", "true");
-    } catch {}
+    localStorage.setItem("cooked_onboarding_done", "true");
     onComplete?.();
   };
 

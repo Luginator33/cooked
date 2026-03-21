@@ -48,7 +48,7 @@ function EyeIcon({ size = 14, color = C.muted }) {
   );
 }
 
-export default function Profile({ allRestaurants = [], heatResults = {}, watchlist = [], onOpenDetail, onFixPhotos, clerkName, clerkImageUrl, onViewUser }) {
+export default function Profile({ allRestaurants = [], heatResults = {}, watchlist = [], onOpenDetail, onFixPhotos, clerkName, clerkImageUrl, onViewUser, allCitiesFromDb = [] }) {
   const { user } = useUser();
   const NOTIFICATION_TYPES = [
     { key: "followed_you", label: "Someone follows you", sublabel: "Get notified when someone follows your profile." },
@@ -172,7 +172,11 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
     return arr.filter(r => (seen.has(r.id) ? false : (seen.add(r.id), true)));
   }, [allRestaurants, findsIds]);
 
-  const cities = [...new Set(lovedRestaurants.map(r => r.city).filter(Boolean))];
+  const cities = useMemo(() => {
+    const uniq = [...new Set(lovedRestaurants.map((r) => r.city).filter(Boolean))];
+    const order = new Map((allCitiesFromDb || []).map((c, i) => [c, i]));
+    return uniq.sort((a, b) => (order.get(a) ?? 9999) - (order.get(b) ?? 9999));
+  }, [lovedRestaurants, allCitiesFromDb]);
 
   // Banner rotates through loved photos
   const lovedPhotos = lovedRestaurants.map(r => {
@@ -428,7 +432,7 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
   const stats = [
     { val: followingCount, label: "FOLLOWING", items: [], title: "Following", onClick: () => openSocialList("following") },
     { val: followersCount, label: "FOLLOWERS", items: [], title: "Followers", onClick: () => openSocialList("followers") },
-    { val: cities.length || 12, label: "CITIES", items: cities.map(c => ({ id: c, name: c })), title: "Cities" },
+    { val: cities.length, label: "CITIES", items: cities.map(c => ({ id: c, name: c })), title: "Cities" },
   ];
 
   return (
@@ -493,7 +497,7 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
           <div style={{ flex: 1, paddingBottom: 4 }}>
             <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", fontSize: 26, color: "#fff", lineHeight: 1.05 }}>{name}</div>
             <div style={{ fontSize: 12, color: "rgba(240,235,226,0.65)", marginTop: 4, fontFamily: "-apple-system,sans-serif" }}>
-              {cities.slice(0, 3).join(" · ") || "Los Angeles · New York"}
+              {cities.slice(0, 3).join(" · ") || ""}
             </div>
           </div>
         </div>
