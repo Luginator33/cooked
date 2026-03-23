@@ -83,15 +83,20 @@ export async function saveSharedPhoto(restaurantId, photoUrl) {
 
 // Save a community restaurant so other users can see it.
 export async function addCommunityRestaurant(restaurantObject) {
-  const payload = { ...restaurantObject, description: restaurantObject.desc, updated_at: new Date().toISOString() }
-  delete payload.desc;
-  const { error } = await supabase
+  const { desc, ...rest } = restaurantObject;
+  const payload = {
+    ...rest,
+    description: desc ?? restaurantObject.description,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase
     .from('community_restaurants')
     .upsert(payload, { onConflict: 'id' })
+    .select();
   if (error) {
     console.log('addCommunityRestaurant error:', error)
   }
-  return { error }
+  return { data, error }
 }
 
 // Fetch all community-added restaurants.

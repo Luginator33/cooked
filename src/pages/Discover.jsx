@@ -1844,6 +1844,26 @@ export default function Discover({ tasteProfile, initialTab }) {
     } catch {}
   };
 
+  /** After IG import saves to community_restaurants, persist id to Finds (local + Supabase user_data.finds). */
+  const persistFindAfterCommunityImport = (result, restaurantObject) => {
+    if (result?.data?.[0]?.id || restaurantObject?.id) {
+      const savedId = String(result?.data?.[0]?.id || restaurantObject.id);
+      try {
+        const finds = JSON.parse(safeLocalStorageGetItem("cooked_finds") || "[]");
+        if (!finds.map(String).includes(savedId)) {
+          finds.push(savedId);
+          safeSetItem("cooked_finds", JSON.stringify(finds));
+        }
+      } catch {}
+      if (user?.id) {
+        try {
+          const currentFinds = JSON.parse(safeLocalStorageGetItem("cooked_finds") || "[]");
+          saveUserData(user.id, { finds: currentFinds });
+        } catch {}
+      }
+    }
+  };
+
   const ANTHROPIC_PROMPT = "Look at this Instagram post screenshot. Extract every restaurant mentioned. For each one return a JSON array with objects containing: name, city, neighborhood, cuisine, price ($ to $$$$), description (one evocative sentence), tags (array of 3 strings). Return only valid JSON, no other text.";
 
   const unresolvedRestaurants = allRestaurants.filter((r) => !restaurantPhotoInSharedCache(r));
@@ -2121,8 +2141,22 @@ Return a JSON object with exactly these fields:
         if (toAdd.length) {
           for (const restaurantObject of toAdd) {
             console.log('Saving to community:', restaurantObject);
+            const nameForMatch = String(restaurantObject.name || "").trim();
+            const { data: existing } = nameForMatch
+              ? await supabase
+                  .from('community_restaurants')
+                  .select('id')
+                  .ilike('name', nameForMatch)
+                  .limit(1)
+              : { data: null };
+            if (existing?.length) {
+              const existingId = String(existing[0].id);
+              persistFindAfterCommunityImport({ data: [{ id: existingId }] }, { id: existingId });
+              continue;
+            }
             const result = await addCommunityRestaurant(restaurantObject);
             console.log('Community save result:', result);
+            if (!result.error) persistFindAfterCommunityImport(result, restaurantObject);
           }
         }
         setIgAddedRestaurants(baseRestaurants);
@@ -2325,8 +2359,22 @@ Return a JSON object with exactly these fields:
       (async () => {
         for (const restaurantObject of updated) {
           console.log('Saving to community:', restaurantObject);
+          const nameForMatch = String(restaurantObject.name || "").trim();
+          const { data: existing } = nameForMatch
+            ? await supabase
+                .from('community_restaurants')
+                .select('id')
+                .ilike('name', nameForMatch)
+                .limit(1)
+            : { data: null };
+          if (existing?.length) {
+            const existingId = String(existing[0].id);
+            persistFindAfterCommunityImport({ data: [{ id: existingId }] }, { id: existingId });
+            continue;
+          }
           const result = await addCommunityRestaurant(restaurantObject);
           console.log('Community save result:', result);
+          if (!result.error) persistFindAfterCommunityImport(result, restaurantObject);
         }
       })();
     }
