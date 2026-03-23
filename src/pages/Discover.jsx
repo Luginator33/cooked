@@ -1873,7 +1873,15 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
   };
 
-  const ANTHROPIC_PROMPT = "Look at this Instagram post screenshot. Extract every restaurant mentioned. For each one return a JSON array with objects containing: name, city, neighborhood, cuisine, price ($ to $$$$), description (one evocative sentence), tags (array of 3 strings). Return only valid JSON, no other text.";
+  const ANTHROPIC_PROMPT = `You are a data extraction API. Extract restaurant information from this Instagram post screenshot.
+
+CRITICAL: Return ONLY a valid JSON array. No explanation, no preamble, no markdown, no code blocks. Just the raw JSON array.
+
+Format:
+[{"name":"Restaurant Name","city":"City Name","neighborhood":"Neighborhood","cuisine":"Cuisine Type","price":"$$","description":"One evocative sentence about the restaurant.","tags":["tag1","tag2","tag3"]}]
+
+If no restaurant is visible, return: []
+If unsure about a field, use "Unknown" for strings or "$" for price.`;
 
   const unresolvedRestaurants = allRestaurants.filter((r) => !restaurantPhotoInSharedCache(r));
   const resolvedRestaurants = allRestaurants.filter((r) => restaurantPhotoInSharedCache(r));
@@ -1928,11 +1936,24 @@ export default function Discover({ tasteProfile, initialTab }) {
       const data = await res.json();
       console.log("Claude API full response:", data);
       const text = data.content?.[0]?.text ?? "";
-      let jsonStr = text.trim();
-      const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) jsonStr = jsonMatch[1].trim();
-      const parsed = JSON.parse(jsonStr);
-      const list = Array.isArray(parsed) ? parsed : [parsed];
+      let restaurants = [];
+      try {
+        // Strip any markdown fences if Claude added them despite instructions
+        const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        // Find the JSON array in the response
+        const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          restaurants = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error("No JSON array found in response");
+        }
+      } catch (parseErr) {
+        console.error("[IG Import] JSON parse error:", parseErr, "Raw text:", text);
+        setIgError("Could not extract restaurant data. Please try a clearer screenshot.");
+        setIgImporting(false);
+        return;
+      }
+      const list = Array.isArray(restaurants) ? restaurants : [];
       const googleKey = import.meta.env.VITE_GOOGLE_PLACES_KEY;
       const foundBy = user?.fullName || user?.username || "a user";
       const baseRestaurants = list.map((item, i) => {
