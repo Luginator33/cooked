@@ -1145,9 +1145,12 @@ export default function Discover({ tasteProfile, initialTab }) {
       const community = await getCommunityRestaurants();
       if (cancelled || !Array.isArray(community) || community.length === 0) return;
       setAllRestaurants((prev) => {
-        const byId = new Map(prev.map((r) => [r.id, r]));
+        const byId = new Map(prev.map((r) => [String(r.id), r]));
         community.forEach((r) => {
-          if (r && typeof r.id === "number") byId.set(r.id, { ...(byId.get(r.id) || {}), ...r });
+          if (r && r.id != null) {
+            const key = String(r.id);
+            byId.set(key, { ...(byId.get(key) || {}), ...r });
+          }
         });
         return Array.from(byId.values());
       });
@@ -1951,7 +1954,7 @@ export default function Discover({ tasteProfile, initialTab }) {
                 const detailsRes = await fetch(`https://places.googleapis.com/v1/places/${place.id}`, {
                   headers: {
                     "X-Goog-Api-Key": googleKey,
-                    "X-Goog-FieldMask": "formattedAddress,nationalPhoneNumber,internationalPhoneNumber,regularOpeningHours.weekdayDescriptions,websiteUri,location,photos,priceLevel,rating,addressComponents",
+                    "X-Goog-FieldMask": "displayName,formattedAddress,nationalPhoneNumber,internationalPhoneNumber,regularOpeningHours.weekdayDescriptions,websiteUri,location,photos,priceLevel,rating,addressComponents",
                   },
                 });
                 if (detailsRes.ok) {
@@ -1975,6 +1978,12 @@ export default function Discover({ tasteProfile, initialTab }) {
               addressComponents.find((c) => c?.types?.includes("sublocality_level_1"));
             const cityFromAddress = cityComponent?.longText || cityComponent?.shortText || "";
             const neighborhoodFromAddress = neighborhoodComponent?.longText || neighborhoodComponent?.shortText || "";
+            const neighborhoodFallback =
+              addressComponents.find((c) => c?.types?.includes("sublocality"))?.longText ||
+              addressComponents.find((c) => c?.types?.includes("administrative_area_level_2"))?.longText ||
+              addressComponents.find((c) => c?.types?.includes("postal_town"))?.longText ||
+              cityFromAddress ||
+              "";
             const level = details?.priceLevel;
             const priceFromLevel =
               typeof level === "number" && level > 0 && level <= 4
@@ -1983,8 +1992,12 @@ export default function Discover({ tasteProfile, initialTab }) {
 
             enrichedRestaurant = {
               ...restaurant,
+              name: details?.displayName?.text || restaurant.name,
               city: cityFromAddress || restaurant.city,
-              neighborhood: neighborhoodFromAddress || restaurant.neighborhood,
+              neighborhood:
+                neighborhoodFromAddress ||
+                neighborhoodFallback ||
+                (restaurant.neighborhood !== "Unknown" ? (restaurant.neighborhood || neighborhoodFallback) : neighborhoodFallback),
               address: details?.formattedAddress || restaurant.address,
               phone: details?.nationalPhoneNumber || details?.internationalPhoneNumber || restaurant.phone,
               hours: details?.regularOpeningHours?.weekdayDescriptions || restaurant.hours,
