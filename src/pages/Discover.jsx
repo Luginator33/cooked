@@ -1996,6 +1996,83 @@ export default function Discover({ tasteProfile, initialTab }) {
               source: `Found by ${foundBy}`,
             };
 
+            let openTableUrl = enrichedRestaurant.website || "";
+            try {
+              const otRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Goog-Api-Key": googleKey,
+                  "X-Goog-FieldMask": "places.websiteUri,places.displayName",
+                },
+                body: JSON.stringify({ textQuery: `${enrichedRestaurant.name} opentable ${enrichedRestaurant.city}` }),
+              });
+              if (otRes.ok) {
+                const otData = await otRes.json();
+                const otPlace = otData.places?.[0];
+                if (otPlace?.websiteUri?.includes("opentable.com")) {
+                  openTableUrl = otPlace.websiteUri;
+                }
+              }
+            } catch (otErr) {
+              console.warn("[OT] search failed", otErr);
+            }
+            enrichedRestaurant.website = openTableUrl;
+
+            let aiFields = {};
+            try {
+              const aiRes = await fetch("https://cooked-proxy.luga-podesta.workers.dev/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  model: "claude-sonnet-4-20250514",
+                  max_tokens: 800,
+                  system: "You are a food critic and restaurant expert. Return ONLY valid JSON, no markdown, no explanation.",
+                  messages: [{
+                    role: "user",
+                    content: `Generate rich restaurant data for the Cooked app for this restaurant:
+Name: ${enrichedRestaurant.name}
+City: ${enrichedRestaurant.city}
+Neighborhood: ${enrichedRestaurant.neighborhood}
+Cuisine: ${enrichedRestaurant.cuisine}
+Price: ${enrichedRestaurant.price}
+Address: ${enrichedRestaurant.address}
+Description: ${enrichedRestaurant.desc || ""}
+
+Return a JSON object with exactly these fields:
+{
+  "about": "2-3 sentence description of the restaurant, its history and what makes it special",
+  "must_order": ["dish 1", "dish 2", "dish 3"],
+  "vibe": "one sentence describing the atmosphere and who goes there",
+  "best_for": ["occasion 1", "occasion 2", "occasion 3"],
+  "known_for": "the one thing this restaurant is most famous for",
+  "insider_tip": "a specific actionable tip a local would know",
+  "price_detail": "specific price context e.g. '$45 for the omakase, BYOB saves money'"
+}`
+                  }]
+                })
+              });
+              if (aiRes.ok) {
+                const aiData = await aiRes.json();
+                const aiText = aiData.content?.[0]?.text || "";
+                const cleaned = aiText.replace(/```json|```/g, "").trim();
+                aiFields = JSON.parse(cleaned);
+              }
+            } catch (aiErr) {
+              console.warn("[AI enrichment] failed", aiErr);
+            }
+
+            enrichedRestaurant = {
+              ...enrichedRestaurant,
+              about: aiFields.about || enrichedRestaurant.desc || "",
+              must_order: aiFields.must_order || [],
+              vibe: aiFields.vibe || "",
+              best_for: aiFields.best_for || [],
+              known_for: aiFields.known_for || "",
+              insider_tip: aiFields.insider_tip || "",
+              price_detail: aiFields.price_detail || "",
+            };
+
             const photos = (details?.photos || place?.photos || []).slice(0, 12);
             for (const photo of photos) {
               const photoName = photo.name;
