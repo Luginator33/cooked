@@ -82,16 +82,32 @@ export async function saveSharedPhoto(restaurantId, photoUrl) {
 }
 
 // Save a community restaurant so other users can see it.
+// IDs are 100000–999999 so they never collide with static restaurants.js (~1–35400).
 export async function addCommunityRestaurant(restaurantObject) {
   const { desc, ...rest } = restaurantObject;
+  const name = (restaurantObject.name || '').trim();
+  const newId = Math.floor(Math.random() * 900000) + 100000;
+  let id = newId;
+  if (name) {
+    const { data: existingRows } = await supabase
+      .from('community_restaurants')
+      .select('id')
+      .ilike('name', name)
+      .limit(1);
+    if (existingRows?.length) {
+      id = existingRows[0].id;
+    }
+  }
   const payload = {
     ...rest,
+    id,
+    name: name || restaurantObject.name,
     description: desc ?? restaurantObject.description,
     updated_at: new Date().toISOString(),
   };
   const { data, error } = await supabase
     .from('community_restaurants')
-    .upsert(payload, { onConflict: 'id' })
+    .upsert(payload, { onConflict: 'name' })
     .select();
   if (error) {
     console.log('addCommunityRestaurant error:', error)

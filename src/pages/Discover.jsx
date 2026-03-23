@@ -1146,11 +1146,20 @@ export default function Discover({ tasteProfile, initialTab }) {
       if (cancelled || !Array.isArray(community) || community.length === 0) return;
       setAllRestaurants((prev) => {
         const byId = new Map(prev.map((r) => [String(r.id), r]));
+        const byName = new Map(prev.map((r) => [r.name?.toLowerCase().trim(), r]));
         community.forEach((r) => {
-          if (r && r.id != null) {
-            const key = String(r.id);
-            byId.set(key, { ...(byId.get(key) || {}), ...r });
+          if (!r || r.id == null) return;
+          const key = String(r.id);
+          const nameKey = r.name?.toLowerCase().trim();
+          if (nameKey) {
+            const existingByName = byName.get(nameKey);
+            if (existingByName && String(existingByName.id) !== key) {
+              byId.delete(String(existingByName.id));
+            }
           }
+          const merged = { ...(byId.get(key) || {}), ...r };
+          byId.set(key, merged);
+          if (nameKey) byName.set(nameKey, merged);
         });
         return Array.from(byId.values());
       });
