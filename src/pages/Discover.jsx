@@ -2009,15 +2009,16 @@ export default function Discover({ tasteProfile, initialTab }) {
             const cityNormalizations = {
               "ciudad de méxico": "Mexico City",
               "ciudad de mexico": "Mexico City",
-              cdmx: "Mexico City",
+              "cdmx": "Mexico City",
               "new york city": "New York",
-              nyc: "New York",
+              "nyc": "New York",
               "los ángeles": "Los Angeles",
-              londres: "London",
-              parís: "Paris",
-              tokio: "Tokyo",
-              seúl": "Seoul",
-              dubái: "Dubai",
+              "los angeles": "Los Angeles",
+              "londres": "London",
+              "parís": "Paris",
+              "tokio": "Tokyo",
+              "seúl": "Seoul",
+              "dubái": "Dubai",
             };
             const normalizedCity = cityNormalizations[cityFromAddress.toLowerCase()] || cityFromAddress;
             const neighborhoodFromAddress = neighborhoodComponent?.longText || neighborhoodComponent?.shortText || "";
