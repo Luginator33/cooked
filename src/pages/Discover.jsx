@@ -2006,12 +2006,26 @@ export default function Discover({ tasteProfile, initialTab }) {
               addressComponents.find((c) => c?.types?.includes("sublocality")) ||
               addressComponents.find((c) => c?.types?.includes("sublocality_level_1"));
             const cityFromAddress = cityComponent?.longText || cityComponent?.shortText || "";
+            const cityNormalizations = {
+              "ciudad de méxico": "Mexico City",
+              "ciudad de mexico": "Mexico City",
+              cdmx: "Mexico City",
+              "new york city": "New York",
+              nyc: "New York",
+              "los ángeles": "Los Angeles",
+              londres: "London",
+              parís: "Paris",
+              tokio: "Tokyo",
+              seúl": "Seoul",
+              dubái: "Dubai",
+            };
+            const normalizedCity = cityNormalizations[cityFromAddress.toLowerCase()] || cityFromAddress;
             const neighborhoodFromAddress = neighborhoodComponent?.longText || neighborhoodComponent?.shortText || "";
             const neighborhoodFallback =
               addressComponents.find((c) => c?.types?.includes("sublocality"))?.longText ||
               addressComponents.find((c) => c?.types?.includes("administrative_area_level_2"))?.longText ||
               addressComponents.find((c) => c?.types?.includes("postal_town"))?.longText ||
-              cityFromAddress ||
+              normalizedCity ||
               "";
             const level = details?.priceLevel;
             const priceFromLevel =
@@ -2022,7 +2036,7 @@ export default function Discover({ tasteProfile, initialTab }) {
             enrichedRestaurant = {
               ...restaurant,
               name: details?.displayName?.text || restaurant.name,
-              city: cityFromAddress || restaurant.city,
+              city: normalizedCity || restaurant.city,
               neighborhood:
                 neighborhoodFromAddress ||
                 neighborhoodFallback ||
@@ -2379,11 +2393,18 @@ Return a JSON object with exactly these fields:
           if (existing?.length) {
             const existingId = String(existing[0].id);
             persistFindAfterCommunityImport({ data: [{ id: existingId }] }, { id: existingId });
+            const selectedPhotoUrl = restaurantObject.img || restaurantObject.img2;
+            if (selectedPhotoUrl) void saveSharedPhoto(existingId, selectedPhotoUrl);
             continue;
           }
           const result = await addCommunityRestaurant(restaurantObject);
           console.log('Community save result:', result);
-          if (!result.error) persistFindAfterCommunityImport(result, restaurantObject);
+          if (!result.error) {
+            persistFindAfterCommunityImport(result, restaurantObject);
+            const savedId = String(result?.data?.[0]?.id || restaurantObject.id);
+            const selectedPhotoUrl = restaurantObject.img || restaurantObject.img2;
+            if (selectedPhotoUrl) void saveSharedPhoto(savedId, selectedPhotoUrl);
+          }
         }
       })();
     }
