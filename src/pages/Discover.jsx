@@ -755,6 +755,12 @@ export default function Discover({ tasteProfile, initialTab }) {
     return shared || getVaultPhotoForId(id) || getPreviewPhotoForId(id);
   };
 
+  /** True when `restaurant_photos` / shared cache has an entry for this restaurant id (string or numeric key). */
+  const restaurantPhotoInSharedCache = (r) => {
+    const c = photoCacheRef.current || {};
+    return !!(c[String(r.id)] || c[Number(r.id)]);
+  };
+
   // When the photo cache source switches (initial sign-in load), re-apply cached photo URIs to restaurant cards.
   useEffect(() => {
     if (usingSupabasePhotoCache) {
@@ -1019,6 +1025,9 @@ export default function Discover({ tasteProfile, initialTab }) {
           photoCacheRef.current = sharedPhotos;
           setUsingSupabasePhotoCache(true);
           setPhotoCacheVersion((v) => v + 1);
+          const resolvedIds = Object.keys(sharedPhotos);
+          setPhotoResolved(resolvedIds);
+          safeSetItem("cooked_photo_resolved", JSON.stringify(resolvedIds));
         } else {
           photoCacheRef.current = {};
           setUsingSupabasePhotoCache(false);
@@ -1831,8 +1840,8 @@ export default function Discover({ tasteProfile, initialTab }) {
 
   const ANTHROPIC_PROMPT = "Look at this Instagram post screenshot. Extract every restaurant mentioned. For each one return a JSON array with objects containing: name, city, neighborhood, cuisine, price ($ to $$$$), description (one evocative sentence), tags (array of 3 strings). Return only valid JSON, no other text.";
 
-  const unresolvedRestaurants = allRestaurants.filter(r => !photoResolved.includes(r.id));
-  const resolvedRestaurants = allRestaurants.filter(r => photoResolved.includes(r.id));
+  const unresolvedRestaurants = allRestaurants.filter((r) => !restaurantPhotoInSharedCache(r));
+  const resolvedRestaurants = allRestaurants.filter((r) => restaurantPhotoInSharedCache(r));
 
   const rePickPhotosForAll = () => {
     setPickerMode("fix-photos");
@@ -1844,7 +1853,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     setIgError(null);
     setIgDone(false);
     setIgModal(true);
-    const toFetch = allRestaurants.filter(r => !photoResolved.includes(r.id));
+    const toFetch = allRestaurants.filter((r) => !restaurantPhotoInSharedCache(r));
     // Open immediately with empty slots — LazyPhotoRow will trigger loads as user scrolls
     const emptyItems = toFetch.map(restaurant => ({
       restaurant, photoOptions: [], selectedIndex: -1, isRefreshing: false, refreshOffset: 0, userSelected: false
@@ -2233,8 +2242,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     setIgPhotoPicker([]);
 
     // Reload remaining unresolved as empty slots — lazy queue will fill them as user scrolls
-    const newResolved = [...photoResolved, ...confirmedIds];
-    const remaining = allRestaurants.filter(r => !newResolved.includes(r.id));
+    const remaining = allRestaurants.filter((r) => !restaurantPhotoInSharedCache(r));
     if (remaining.length > 0 && pickerMode === "fix-photos") {
       const emptyItems = remaining.map(restaurant => ({
         restaurant, photoOptions: [], selectedIndex: -1, isRefreshing: false, refreshOffset: 0, userSelected: false
@@ -3568,7 +3576,26 @@ export default function Discover({ tasteProfile, initialTab }) {
       {/* Profile Tab */}
       {tab === "profile" && (
         <div style={{ paddingTop: headerHeight }}>
-          <Profile tasteProfile={tasteProfile} allRestaurants={allRestaurants} heatResults={heatResults} watchlist={watchlist} onOpenDetail={setDetailRestaurant} onFixPhotos={rePickPhotosForAll} clerkName={user?.fullName} clerkImageUrl={user?.imageUrl} onViewUser={setViewingUserId} allCitiesFromDb={ALL_CITIES} />
+          <Profile
+            tasteProfile={tasteProfile}
+            allRestaurants={allRestaurants}
+            heatResults={heatResults}
+            watchlist={watchlist}
+            onOpenDetail={setDetailRestaurant}
+            onFixPhotos={rePickPhotosForAll}
+            clerkName={user?.fullName}
+            clerkImageUrl={user?.imageUrl}
+            onViewUser={setViewingUserId}
+            allCitiesFromDb={ALL_CITIES}
+            onSharedPhotoSaved={(restaurantId, photoUrl) => {
+              setPhotoResolved((prev) => [...new Set([...prev, restaurantId])]);
+              if (photoUrl) {
+                photoCacheRef.current = { ...(photoCacheRef.current || {}), [String(restaurantId)]: photoUrl };
+                setUsingSupabasePhotoCache(true);
+                setPhotoCacheVersion((v) => v + 1);
+              }
+            }}
+          />
         </div>
       )}
 

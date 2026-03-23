@@ -48,7 +48,19 @@ function EyeIcon({ size = 14, color = C.muted }) {
   );
 }
 
-export default function Profile({ allRestaurants = [], heatResults = {}, watchlist = [], onOpenDetail, onFixPhotos, clerkName, clerkImageUrl, onViewUser, allCitiesFromDb = [] }) {
+export default function Profile({
+  allRestaurants = [],
+  heatResults = {},
+  watchlist = [],
+  onOpenDetail,
+  onFixPhotos,
+  clerkName,
+  clerkImageUrl,
+  onViewUser,
+  allCitiesFromDb = [],
+  /** Called after a photo is saved to `restaurant_photos` (e.g. admin sync) so Discover can update queue state. */
+  onSharedPhotoSaved,
+}) {
   const { user } = useUser();
   const NOTIFICATION_TYPES = [
     { key: "followed_you", label: "Someone follows you", sublabel: "Get notified when someone follows your profile." },
@@ -263,6 +275,7 @@ export default function Profile({ allRestaurants = [], heatResults = {}, watchli
     try {
       for (const [restaurantId, photoUrl] of entries) {
         await saveSharedPhoto(restaurantId, photoUrl);
+        onSharedPhotoSaved?.(restaurantId, photoUrl);
         synced += 1;
         if (synced === total || synced % 25 === 0) {
           setPhotoSyncCount(synced);
