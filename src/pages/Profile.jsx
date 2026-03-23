@@ -140,6 +140,19 @@ export default function Profile({
       } else {
         setPhotoCache({});
       }
+
+      if (data?.finds && Array.isArray(data.finds) && data.finds.length > 0) {
+        const supabaseFinds = data.finds || [];
+        let localFinds = [];
+        try {
+          localFinds = JSON.parse(localStorage.getItem("cooked_finds") || "[]");
+        } catch {
+          localFinds = [];
+        }
+        const mergedFinds = [...new Set([...supabaseFinds.map(String), ...localFinds.map(String)])];
+        setFinds(mergedFinds);
+        safeSetItem("cooked_finds", JSON.stringify(mergedFinds));
+      }
     })();
     return () => { cancelled = true; };
   }, [user?.id, clerkImageUrl]);
@@ -158,31 +171,39 @@ export default function Profile({
     return arr.filter(r => seen.has(r.id) ? false : seen.add(r.id));
   }, [allRestaurants, watchlist]);
 
-  const [findsIds, setFindsIds] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("cooked_finds") || "[]"); } catch { return []; }
+  const [finds, setFinds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("cooked_finds") || "[]");
+    } catch {
+      return [];
+    }
   });
 
   useEffect(() => {
     const handler = () => {
-      try { setFindsIds(JSON.parse(localStorage.getItem("cooked_finds") || "[]")); } catch {}
+      try {
+        setFinds(JSON.parse(localStorage.getItem("cooked_finds") || "[]"));
+      } catch {}
     };
-    window.addEventListener('storage', handler);
-    return () => window.removeEventListener('storage', handler);
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
   }, []);
 
   // When user switches to the Finds tab within the same session, localStorage won't emit a `storage` event.
   // Re-read immediately so the list updates.
   useEffect(() => {
     if (activeTab !== "finds") return;
-    try { setFindsIds(JSON.parse(localStorage.getItem("cooked_finds") || "[]")); } catch {}
+    try {
+      setFinds(JSON.parse(localStorage.getItem("cooked_finds") || "[]"));
+    } catch {}
   }, [activeTab]);
 
   const findsRestaurants = useMemo(() => {
-    const ids = new Set((findsIds || []).map(id => Number(id)));
-    const arr = allRestaurants.filter(r => ids.has(Number(r.id)));
+    const idSet = new Set((finds || []).map(String));
+    const arr = allRestaurants.filter((r) => idSet.has(String(r.id)));
     const seen = new Set();
-    return arr.filter(r => (seen.has(r.id) ? false : (seen.add(r.id), true)));
-  }, [allRestaurants, findsIds]);
+    return arr.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+  }, [allRestaurants, finds]);
 
   const cities = useMemo(() => {
     const uniq = [...new Set(lovedRestaurants.map((r) => r.city).filter(Boolean))];
