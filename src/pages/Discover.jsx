@@ -2104,7 +2104,9 @@ If unsure about a field, use "Unknown" for strings or "$" for price.`;
             } catch (otErr) {
               console.warn("[OT] search failed", otErr);
             }
-            enrichedRestaurant.website = openTableUrl;
+            if (openTableUrl.includes("opentable.com")) {
+              enrichedRestaurant.website = openTableUrl;
+            }
 
             let aiFields = {};
             try {
@@ -4412,7 +4414,12 @@ Return a JSON object with exactly these fields:
               const shortAddr = (detail.address||"").split(",").slice(0,2).join(",").trim();
               const websiteRaw = (detail.website || "").trim();
               const websiteLower = websiteRaw.toLowerCase();
-              const hasNonOpenTableWebsite = websiteRaw && !websiteLower.includes("opentable.com");
+              const isReservationPlatformWebsite =
+                websiteLower.includes("opentable.com") ||
+                websiteLower.includes("resy.com") ||
+                websiteLower.includes("tock.com") ||
+                websiteLower.includes("sevenrooms.com");
+              const hasNonOpenTableWebsite = websiteRaw && !isReservationPlatformWebsite;
               const websiteHref = hasNonOpenTableWebsite
                 ? (websiteRaw.startsWith("http://") || websiteRaw.startsWith("https://") ? websiteRaw : `https://${websiteRaw.replace(/^\/+/, "")}`)
                 : "";
@@ -4454,18 +4461,60 @@ Return a JSON object with exactly these fields:
             })()}
 
             {/* SECTION 6 — RESERVATIONS */}
-            {detail.website && (
-              <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"14px 18px" }}>
-                <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:10, fontFamily:"-apple-system,sans-serif" }}>RESERVATIONS</div>
-                <button type="button" onClick={() => window.open(detail.website,"_blank")} style={{ width:"100%", background:"#1a0f07", border:"1px solid #3a2010", borderRadius:14, padding:"16px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                    <span style={{ background:"#e8333c", color:"#fff", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:12, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>OT</span>
-                    <span style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:15, color:"#e8e0d4" }}>Book on OpenTable</span>
-                  </div>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a3a20" strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
-              </div>
-            )}
+            {detail.website && (() => {
+              const w = (detail.website || "").trim();
+              const wl = w.toLowerCase();
+              const href = w.startsWith("http://") || w.startsWith("https://") ? w : `https://${w.replace(/^\/+/, "")}`;
+              let domain = w;
+              try {
+                domain = new URL(href).hostname.replace(/^www\./i, "");
+              } catch {
+                domain = w.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").split("/")[0];
+              }
+              let btnBg = "#1a0f07";
+              let btnBorder = "#3a2010";
+              let labelColor = "#e8e0d4";
+              let badge = null;
+              let label = "";
+              if (wl.includes("opentable.com")) {
+                badge = <span style={{ background:"#e8333c", color:"#fff", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:12, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>OT</span>;
+                label = "Book on OpenTable";
+              } else if (wl.includes("resy.com")) {
+                btnBg = "#E93C51";
+                btnBorder = "rgba(0,0,0,0.15)";
+                badge = <span style={{ background:"rgba(255,255,255,0.2)", color:"#fff", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:12, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>Resy</span>;
+                label = "Reserve on Resy";
+              } else if (wl.includes("tock.com")) {
+                btnBg = "#000000";
+                btnBorder = "#333";
+                badge = <span style={{ background:"#fff", color:"#000", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:11, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>Tock</span>;
+                label = "Reserve on Tock";
+                labelColor = "#e8e0d4";
+              } else if (wl.includes("sevenrooms.com")) {
+                btnBg = "#1a1a1a";
+                btnBorder = "#3a3a3a";
+                badge = <span style={{ background:"#c9a227", color:"#111", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:11, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>7R</span>;
+                label = "Reserve on SevenRooms";
+              } else {
+                btnBg = C.bg2;
+                btnBorder = C.border;
+                labelColor = C.terracotta;
+                label = `Visit website → ${domain}`;
+              }
+              const chevronStroke = wl.includes("resy.com") || wl.includes("tock.com") ? "rgba(255,255,255,0.6)" : "#5a3a20";
+              return (
+                <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"14px 18px" }}>
+                  <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:10, fontFamily:"-apple-system,sans-serif" }}>RESERVATIONS</div>
+                  <button type="button" onClick={() => window.open(href, "_blank", "noopener,noreferrer")} style={{ width:"100%", background:btnBg, border:`1px solid ${btnBorder}`, borderRadius:14, padding:"16px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                      {badge}
+                      <span style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:15, color:labelColor }}>{label}</span>
+                    </div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={chevronStroke} strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+              );
+            })()}
 
             {/* SECTION 8 — YOUR RATING */}
             <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"14px 18px" }}>
