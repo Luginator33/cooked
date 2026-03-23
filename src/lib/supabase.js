@@ -50,12 +50,23 @@ export async function loadUserPhotos(clerkUserId) {
 }
 
 export async function loadSharedPhotos() {
-  const { data, error } = await supabase
-    .from('restaurant_photos')
-    .select('restaurant_id, photo_url');
-  if (error || !data) return {};
+  const allRows = [];
+  let from = 0;
+  const batchSize = 1000;
+  while (true) {
+    const { data, error } = await supabase
+      .from('restaurant_photos')
+      .select('restaurant_id, photo_url')
+      .range(from, from + batchSize - 1);
+    if (error || !data || data.length === 0) break;
+    allRows.push(...data);
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
   const map = {};
-  data.forEach(row => { map[String(row.restaurant_id)] = row.photo_url; });
+  allRows.forEach((row) => {
+    map[String(row.restaurant_id)] = row.photo_url;
+  });
   return map;
 }
 
