@@ -4887,7 +4887,7 @@ export default function ChatBot({ onClose, allRestaurants = [], initialInput = "
 
     try {
       const detectCity = (text) => {
-        const cities = ["Los Angeles","New York","Chicago","San Francisco","Miami","Austin","Nashville","Dallas","San Diego","Portland","Mexico City","London","Paris","Barcelona","Tokyo","Copenhagen","Seoul","Dubai","Lisbon","Malta"];
+        const cities = [...new Set((allRestaurants || []).map(r => r.city).filter(Boolean))];
         const lower = text.toLowerCase();
         return cities.find(c => lower.includes(c.toLowerCase())) || null;
       };
@@ -4919,6 +4919,10 @@ export default function ChatBot({ onClose, allRestaurants = [], initialInput = "
           messages: newMessages.map(m => ({ role: m.role, content: m.content }))
         })
       })
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
 
       const data = await response.json()
       const reply = data.content?.[0]?.text || "Hmm, let me think on that... what city are you in?"

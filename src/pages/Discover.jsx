@@ -815,6 +815,10 @@ export default function Discover({ tasteProfile, initialTab }) {
   const headerRef = useRef(null);
   const [headerHeight, setHeaderHeight] = useState(52);
   useLayoutEffect(() => {
+    if (tab !== "discover") {
+      if (discoverSearchMode !== "restaurants") setDiscoverSearchMode("restaurants");
+      return;
+    }
     if (headerRef.current) {
       setHeaderHeight(headerRef.current.getBoundingClientRect().height);
     }
@@ -1795,7 +1799,24 @@ export default function Discover({ tasteProfile, initialTab }) {
     });
   };
   const toggleWatch = (id) => setWatchlist(s => s.includes(id) ? s.filter(x=>x!==id) : [...s,id]);
-  const share = (name) => { setToast(name); setTimeout(()=>setToast(null),2500); };
+  const share = async (name) => {
+    const text = `Check out ${name} on Cooked — the restaurant app for people who care.`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: name, text, url: window.location.href });
+      } else {
+        await navigator.clipboard.writeText(text);
+        setToast(name);
+        setTimeout(() => setToast(null), 2500);
+      }
+    } catch {
+      try {
+        await navigator.clipboard.writeText(text);
+        setToast(name);
+        setTimeout(() => setToast(null), 2500);
+      } catch {}
+    }
+  };
 
   const addToCookedFinds = (ids) => {
     try {
@@ -3523,7 +3544,7 @@ export default function Discover({ tasteProfile, initialTab }) {
             <div style={{ position:"absolute", bottom:16, left:16, right:16, background:"#fff9f2", borderRadius:20, overflow:"hidden", boxShadow:"0 8px 40px rgba(30,18,8,0.25)", border:"1px solid #ddd0bc", cursor:"pointer" }} onClick={() => { setDetailRestaurant(selectedRest); setSelectedRest(null); }}>
               <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedRest(null); }} style={{ position:"absolute", top:10, right:10, zIndex:10, width:32, height:32, borderRadius:"50%", border:"none", background:"rgba(30,18,8,0.5)", backdropFilter:"blur(4px)", color:"#fff", fontSize:16, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, isolation:"isolate" }}>✕</button>
               <div style={{ position:"relative", height:140, overflow:"hidden" }}>
-                <img src={selectedRest.img} alt={selectedRest.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                <img src={getAnyCachedPhotoForId(selectedRest.id) || selectedRest.img} alt={selectedRest.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
                 <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, transparent 40%, rgba(30,18,8,0.7) 100%)" }} />
                 <div style={{ position:"absolute", bottom:10, left:14, right:14, display:"flex", justifyContent:"space-between", alignItems:"flex-end" }}>
                   <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:22, fontWeight:700, color:"#fff" }}>{selectedRest.name}</div>
