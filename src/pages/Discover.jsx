@@ -1998,14 +1998,22 @@ export default function Discover({ tasteProfile, initialTab }) {
             }
 
             const addressComponents = details?.addressComponents || [];
-            const cityComponent =
-              addressComponents.find((c) => c?.types?.includes("locality")) ||
-              addressComponents.find((c) => c?.types?.includes("administrative_area_level_1"));
+            const cityComponent = addressComponents.find((c) => c?.types?.includes("locality"));
             const neighborhoodComponent =
               addressComponents.find((c) => c?.types?.includes("neighborhood")) ||
               addressComponents.find((c) => c?.types?.includes("sublocality")) ||
               addressComponents.find((c) => c?.types?.includes("sublocality_level_1"));
             const cityFromAddress = cityComponent?.longText || cityComponent?.shortText || "";
+            const stateComponent = addressComponents.find((c) =>
+              c?.types?.includes("administrative_area_level_1")
+            );
+            const stateFromAddress = stateComponent?.longText || "";
+
+            const municipalityComponent = addressComponents.find((c) =>
+              c?.types?.includes("locality") ||
+              c?.types?.includes("administrative_area_level_2")
+            );
+            const municipalityFromAddress = municipalityComponent?.longText || "";
             const cityNormalizations = {
               "ciudad de méxico": "Mexico City",
               "ciudad de mexico": "Mexico City",
@@ -2020,7 +2028,8 @@ export default function Discover({ tasteProfile, initialTab }) {
               "seúl": "Seoul",
               "dubái": "Dubai",
             };
-            const normalizedCity = cityNormalizations[cityFromAddress.toLowerCase()] || cityFromAddress;
+            const rawCity = municipalityFromAddress || cityFromAddress || stateFromAddress;
+            const normalizedCity = cityNormalizations[rawCity.toLowerCase()] || rawCity;
             const neighborhoodFromAddress = neighborhoodComponent?.longText || neighborhoodComponent?.shortText || "";
             const neighborhoodFallback =
               addressComponents.find((c) => c?.types?.includes("sublocality"))?.longText ||
