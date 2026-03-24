@@ -10,6 +10,7 @@ import {
   isFollowing,
   unfollowUser,
 } from "../lib/supabase";
+import { syncFollow, removeFollow } from "../lib/neo4j";
 
 const C = {
   bg: "#0f0c09",
@@ -171,6 +172,8 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
 
   const doToggleFollow = async () => {
     if (!user?.id || !clerkUserId || user.id === clerkUserId || pendingFollow) return;
+    const currentUserClerkId = user.id;
+    const profileClerkId = clerkUserId;
     setPendingFollow(true);
     if (isFollowingUser) {
       setIsFollowingUser(false);
@@ -179,6 +182,8 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
       if (error) {
         setIsFollowingUser(true);
         setFollowersCount((n) => n + 1);
+      } else {
+        removeFollow(currentUserClerkId, profileClerkId);
       }
     } else {
       setIsFollowingUser(true);
@@ -187,6 +192,8 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
       if (error) {
         setIsFollowingUser(false);
         setFollowersCount((n) => Math.max(0, n - 1));
+      } else {
+        syncFollow(currentUserClerkId, profileClerkId);
       }
     }
     setPendingFollow(false);
