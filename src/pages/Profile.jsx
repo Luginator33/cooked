@@ -96,6 +96,7 @@ export default function Profile({
   const [photoSyncCount, setPhotoSyncCount] = useState(0);
   const [photoSyncTotal, setPhotoSyncTotal] = useState(0);
   const [photoSyncMessage, setPhotoSyncMessage] = useState(null);
+  const [cookedScore, setCookedScore] = useState(0);
 
   useEffect(() => {
     if (!clerkName) return;
@@ -404,15 +405,8 @@ export default function Profile({
   }, [user?.id]);
 
   useEffect(() => {
-    if (!user?.id) {
-      setCookedScore(0);
-      return;
-    }
-    let cancelled = false;
-    getCookedScore(user.id).then((score) => {
-      if (!cancelled) setCookedScore(typeof score === "number" ? score : 0);
-    });
-    return () => { cancelled = true; };
+    if (!user?.id) { setCookedScore(0); return; }
+    getCookedScore(user.id).then((score) => setCookedScore(score));
   }, [user?.id]);
 
   const openSocialList = async (kind) => {

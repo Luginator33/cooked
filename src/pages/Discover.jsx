@@ -618,15 +618,25 @@ export default function Discover({ tasteProfile, initialTab }) {
   const skipNextTabPersistRef = useRef(false);
   const [tab, setTab] = useState(() => {
     try {
-      if (!localStorage.getItem("cooked_onboarding_done")) return "home";
-      return localStorage.getItem("cooked_last_tab") || initialTab || "home";
+      const last = localStorage.getItem("cooked_last_tab");
+      if (last && ["home", "heat", "discover", "map", "profile"].includes(last)) return last;
+    } catch {}
+    return "home";
+  });
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    try {
+      return !localStorage.getItem("cooked_onboarding_done");
     } catch {
-      return initialTab || "home";
+      return false;
     }
   });
-  const [showOnboarding, setShowOnboarding] = useState(
-    () => !localStorage.getItem("cooked_onboarding_done")
-  );
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("cooked_onboarding_done")) setShowOnboarding(false);
+    } catch {}
+  }, []);
+
   const [showHeatTip, setShowHeatTip] = useState(false);
   const [heatTipFading, setHeatTipFading] = useState(false);
   const [setupGateOpen, setSetupGateOpen] = useState(false);
