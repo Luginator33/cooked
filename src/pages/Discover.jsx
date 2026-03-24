@@ -3683,7 +3683,7 @@ Return a JSON object with exactly these fields:
               {/* Next card (behind) */}
               {nextCard && (
                 <div style={{ position:"absolute", inset:0, borderRadius:20, overflow:"hidden", transform:"scale(0.95) translateY(8px)", transition:"transform 0.2s", boxShadow:"0 4px 20px rgba(30,18,8,0.12)" }}>
-                  <img src={nextCard.img} alt={nextCard.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                  <img src={getAnyCachedPhotoForId(nextCard.id) || nextCard.img} alt={nextCard.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
                   <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, transparent 35%, rgba(30,18,8,0.85) 100%)" }} />
                 </div>
               )}
@@ -3710,7 +3710,7 @@ Return a JSON object with exactly these fields:
                     if (Math.abs(swipeDelta.x) < 5 && Math.abs(swipeDelta.y) < 5) setDetailRestaurant(card);
                   }}
                 >
-                  <img src={card.img} alt={card.name} style={{ width:"100%", height:"100%", objectFit:"cover", pointerEvents:"none" }} />
+                  <img src={getAnyCachedPhotoForId(card.id) || card.img} alt={card.name} style={{ width:"100%", height:"100%", objectFit:"cover", pointerEvents:"none" }} />
                   <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, transparent 35%, rgba(30,18,8,0.88) 100%)", pointerEvents:"none" }} />
 
                   {/* LOVE stamp */}
