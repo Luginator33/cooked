@@ -4530,10 +4530,24 @@ Return a JSON object with exactly these fields:
                 badge = <span style={{ background:"#c9a227", color:"#111", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:11, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>7R</span>;
                 label = "Reserve on SevenRooms";
               } else {
-                btnBg = C.bg2;
-                btnBorder = C.border;
-                labelColor = C.terracotta;
-                label = `Visit website → ${domain}`;
+                const otSearchUrl = `https://www.opentable.com/s/?term=${encodeURIComponent(detail.name)}&covers=2`;
+                badge = <span style={{ background:"#e8333c", color:"#fff", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:12, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>OT</span>;
+                label = "Find on OpenTable";
+                btnBg = "#1a0f07";
+                btnBorder = "#3a2010";
+                labelColor = "#e8e0d4";
+                return (
+                  <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"14px 18px" }}>
+                    <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:10, fontFamily:"-apple-system,sans-serif" }}>RESERVATIONS</div>
+                    <button type="button" onClick={() => window.open(otSearchUrl, "_blank", "noopener,noreferrer")} style={{ width:"100%", background:btnBg, border:`1px solid ${btnBorder}`, borderRadius:14, padding:"16px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                        {badge}
+                        <span style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:15, color:labelColor }}>{label}</span>
+                      </div>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a3a20" strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                  </div>
+                );
               }
               const chevronStroke = wl.includes("resy.com") || wl.includes("tock.com") ? "rgba(255,255,255,0.6)" : "#5a3a20";
               return (
