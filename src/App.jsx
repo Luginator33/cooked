@@ -60,11 +60,15 @@ export class AppErrorBoundary extends React.Component {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState("onboarding"); // onboarding | discover
+  const [screen, setScreen] = useState(() =>
+    localStorage.getItem("cooked_onboarding_done") === "1" ? "discover" : "onboarding"
+  );
   const [tasteProfile, setTasteProfile] = useState(null);
+  const [initialTab, setInitialTab] = useState(null);
 
   const handleOnboardingComplete = (profile) => {
     setTasteProfile(profile);
+    setInitialTab("heat");
     setScreen("discover");
   };
 
@@ -74,7 +78,7 @@ export default function App() {
         <Onboarding onComplete={handleOnboardingComplete} />
       )}
       {screen === "discover" && (
-        <Discover tasteProfile={tasteProfile} />
+        <Discover tasteProfile={tasteProfile} initialTab={initialTab} />
       )}
     </>
   );
