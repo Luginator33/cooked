@@ -134,3 +134,122 @@ export async function removeCityFollow(clerkUserId, cityName) {
     { userId: clerkUserId, city: cityName }
   );
 }
+
+// Get taste fingerprint for a user
+export async function getTasteFingerprint(clerkUserId) {
+  if (!clerkUserId) return null;
+
+  // Get all loved restaurants with their properties
+  const records = await runQuery(
+    `MATCH (u:User {id: $userId})-[:LOVED]->(r:Restaurant)
+     RETURN r.cuisine AS cuisine, r.city AS city, r.id AS id`,
+    { userId: clerkUserId }
+  );
+
+  if (!records.length) return null;
+
+  const cuisines = {};
+  const cities = {};
+  const ids = [];
+
+  records.forEach(rec => {
+    const cuisine = rec.get('cuisine') || 'Unknown';
+    const city = rec.get('city') || 'Unknown';
+    const id = rec.get('id');
+    cuisines[cuisine] = (cuisines[cuisine] || 0) + 1;
+    cities[city] = (cities[city] || 0) + 1;
+    ids.push(id);
+  });
+
+  const sortedCuisines = Object.entries(cuisines)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({ name, count }));
+
+  const sortedCities = Object.entries(cities)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({ name, count }));
+
+  return {
+    totalLoves: records.length,
+    topCuisines: sortedCuisines.slice(0, 8),
+    topCities: sortedCities.slice(0, 6),
+    restaurantIds: ids,
+  };
+}
+
+// Get Cooked Score for a user
+export async function getCookedScore(clerkUserId) {
+  if (!clerkUserId) return 0;
+
+  // Points for restaurants you loved that others in network later loved
+  const discoveryRecords = await runQuery(
+    `MATCH (u:User {id: $userId})-[myLove:LOVED]->(r:Restaurant)<-[theirLove:LOVED]-(other:User)
+     WHERE other.id <> $userId
+     AND myLove.timestamp < theirLove.timestamp
+     RETURN count(*) AS discoveryPoints`,
+    { userId: clerkUserId }
+  );
+
+  // City diversity bonus
+  const cityRecords = await runQuery(
+    `MATCH (u:User {id: $userId})-[:LOVED]->(r:Restaurant)
+     RETURN count(DISTINCT r.city) AS cityCount`,
+    { userId: clerkUserId }
+  );
+
+  // Total loves
+  const loveRecords = await runQuery(
+    `MATCH (u:User {id: $userId})-[:LOVED]->(r:Restaurant)
+     RETURN count(*) AS loveCount`,
+    { userId: clerkUserId }
+  );
+
+  const discoveryPoints = discoveryRecords[0]?.get('discoveryPoints')?.toNumber() || 0;
+  const cityCount = cityRecords[0]?.get('cityCount')?.toNumber() || 0;
+  const loveCount = loveRecords[0]?.get('loveCount')?.toNumber() || 0;
+
+  return (discoveryPoints * 3) + (loveCount * 1) + (cityCount * 2);
+}
+
+// Get people with similar taste
+export async function getPeopleLikeYou(clerkUserId, limit = 5) {
+  if (!clerkUserId) return [];
+  const records = await runQuery(
+    `MATCH (me:User {id: $myId})-[:LOVED]->(r:Restaurant)<-[:LOVED]-(other:User)
+     WHERE other.id <> $myId
+     RETURN other.id AS id, other.name AS name, other.username AS username,
+            count(r) AS sharedCount
+     ORDER BY sharedCount DESC
+     LIMIT $limit`,
+    { myId: clerkUserId, limit: neo4j.int(limit) }
+  );
+  return records.map(rec => ({
+    id: rec.get('id'),
+    name: rec.get('name'),
+    username: rec.get('username'),
+    sharedCount: rec.get('sharedCount').toNumber(),
+  }));
+}
+
+// Get who to follow (friends of friends with taste overlap)
+export async function getWhoToFollow(clerkUserId, limit = 5) {
+  if (!clerkUserId) return [];
+  const records = await runQuery(
+    `MATCH (me:User {id: $myId})-[:FOLLOWS]->(friend)-[:FOLLOWS]->(candidate:User)
+     WHERE candidate.id <> $myId
+     AND NOT (me)-[:FOLLOWS]->(candidate)
+     MATCH (me)-[:LOVED]->(r:Restaurant)<-[:LOVED]-(candidate)
+     RETURN candidate.id AS id, candidate.name AS name, 
+            candidate.username AS username,
+            count(r) AS sharedCount
+     ORDER BY sharedCount DESC
+     LIMIT $limit`,
+    { myId: clerkUserId, limit: neo4j.int(limit) }
+  );
+  return records.map(rec => ({
+    id: rec.get('id'),
+    name: rec.get('name'),
+    username: rec.get('username'),
+    sharedCount: rec.get('sharedCount').toNumber(),
+  }));
+}

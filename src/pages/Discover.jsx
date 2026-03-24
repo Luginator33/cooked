@@ -9,6 +9,7 @@ import { RESTAURANTS, ALL_TAGS } from "../data/restaurants";
 const ALL_CITIES = [...new Set(RESTAURANTS.map((r) => r.city).filter(Boolean))].sort();
 import ChatBot from "../components/ChatBot";
 import Profile from "./Profile";
+import TasteProfile from "./TasteProfile";
 import UserProfile from "./UserProfile";
 import Onboarding from "./Onboarding";
 import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser } from "../lib/supabase";
@@ -635,6 +636,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [city, setCity] = useState("Los Angeles");
   const [followedCities, setFollowedCities] = useState([]);
   const [trendingInCities, setTrendingInCities] = useState([]);
+  const [showTasteProfile, setShowTasteProfile] = useState(false);
   const [watchlist, setWatchlist] = useState(() => {
     try { return JSON.parse(safeLocalStorageGetItem("cooked_watchlist") || "[]"); } catch { return []; }
   });
@@ -3811,7 +3813,7 @@ Return a JSON object with exactly these fields:
       {tab === "profile" && (
         <div style={{ paddingTop: headerHeight }}>
           <Profile
-            tasteProfile={tasteProfile}
+            onOpenTasteProfile={() => setShowTasteProfile(true)}
             allRestaurants={allRestaurants}
             heatResults={heatResults}
             watchlist={watchlist}
@@ -4754,6 +4756,13 @@ Return a JSON object with exactly these fields:
 
       {/* Toast */}
       {toast && <div style={{ position:"fixed", top:76, left:"50%", transform:"translateX(-50%)", background:C.terracotta, color:"#fff", borderRadius:20, padding:"10px 20px", fontSize:13, fontWeight:600, zIndex:300, fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap", boxShadow:"0 4px 20px rgba(196,96,58,0.4)" }}>Link copied — {toast} 📋</div>}
+      {showTasteProfile && (
+        <TasteProfile
+          onBack={() => setShowTasteProfile(false)}
+          onViewUser={(id) => setViewingUserId(id)}
+          allRestaurants={allRestaurants}
+        />
+      )}
       {viewingUserId && (
         <UserProfile
           clerkUserId={viewingUserId}

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { getFollowers, getFollowing, getUserProfile, saveSharedPhoto, saveUserData, saveUserPhotos, supabase } from "../lib/supabase";
+import { getCookedScore } from "../lib/neo4j";
 
 function safeSetItem(key, value) {
   try {
@@ -57,6 +58,7 @@ export default function Profile({
   clerkName,
   clerkImageUrl,
   onViewUser,
+  onOpenTasteProfile,
   allCitiesFromDb = [],
   /** Called after a photo is saved to `restaurant_photos` (e.g. admin sync) so Discover can update queue state. */
   onSharedPhotoSaved,
@@ -401,6 +403,18 @@ export default function Profile({
     return () => { cancelled = true; };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) {
+      setCookedScore(0);
+      return;
+    }
+    let cancelled = false;
+    getCookedScore(user.id).then((score) => {
+      if (!cancelled) setCookedScore(typeof score === "number" ? score : 0);
+    });
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
   const openSocialList = async (kind) => {
     if (!user?.id) return;
     setSocialModal({ title: kind === "followers" ? "Followers" : "Following", users: [], loading: true });
@@ -572,6 +586,46 @@ export default function Profile({
           </svg>
         </button>
       </div>
+
+      {user?.id && onOpenTasteProfile ? (
+        <div
+          style={{
+            margin: "12px 18px 0",
+            padding: "14px 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            background: C.bg2,
+            border: `1px solid ${C.border}`,
+            borderRadius: 14,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 9, color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "-apple-system,sans-serif", marginBottom: 4 }}>
+              Cooked score
+            </div>
+            <div style={{ fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 28, color: C.terracotta, lineHeight: 1 }}>{cookedScore}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenTasteProfile()}
+            style={{
+              flexShrink: 0,
+              background: "transparent",
+              border: `1px solid ${C.terracotta}`,
+              color: C.terracotta,
+              borderRadius: 20,
+              padding: "8px 14px",
+              fontSize: 13,
+              fontFamily: "-apple-system,sans-serif",
+              cursor: "pointer",
+            }}
+          >
+            View taste profile →
+          </button>
+        </div>
+      ) : null}
 
       {/* Username */}
       <div style={{ padding: "10px 18px 0", fontSize: 12, color: C.muted, fontFamily: "-apple-system,sans-serif" }}>{username}</div>
