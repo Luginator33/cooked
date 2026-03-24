@@ -1199,9 +1199,8 @@ export default function Discover({ tasteProfile, initialTab }) {
   useEffect(() => {
     if (!initialTab) return;
     if (!["home", "discover", "heat", "map", "profile"].includes(initialTab)) return;
-    if (initialTab === prevInitialTabRef.current) return;
-    prevInitialTabRef.current = initialTab;
     setTab(initialTab);
+    prevInitialTabRef.current = initialTab;
   }, [initialTab]);
 
   useEffect(() => {
@@ -3654,7 +3653,7 @@ Return a JSON object with exactly these fields:
                   <span style={{ fontFamily:"-apple-system,sans-serif", fontSize:12, color:C.muted, marginLeft:2 }}>{heatActive.length}</span>
                 </div>
                 {(heatResults.loved.length > 0 || heatResults.noped.length > 0 || heatResults.skipped.length > 0) && (
-                  <button onClick={() => setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} }))} style={{ fontFamily:"-apple-system,sans-serif", fontSize:10, color:C.muted, background:"none", border:`1px solid ${C.border}`, borderRadius:12, padding:"4px 10px", cursor:"pointer" }}>Reset</button>
+                  <button onClick={() => { setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} })); setSwipeDir(null); setSwipeDelta({ x: 0, y: 0 }); setIsDragging(false); }} style={{ fontFamily:"-apple-system,sans-serif", fontSize:10, color:C.muted, background:"none", border:`1px solid ${C.border}`, borderRadius:12, padding:"4px 10px", cursor:"pointer" }}>Reset</button>
                 )}
               </div>
             </div>
@@ -3676,7 +3675,7 @@ Return a JSON object with exactly these fields:
                   <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:14, color:C.muted }}>
                     {heatResults.loved.length} loved · {heatResults.noped.length} passed
                   </div>
-                  <button onClick={() => setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} }))} style={{ marginTop:8, padding:"12px 28px", borderRadius:12, background:C.terracotta, color:"#fff", border:"none", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Start over</button>
+                  <button onClick={() => { setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} })); setSwipeDir(null); setSwipeDelta({ x: 0, y: 0 }); setIsDragging(false); }} style={{ marginTop:8, padding:"12px 28px", borderRadius:12, background:C.terracotta, color:"#fff", border:"none", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Start over</button>
                 </div>
               )}
 
