@@ -88,6 +88,11 @@ export default function TasteProfile({ onBack, onViewUser, allRestaurants = [] }
     return list;
   }, [fingerprint]);
 
+  const topCitiesFiltered = useMemo(
+    () => fingerprint?.topCities?.filter((c) => c.name && c.name !== "Unknown") ?? [],
+    [fingerprint]
+  );
+
   const maxCuisineCount = cuisinesFiltered[0]?.count || 1;
 
   const priceTotal = priceDistribution.reduce((a, p) => a + p.count, 0);
@@ -456,7 +461,7 @@ export default function TasteProfile({ onBack, onViewUser, allRestaurants = [] }
               )}
 
               {/* Cities — horizontal scroll */}
-              {fingerprint.topCities.length > 0 && (
+              {topCitiesFiltered.length > 0 && (
                 <section style={{ marginBottom: 28 }}>
                   <div
                     style={{
@@ -481,7 +486,7 @@ export default function TasteProfile({ onBack, onViewUser, allRestaurants = [] }
                       WebkitOverflowScrolling: "touch",
                     }}
                   >
-                    {fingerprint.topCities.map(({ name, count }) => (
+                    {topCitiesFiltered.map(({ name, count }) => (
                       <div
                         key={name}
                         style={{

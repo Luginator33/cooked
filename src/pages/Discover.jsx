@@ -631,12 +631,6 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
   });
 
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("cooked_onboarding_done")) setShowOnboarding(false);
-    } catch {}
-  }, []);
-
   const [showHeatTip, setShowHeatTip] = useState(false);
   const [heatTipFading, setHeatTipFading] = useState(false);
   const [setupGateOpen, setSetupGateOpen] = useState(false);
@@ -2744,8 +2738,11 @@ Return a JSON object with exactly these fields:
     return (
       <Onboarding
         onComplete={() => {
-          skipNextTabPersistRef.current = true;
+          try {
+            localStorage.setItem("cooked_onboarding_done", "1");
+          } catch {}
           setShowOnboarding(false);
+          skipNextTabPersistRef.current = true;
           setTab("heat");
           setShowHeatTip(true);
         }}

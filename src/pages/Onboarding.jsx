@@ -337,7 +337,9 @@ export default function Onboarding({ onComplete }) {
   }, []);
 
   const finish = () => {
-    localStorage.setItem("cooked_onboarding_done", "true");
+    try {
+      localStorage.setItem("cooked_onboarding_done", "1");
+    } catch {}
     onComplete?.();
   };
 
