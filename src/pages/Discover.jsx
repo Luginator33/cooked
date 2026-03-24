@@ -3651,10 +3651,10 @@ Return a JSON object with exactly these fields:
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <FlameIcon size={18} filled={true} />
                   <span style={{ fontFamily:"Georgia,serif", fontSize:18, fontWeight:"bold", fontStyle:"italic", color:C.text }}>Heat</span>
-                  <span style={{ fontFamily:"-apple-system,sans-serif", fontSize:12, color:C.muted, marginLeft:2 }}>{heatDeck.length}</span>
+                  <span style={{ fontFamily:"-apple-system,sans-serif", fontSize:12, color:C.muted, marginLeft:2 }}>{heatActive.length}</span>
                 </div>
                 {(heatResults.loved.length > 0 || heatResults.noped.length > 0 || heatResults.skipped.length > 0) && (
-                  <button onClick={() => setHeatResults({ loved: [], noped: [], skipped: [], votes: {} })} style={{ fontFamily:"-apple-system,sans-serif", fontSize:10, color:C.muted, background:"none", border:`1px solid ${C.border}`, borderRadius:12, padding:"4px 10px", cursor:"pointer" }}>Reset</button>
+                  <button onClick={() => setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} }))} style={{ fontFamily:"-apple-system,sans-serif", fontSize:10, color:C.muted, background:"none", border:`1px solid ${C.border}`, borderRadius:12, padding:"4px 10px", cursor:"pointer" }}>Reset</button>
                 )}
               </div>
             </div>
@@ -3676,7 +3676,7 @@ Return a JSON object with exactly these fields:
                   <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:14, color:C.muted }}>
                     {heatResults.loved.length} loved · {heatResults.noped.length} passed
                   </div>
-                  <button onClick={() => setHeatResults({ loved: [], noped: [], skipped: [], votes: {} })} style={{ marginTop:8, padding:"12px 28px", borderRadius:12, background:C.terracotta, color:"#fff", border:"none", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Start over</button>
+                  <button onClick={() => setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} }))} style={{ marginTop:8, padding:"12px 28px", borderRadius:12, background:C.terracotta, color:"#fff", border:"none", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Start over</button>
                 </div>
               )}
 
@@ -3754,7 +3754,7 @@ Return a JSON object with exactly these fields:
                     <button
                       type="button"
                       onPointerDown={e => { e.stopPropagation(); e.preventDefault(); }}
-                      onPointerUp={e => { e.stopPropagation(); toggleWatch(card.id); doSwipe('up'); }}
+                      onPointerUp={e => { e.stopPropagation(); if (!watchlist.includes(card.id)) toggleWatch(card.id); doSwipe('up'); }}
                       style={{ width:42, height:42, borderRadius:"50%", border:`1px solid ${watchlist.includes(card.id) ? "#4a90d9" : "#1a2a3d"}`, background: watchlist.includes(card.id) ? "#0a1a2e" : "#080f16", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
                       <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                         <circle cx="9" cy="9" r="7" stroke={watchlist.includes(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5"/>
