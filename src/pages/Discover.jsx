@@ -1820,7 +1820,9 @@ export default function Discover({ tasteProfile, initialTab }) {
   const toggleWatch = (id) => {
     setWatchlist(s => {
       const next = s.includes(id) ? s.filter(x => x !== id) : [...s, id];
-      if (user?.id) saveUserData(user.id, { watchlist: next });
+      if (user?.id && supabaseLoadedRef.current) {
+        saveUserData(user.id, { watchlist: next });
+      }
       return next;
     });
   };
