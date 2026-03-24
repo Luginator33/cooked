@@ -12,7 +12,7 @@ import Profile from "./Profile";
 import UserProfile from "./UserProfile";
 import Onboarding from "./Onboarding";
 import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser } from "../lib/supabase";
-import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant } from "../lib/neo4j";
+import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities } from "../lib/neo4j";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -634,6 +634,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [setupSaving, setSetupSaving] = useState(false);
   const [city, setCity] = useState("Los Angeles");
   const [followedCities, setFollowedCities] = useState([]);
+  const [trendingInCities, setTrendingInCities] = useState([]);
   const [watchlist, setWatchlist] = useState(() => {
     try { return JSON.parse(safeLocalStorageGetItem("cooked_watchlist") || "[]"); } catch { return []; }
   });
@@ -866,6 +867,18 @@ export default function Discover({ tasteProfile, initialTab }) {
     })();
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || followedCities.length === 0) return;
+    getTrendingInFollowedCities(user.id, 10).then((results) => {
+      if (results.length > 0) {
+        const matched = results
+          .map((r) => allRestaurants.find((ar) => String(ar.id) === String(r.id)))
+          .filter(Boolean);
+        setTrendingInCities(matched);
+      }
+    });
+  }, [user?.id, followedCities.length]);
 
   const toggleCityFollow = async (cityName, e) => {
     e.preventDefault();
@@ -3061,6 +3074,39 @@ Return a JSON object with exactly these fields:
               </HomePhotoCard>
             ) : null}
           </div>
+
+          {trendingInCities.length > 0 ? (
+            <div style={{ padding: "0 16px", marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontFamily: "Cormorant Garamond", fontStyle: "italic", fontSize: 22, color: C.text }}>
+                  Trending in your cities
+                </span>
+              </div>
+              {trendingInCities.map((r, i) => (
+                <HomePhotoCard
+                  key={`${r.id}-${photoCacheVersion}`}
+                  r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }}
+                  onClick={() => setDetailRestaurant(r)}
+                  style={{
+                    width: "100%",
+                    height: 200,
+                    borderRadius: 14,
+                    marginBottom: i < trendingInCities.length - 1 ? 12 : 0,
+                  }}
+                >
+                  <div style={{ position: "absolute", top: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 15, color: "#c4603a" }}>
+                    {r.rating}
+                  </div>
+                  <div style={{ position: "absolute", bottom: 28, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
+                    {r.name}
+                  </div>
+                  <div style={{ position: "absolute", bottom: 10, left: 10, fontSize: 11, color: "rgba(240,235,226,0.6)" }}>
+                    {r.cuisine || ""}
+                  </div>
+                </HomePhotoCard>
+              ))}
+            </div>
+          ) : null}
 
           <div style={{ marginTop: 20 }}>
             <div style={{ padding: "0 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
