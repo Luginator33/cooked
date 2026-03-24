@@ -12,13 +12,11 @@ import Profile from "./Profile";
 import UserProfile from "./UserProfile";
 import Onboarding from "./Onboarding";
 import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser } from "../lib/supabase";
+import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant } from "../lib/neo4j";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const DATA_VERSION = "v5-2920";
-
-/** Session cache: `${viewerClerkId}:${restaurantId}` → friends who loved this spot (avoids refetch on reopen). */
-const friendsBeenHereCache = new Map();
 
 function lovedIdsFromUserRow(row) {
   if (Array.isArray(row?.loved)) return row.loved;
@@ -660,7 +658,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [mapsReady, setMapsReady] = useState(false);
   const [selectedRest, setSelectedRest] = useState(null);
   const [viewingUserId, setViewingUserId] = useState(null);
-  /** Friends (following) who have this restaurant in loved — loaded when detail opens; see friendsBeenHereCache. */
+  /** Friends (following) who loved this spot — from Neo4j when detail opens. */
   const [friendsBeenHere, setFriendsBeenHere] = useState({ loading: false, list: [] });
   const [friendsBeenHereSheetOpen, setFriendsBeenHereSheetOpen] = useState(false);
   // Restaurants: static RESTAURANTS + community (Supabase) merged in useEffect below — never persisted in localStorage (Safari quota).
@@ -876,10 +874,16 @@ export default function Discover({ tasteProfile, initialTab }) {
     const isFollowingCity = followedCities.includes(cityName);
     if (isFollowingCity) {
       const { error } = await unfollowCity(user.id, cityName);
-      if (!error) setFollowedCities((prev) => prev.filter((c) => c !== cityName));
+      if (!error) {
+        setFollowedCities((prev) => prev.filter((c) => c !== cityName));
+        removeCityFollow(user?.id, cityName);
+      }
     } else {
       const { error } = await followCity(user.id, cityName);
-      if (!error) setFollowedCities((prev) => (prev.includes(cityName) ? prev : [...prev, cityName]));
+      if (!error) {
+        setFollowedCities((prev) => (prev.includes(cityName) ? prev : [...prev, cityName]));
+        syncCityFollow(user?.id, cityName);
+      }
     }
   };
 
@@ -1194,64 +1198,31 @@ export default function Discover({ tasteProfile, initialTab }) {
   useEffect(() => { safeSetItem("cooked_heat", JSON.stringify(heatResults)); }, [heatResults]);
 
   useEffect(() => {
-    if (!detailRestaurant?.id) {
+    if (!detailRestaurant || !user?.id) {
       setFriendsBeenHere({ loading: false, list: [] });
-      return;
-    }
-    if (!user?.id) {
-      setFriendsBeenHere({ loading: false, list: [] });
-      return;
-    }
-    const restId = detailRestaurant.id;
-    const cacheKey = `${user.id}:${restId}`;
-    if (friendsBeenHereCache.has(cacheKey)) {
-      setFriendsBeenHere({ loading: false, list: friendsBeenHereCache.get(cacheKey) });
       return;
     }
     let cancelled = false;
     setFriendsBeenHere({ loading: true, list: [] });
-    (async () => {
-      try {
-        const { data: followingRows } = await getFollowing(user.id);
-        const followingIds = (followingRows || []).map((row) => row.following_id).filter(Boolean);
-        if (!followingIds.length) {
-          if (!cancelled) {
-            friendsBeenHereCache.set(cacheKey, []);
-            setFriendsBeenHere({ loading: false, list: [] });
-          }
-          return;
-        }
-        const { data, error } = await supabase
-          .from("user_data")
-          .select("clerk_user_id,loved,heat,profile_photo,profile_name,ratings")
-          .in("clerk_user_id", followingIds);
+    getFriendsWhoLovedRestaurant(user.id, detailRestaurant.id)
+      .then((friends) => {
         if (cancelled) return;
-        if (error) {
-          setFriendsBeenHere({ loading: false, list: [] });
-          return;
-        }
-        const list = [];
-        for (const row of data || []) {
-          const loved = lovedIdsFromUserRow(row);
-          if (!restaurantIdInLovedList(restId, loved)) continue;
-          const uid = row.clerk_user_id;
-          if (!uid) continue;
-          list.push({
-            clerkUserId: uid,
-            profileName: String(row.profile_name || "User").trim() || "User",
-            profilePhoto: row.profile_photo || null,
-            flameRating: flameRatingFromUserData(row.ratings, restId),
-          });
-        }
+        const list = (friends || []).map((f) => ({
+          clerkUserId: f.id,
+          profileName: f.name || f.username || "Friend",
+          profilePhoto: null,
+          flameRating: null,
+        }));
         list.sort((a, b) => a.profileName.localeCompare(b.profileName, undefined, { sensitivity: "base" }));
-        friendsBeenHereCache.set(cacheKey, list);
         setFriendsBeenHere({ loading: false, list });
-      } catch {
+      })
+      .catch(() => {
         if (!cancelled) setFriendsBeenHere({ loading: false, list: [] });
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [user?.id, detailRestaurant?.id]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detailRestaurant?.id, user?.id]);
 
   useEffect(() => {
     if (!detailRestaurant) setFriendsBeenHereSheetOpen(false);
@@ -1304,6 +1275,7 @@ export default function Discover({ tasteProfile, initialTab }) {
         }
       } else {
         await followUser(user.id, 'user_3B9bXI2JCTGmvdVl6lRtjQ276W3');
+        syncFollow(user.id, 'user_3B9bXI2JCTGmvdVl6lRtjQ276W3');
         await supabase.from("notification_prefs").insert([
           { clerk_user_id: user.id, type: "followed_you", enabled: true },
           { clerk_user_id: user.id, type: "friend_loved_your_watchlist", enabled: true },
@@ -1816,6 +1788,11 @@ export default function Discover({ tasteProfile, initialTab }) {
         }
         safeSetItem("cooked_loved", JSON.stringify([...set]));
       } catch {}
+      const nowLoved = !isLoved;
+      if (user?.id) {
+        if (nowLoved) syncLove(user.id, id);
+        else removeLove(user.id, id);
+      }
       return {
         ...prev,
         loved: nextLoved,
@@ -3470,9 +3447,11 @@ Return a JSON object with exactly these fields:
                             if (!user?.id || !uid || uid === user.id) return;
                             if (following) {
                               await unfollowUser(user.id, uid);
+                              removeFollow(user?.id, uid);
                               setPeopleFollowingMap((prev) => ({ ...prev, [uid]: false }));
                             } else {
                               await followUser(user.id, uid);
+                              syncFollow(user?.id, uid);
                               setPeopleFollowingMap((prev) => ({ ...prev, [uid]: true }));
                             }
                           }}
