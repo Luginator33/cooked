@@ -1266,7 +1266,7 @@ export default function Discover({ tasteProfile, initialTab }) {
           skipped: Array.isArray(remote.skipped) ? remote.skipped : [],
           votes: remote.votes && typeof remote.votes === "object" ? remote.votes : {},
         };
-        const remoteWatchlist = Array.isArray(remote.watchlist) ? remote.watchlist : [];
+        const remoteWatchlist = Array.isArray(remote.watchlist) ? [...new Set(remote.watchlist.map(String))] : [];
         const remoteRatings = remote.ratings && typeof remote.ratings === "object" ? remote.ratings : {};
         const remotePhotoResolved = Array.isArray(remote.photo_resolved) ? remote.photo_resolved : [];
 
@@ -1817,15 +1817,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       };
     });
   };
-  const toggleWatch = (id) => {
-    setWatchlist(s => {
-      const next = s.includes(id) ? s.filter(x => x !== id) : [...s, id];
-      if (user?.id && supabaseLoadedRef.current) {
-        saveUserData(user.id, { watchlist: next });
-      }
-      return next;
-    });
-  };
+  const toggleWatch = (id) => setWatchlist(s => s.includes(id) ? s.filter(x=>x!==id) : [...s,id]);
   const share = async (name) => {
     const text = `Check out ${name} on Cooked — the restaurant app for people who care.`;
     try {
