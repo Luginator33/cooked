@@ -1809,8 +1809,48 @@ export default function Discover({ tasteProfile, initialTab }) {
       } catch {}
       const nowLoved = !isLoved;
       if (user?.id) {
-        if (nowLoved) syncLove(user.id, id);
-        else removeLove(user.id, id);
+        if (nowLoved) {
+          syncLove(user.id, id);
+          // Notify followers who have this on their watchlist
+          supabase.from("user_data").select("clerk_user_id, watchlist").then(({ data }) => {
+            if (!data) return;
+            const restaurant = allRestaurants.find(r => r.id === id || r.id === Number(id));
+            data.forEach(row => {
+              if (row.clerk_user_id === user.id) return;
+              const wl = Array.isArray(row.watchlist) ? row.watchlist : [];
+              if (wl.map(String).includes(String(id))) {
+                supabase.from("notifications").insert({
+                  user_id: row.clerk_user_id,
+                  type: "friend_loved_your_watchlist",
+                  from_user_id: user.id,
+                  restaurant_id: String(id),
+                  restaurant_name: restaurant?.name || "",
+                  read: false,
+                });
+              }
+            });
+          });
+          // Notify followers who follow cities where this restaurant is located
+          const restaurant = allRestaurants.find(r => r.id === id || r.id === Number(id));
+          if (restaurant?.city) {
+            supabase.from("city_follows").select("clerk_user_id").eq("city", restaurant.city).then(({ data: cityFollowers }) => {
+              if (!cityFollowers) return;
+              cityFollowers.forEach(row => {
+                if (row.clerk_user_id === user.id) return;
+                supabase.from("notifications").insert({
+                  user_id: row.clerk_user_id,
+                  type: "friend_visited_city",
+                  from_user_id: user.id,
+                  restaurant_id: String(id),
+                  restaurant_name: restaurant.name,
+                  read: false,
+                });
+              });
+            });
+          }
+        } else {
+          removeLove(user.id, id);
+        }
       }
       return {
         ...prev,
@@ -1853,7 +1893,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   };
 
   /** After IG import saves to community_restaurants, persist id to Finds (local + Supabase user_data.finds). */
-  const persistFindAfterCommunityImport = (result, restaurantObject) => {
+  const persistFindAfterCommunityImport = async (result, restaurantObject) => {
     if (result?.data?.[0]?.id || restaurantObject?.id) {
       const savedId = String(result?.data?.[0]?.id || restaurantObject.id);
       try {
@@ -1867,6 +1907,19 @@ export default function Discover({ tasteProfile, initialTab }) {
         try {
           const currentFinds = JSON.parse(safeLocalStorageGetItem("cooked_finds") || "[]");
           saveUserData(user.id, { finds: currentFinds });
+          // Notify followers that friend added a new Find
+          const { data: followers } = await supabase.from("follows").select("follower_id").eq("following_id", user.id);
+          if (followers) {
+            followers.forEach(row => {
+              supabase.from("notifications").insert({
+                user_id: row.follower_id,
+                type: "friend_new_find",
+                from_user_id: user.id,
+                restaurant_id: savedId,
+                read: false,
+              });
+            });
+          }
         } catch {}
       }
     }
@@ -3511,6 +3564,12 @@ Return a JSON object with exactly these fields:
                               await followUser(user.id, uid);
                               syncFollow(user?.id, uid);
                               setPeopleFollowingMap((prev) => ({ ...prev, [uid]: true }));
+                              supabase.from("notifications").insert({
+                                user_id: uid,
+                                type: "followed_you",
+                                from_user_id: user.id,
+                                read: false,
+                              });
                             }
                           }}
                           style={{
