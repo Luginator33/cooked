@@ -9,6 +9,7 @@ import {
   getFollowing,
   getUserProfile,
   isFollowing,
+  supabase,
   unfollowUser,
 } from "../lib/supabase";
 import { syncFollow, removeFollow } from "../lib/neo4j";
@@ -274,6 +275,12 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
         setFollowersCount((n) => Math.max(0, n - 1));
       } else {
         syncFollow(currentUserClerkId, profileClerkId);
+        supabase.from("notifications").insert({
+          user_id: profileClerkId,
+          type: "followed_you",
+          from_user_id: currentUserClerkId,
+          read: false,
+        });
       }
     }
     setPendingFollow(false);
