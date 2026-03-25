@@ -1837,7 +1837,7 @@ export default function Discover({ tasteProfile, initialTab }) {
                   restaurant_id: String(id),
                   restaurant_name: restaurant?.name || "",
                   read: false,
-                });
+                }).then(r => { if (r.error) console.error("notif insert error:", r.error); else console.log("notif inserted for", row.clerk_user_id); });
               }
             });
           });
