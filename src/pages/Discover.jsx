@@ -1819,8 +1819,10 @@ export default function Discover({ tasteProfile, initialTab }) {
       if (user?.id) {
         if (nowLoved) {
           syncLove(user.id, id);
+          console.log("firing watchlist notification check for id:", id);
           // Notify followers who have this on their watchlist
           supabase.from("user_data").select("clerk_user_id, watchlist").then(({ data }) => {
+            console.log("user_data rows fetched:", data?.length, "error checking");
             if (!data) return;
             const restaurant = allRestaurants.find(r => r.id === id || r.id === Number(id));
             data.forEach(row => {
