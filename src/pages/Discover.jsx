@@ -1266,7 +1266,7 @@ export default function Discover({ tasteProfile, initialTab }) {
           skipped: Array.isArray(remote.skipped) ? remote.skipped : [],
           votes: remote.votes && typeof remote.votes === "object" ? remote.votes : {},
         };
-        const remoteWatchlist = Array.isArray(remote.watchlist) ? [...new Set(remote.watchlist.map(String))] : [];
+        const remoteWatchlist = Array.isArray(remote.watchlist) ? [...new Set(remote.watchlist.map(id => isNaN(id) ? id : Number(id)))] : [];
         const remoteRatings = remote.ratings && typeof remote.ratings === "object" ? remote.ratings : {};
         const remotePhotoResolved = Array.isArray(remote.photo_resolved) ? remote.photo_resolved : [];
 
