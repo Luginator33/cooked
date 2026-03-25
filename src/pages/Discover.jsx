@@ -4716,7 +4716,7 @@ Return a JSON object with exactly these fields:
               {friendsBeenHere.list.map((f, idx) => (
                 <div
                   key={f.clerkUserId}
-                  onClick={() => { setFriendsBeenHereSheetOpen(false); setViewingUserId(f.clerkUserId); }}
+                  onClick={() => { setFriendsBeenHereSheetOpen(false); setDetailRestaurant(null); setViewingUserId(f.clerkUserId); }}
                   style={{
                     display: "flex",
                     alignItems: "center",
