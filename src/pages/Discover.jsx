@@ -1049,6 +1049,7 @@ export default function Discover({ tasteProfile, initialTab }) {
         if (cancelled) return;
         if (sharedPhotos && Object.keys(sharedPhotos).length > 0) {
           photoCacheRef.current = sharedPhotos;
+          try { localStorage.setItem("cooked_shared_photos", JSON.stringify(sharedPhotos)); } catch {}
           setUsingSupabasePhotoCache(true);
           setPhotoCacheVersion((v) => v + 1);
           const resolvedIds = Object.keys(sharedPhotos);

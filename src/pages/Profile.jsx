@@ -137,21 +137,13 @@ export default function Profile({
         setCustomBanner(b);
       }
 
-      // Load shared photos from restaurant_photos table (same source as Discover)
       try {
-        const { loadSharedPhotos } = await import('../lib/supabase');
-        const sharedRows = await loadSharedPhotos();
-        const sharedMap = {};
-        for (const row of (sharedRows || [])) {
-          sharedMap[row.restaurant_id] = row.photo_url;
-          sharedMap[String(row.restaurant_id)] = row.photo_url;
-          sharedMap[Number(row.restaurant_id)] = row.photo_url;
-        }
+        const sharedRaw = localStorage.getItem("cooked_shared_photos");
+        const sharedMap = sharedRaw ? JSON.parse(sharedRaw) : {};
         const personalPhotos = (data?.photos && typeof data.photos === "object") ? data.photos : {};
         setPhotoCache({ ...sharedMap, ...personalPhotos });
       } catch {
-        const personalPhotos = (data?.photos && typeof data.photos === "object") ? data.photos : {};
-        setPhotoCache(personalPhotos);
+        setPhotoCache({});
       }
 
       if (data?.finds && Array.isArray(data.finds) && data.finds.length > 0) {
