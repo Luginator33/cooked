@@ -881,6 +881,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     try { return JSON.parse(safeLocalStorageGetItem("cooked_heat") || '{"loved":[],"noped":[],"skipped":[],"votes":{}}'); } catch { return { loved: [], noped: [], skipped: [], votes: {} }; }
   });
   const [heatCity, setHeatCity] = useState("All");
+  const [heatCityPickerOpen, setHeatCityPickerOpen] = useState(false);
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
   const [notifUnreadCount, setNotifUnreadCount] = useState(0);
   const [notifSheetOpen, setNotifSheetOpen] = useState(false);
@@ -3742,11 +3743,26 @@ Return a JSON object with exactly these fields:
                 )}
               </div>
             </div>
-            {/* City filter */}
-            <div style={{ display:"flex", gap:6, overflowX:"auto", padding:"6px 16px 8px", scrollbarWidth:"none" }}>
-              {["All", ...getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults).flatMap(r => r.cities)].map(c => (
-                <button key={c} type="button" onClick={() => setHeatCity(c)} style={{ flexShrink:0, padding:"5px 12px", borderRadius:16, border:`1.5px solid ${heatCity===c ? C.terracotta : C.border}`, background: heatCity===c ? C.terracotta : "transparent", color: heatCity===c ? "#fff" : C.muted, fontSize:11, fontFamily:"'DM Mono',monospace", cursor:"pointer", letterSpacing:"0.3px", transition:"all 0.15s" }}>{c}</button>
-              ))}
+            {/* City filter — compact dropdown */}
+            <div style={{ padding:"4px 16px 8px" }}>
+              <button
+                type="button"
+                onClick={() => setHeatCityPickerOpen(o => !o)}
+                style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:20, border:`1.5px solid ${C.border}`, background:"transparent", color:C.text, fontSize:13, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}
+              >
+                <span>{heatCity === "All" ? "All Cities" : heatCity}</span>
+                <span style={{ fontSize:10, color:C.muted }}>▾</span>
+              </button>
+              {heatCityPickerOpen && (
+                <div style={{ position:"absolute", top:90, left:16, right:16, background:C.bg2, border:`1px solid ${C.border}`, borderRadius:14, zIndex:200, maxHeight:320, overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.4)" }}>
+                  {["All", ...getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults).flatMap(r => r.cities)].map(c => (
+                    <button key={c} type="button" onClick={() => { setHeatCity(c); setHeatCityPickerOpen(false); }}
+                      style={{ display:"block", width:"100%", padding:"10px 16px", textAlign:"left", background: heatCity===c ? `${C.terracotta}18` : "transparent", border:"none", color: heatCity===c ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                      {c === "All" ? "All Cities" : c}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
 
