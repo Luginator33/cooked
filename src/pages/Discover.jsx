@@ -6,7 +6,38 @@ import { SignInButton, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
 import { RESTAURANTS, ALL_TAGS } from "../data/restaurants";
 
 /** All cities present in the restaurant database — single source for filters across tabs */
-const ALL_CITIES = [...new Set(RESTAURANTS.map((r) => r.city).filter(Boolean))].sort();
+const CITY_REGIONS = [
+  { region: "United States", cities: ["Los Angeles","New York","Ventura County","Malibu","Chicago","Miami","Las Vegas","San Francisco","San Diego","Austin","Nashville","Maui","Napa","Ojai","Portland","Dallas","Savannah","Scottsdale"] },
+  { region: "Mexico & Caribbean", cities: ["Mexico City","Playa del Carmen","Canouan Island","Liberia"] },
+  { region: "Europe", cities: ["London","UK","Paris","Barcelona","Amsterdam","Copenhagen","Lisbon","Rome","Berlin","Istanbul","Munich","Prague","Stockholm","Vienna","Ibiza","Mykonos","Malta","Cannes"] },
+  { region: "Middle East", cities: ["Dubai","Tel Aviv"] },
+  { region: "Asia", cities: ["Tokyo","Seoul","Hong Kong","Bangkok","Bali","Singapore","Mumbai"] },
+  { region: "Canada", cities: ["Toronto"] },
+];
+
+const ALL_CITIES = [...new Set(CITY_REGIONS.flatMap(r => r.cities))];
+
+function getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults) {
+  const cityScores = {};
+  // Score from loved restaurants
+  (lovedRestaurants || []).forEach(r => {
+    if (r.city) cityScores[r.city] = (cityScores[r.city] || 0) + 3;
+  });
+  // Score from followed cities
+  (followedCities || []).forEach(c => {
+    cityScores[c] = (cityScores[c] || 0) + 5;
+  });
+  // Score from heat loved
+  const heatLoved = heatResults?.loved || [];
+  heatLoved.forEach(id => {
+    const r = RESTAURANTS.find(x => x.id === id || x.id === Number(id));
+    if (r?.city) cityScores[r.city] = (cityScores[r.city] || 0) + 1;
+  });
+  return CITY_REGIONS.map(region => ({
+    ...region,
+    cities: [...region.cities].sort((a, b) => (cityScores[b] || 0) - (cityScores[a] || 0)),
+  }));
+}
 import ChatBot from "../components/ChatBot";
 import Profile from "./Profile";
 import TasteProfile from "./TasteProfile";
@@ -1796,6 +1827,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const findsList = findsIds.map((id) => allRestaurants.find((r) => r.id === id || r.id === Number(id))).filter(Boolean);
   const explicitLovedIds = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_loved") || "[]"); } catch { return []; } })();
   const lovedList = allRestaurants.filter(r => explicitLovedIds.includes(r.id) || explicitLovedIds.includes(Number(r.id)));
+  const lovedRestaurants = lovedList;
   const watchList = allRestaurants.filter(r => watchlist.includes(r.id));
   const lovedFromSwipe = lovedList;
 
@@ -2951,49 +2983,31 @@ Return a JSON object with exactly these fields:
                       <div style={{ padding: "8px 16px 4px", fontFamily: "'DM Mono', monospace", fontSize: 8, color: C.dim, letterSpacing: "1.8px", textTransform: "uppercase", borderTop: user?.id && followedCities.length > 0 ? `1px solid ${C.border2}` : "none" }}>
                         All cities
                       </div>
-                      {["All", ...ALL_CITIES].map((c) => (
-                        <div key={c} style={{ display: "flex", alignItems: "stretch", width: "100%" }}>
-                          <button
-                            type="button"
-                            onClick={() => { setCity(c); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
-                            style={{
-                              flex: 1,
-                              minWidth: 0,
-                              padding: "8px 8px 8px 14px",
-                              textAlign: "left",
-                              background: city === c ? `${C.terracotta}18` : "transparent",
-                              border: "none",
-                              color: city === c ? C.terracotta : C.text,
-                              fontSize: 14,
-                              fontFamily: "'DM Sans', sans-serif",
-                              fontWeight: city === c ? 600 : 400,
-                              cursor: "pointer",
-                              letterSpacing: "-0.1px",
-                              lineHeight: 1.3,
-                            }}
-                          >
-                            {c === "All" ? "All Cities" : c}
-                          </button>
-                          {c !== "All" && user?.id ? (
-                            <button
-                              type="button"
-                              aria-label={followedCities.includes(c) ? `Unfollow ${c}` : `Follow ${c}`}
-                              onClick={(e) => toggleCityFollow(c, e)}
-                              style={{
-                                flexShrink: 0,
-                                width: 38,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                border: "none",
-                                background: "transparent",
-                                cursor: "pointer",
-                                padding: 0,
-                              }}
-                            >
-                              <CityFollowPinIcon followed={followedCities.includes(c)} />
-                            </button>
-                          ) : null}
+                      <div style={{ display: "flex", alignItems: "stretch", width: "100%" }}>
+                        <button type="button" onClick={() => { setCity("All"); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }} style={{ flex:1, padding:"8px 8px 8px 14px", textAlign:"left", background: city==="All" ? `${C.terracotta}18` : "transparent", border:"none", color: city==="All" ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", fontWeight: city==="All" ? 600 : 400, cursor:"pointer" }}>All Cities</button>
+                      </div>
+                      {getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults).map(({ region, cities }) => (
+                        <div key={region}>
+                          <div style={{ padding:"10px 14px 4px", fontFamily:"'DM Mono',monospace", fontSize:8, color:C.terracotta, letterSpacing:"1.8px", textTransform:"uppercase", borderTop:`1px solid ${C.border}` }}>{region}</div>
+                          {cities.map((c) => (
+                            <div key={c} style={{ display: "flex", alignItems: "stretch", width: "100%" }}>
+                              <button type="button" onClick={() => { setCity(c); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
+                                style={{ flex: 1, minWidth: 0, padding: "8px 8px 8px 14px", textAlign: "left", background: city === c ? `${C.terracotta}18` : "transparent", border: "none", color: city === c ? C.terracotta : C.text, fontSize: 14, fontFamily: "'DM Sans', sans-serif", fontWeight: city === c ? 600 : 400, cursor: "pointer", letterSpacing: "-0.1px", lineHeight: 1.3 }}
+                              >
+                                {c}
+                              </button>
+                              {user?.id ? (
+                                <button
+                                  type="button"
+                                  aria-label={followedCities.includes(c) ? `Unfollow ${c}` : `Follow ${c}`}
+                                  onClick={(e) => { e.stopPropagation(); toggleCityFollow(c, e); }}
+                                  style={{ padding: "0 14px", background: "transparent", border: "none", cursor: "pointer", color: followedCities.includes(c) ? C.terracotta : C.muted, fontSize: 16, flexShrink: 0 }}
+                                >
+                                  {followedCities.includes(c) ? "★" : "☆"}
+                                </button>
+                              ) : null}
+                            </div>
+                          ))}
                         </div>
                       ))}
                     </div>
