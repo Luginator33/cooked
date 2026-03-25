@@ -3744,7 +3744,7 @@ Return a JSON object with exactly these fields:
             </div>
             {/* City filter */}
             <div style={{ display:"flex", gap:6, overflowX:"auto", padding:"6px 16px 8px", scrollbarWidth:"none" }}>
-              {["All", ...ALL_CITIES].map(c => (
+              {["All", ...getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults).flatMap(r => r.cities)].map(c => (
                 <button key={c} type="button" onClick={() => setHeatCity(c)} style={{ flexShrink:0, padding:"5px 12px", borderRadius:16, border:`1.5px solid ${heatCity===c ? C.terracotta : C.border}`, background: heatCity===c ? C.terracotta : "transparent", color: heatCity===c ? "#fff" : C.muted, fontSize:11, fontFamily:"'DM Mono',monospace", cursor:"pointer", letterSpacing:"0.3px", transition:"all 0.15s" }}>{c}</button>
               ))}
             </div>
