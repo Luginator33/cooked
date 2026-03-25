@@ -411,7 +411,15 @@ function notificationMessage(row) {
   if (row?.message != null && String(row.message).trim()) return String(row.message);
   if (row?.body != null && String(row.body).trim()) return String(row.body);
   if (row?.content != null && String(row.content).trim()) return String(row.content);
-  return "Notification";
+  const name = row?.restaurant_name || "a restaurant";
+  switch (row?.type) {
+    case "followed_you": return "Someone started following you";
+    case "friend_loved_your_watchlist": return `A friend loved ${name} — it's on your watchlist`;
+    case "friend_new_find": return `A friend added a new Find`;
+    case "friend_visited_city": return `A friend loved ${name} in a city you follow`;
+    case "restaurant_trending": return `${name} is trending`;
+    default: return "Notification";
+  }
 }
 
 // Restaurant cuisine → display category (Tier 2 dropdown when Restaurants selected)
