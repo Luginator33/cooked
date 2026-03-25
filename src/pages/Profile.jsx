@@ -684,7 +684,7 @@ export default function Profile({
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {activeItems.map(r => <RestCard key={r.id} r={r} onOpen={onOpenDetail} />)}
+            {activeItems.map(r => <RestCard key={r.id} r={r} onOpen={onOpenDetail} photoCache={photoCache} />)}
           </div>
         )}
       </div>
@@ -701,7 +701,7 @@ export default function Profile({
               {listModal.items.map((r, i) => (
                 r.cuisine !== undefined ? (
                   <div key={r.id} style={{ marginTop: i === 0 ? 6 : 0, marginBottom: 8 }}>
-                    <RestCard r={r} compact onOpen={onOpenDetail} />
+                    <RestCard r={r} compact onOpen={onOpenDetail} photoCache={photoCache} />
                   </div>
                 ) : (
                   <div key={r.id || r.name} style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, color: C.text, fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 16 }}>
@@ -908,11 +908,15 @@ export default function Profile({
   );
 }
 
-function RestCard({ r, compact, onOpen }) {
-  const [imgSrc, setImgSrc] = useState(r.img);
+function RestCard({ r, compact, onOpen, photoCache }) {
+  const [imgSrc, setImgSrc] = useState(
+    (photoCache && (photoCache[r.id] || photoCache[String(r.id)])) || r.img
+  );
   useEffect(() => {
+    const fromCache = photoCache && (photoCache[r.id] || photoCache[String(r.id)]);
+    if (fromCache) { setImgSrc(fromCache); return; }
     try { const cached = JSON.parse(localStorage.getItem("cooked_photos") || "{}"); if (cached[r.id]) setImgSrc(cached[r.id]); } catch {}
-  }, [r.id]);
+  }, [r.id, photoCache]);
 
   const flameCount = Math.round((r.rating || 0) / 2);
 
