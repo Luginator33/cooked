@@ -1817,7 +1817,10 @@ export default function Discover({ tasteProfile, initialTab }) {
       };
     });
   };
-  const toggleWatch = (id) => setWatchlist(s => s.includes(id) ? s.filter(x=>x!==id) : [...s,id]);
+  const toggleWatch = (id) => {
+    const normalizedId = isNaN(id) ? id : Number(id);
+    setWatchlist(s => s.includes(normalizedId) ? s.filter(x=>x!==normalizedId) : [...s,normalizedId]);
+  };
   const share = async (name) => {
     const text = `Check out ${name} on Cooked — the restaurant app for people who care.`;
     try {
