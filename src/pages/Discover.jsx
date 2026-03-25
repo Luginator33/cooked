@@ -862,6 +862,8 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [followingPicksNoFollows, setFollowingPicksNoFollows] = useState(false);
   const [venueType, setVenueType] = useState("all"); // "all" | "restaurants" | "bars" | "coffee"
   const [secondaryCuisine, setSecondaryCuisine] = useState(null); // dropdown selection when restaurants or bars
+  const [showFilterSheet, setShowFilterSheet] = useState(false);
+  const [filterMood, setFilterMood] = useState(null);
   const [chatInput, setChatInput] = useState("");
   const [restoredMessages, setRestoredMessages] = useState(null);
   const [homeChatKey, setHomeChatKey] = useState(0);
@@ -1740,7 +1742,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       );
     }
     return true;
-  });
+  }).filter(r => !filterMood || (r.tags && r.tags.some(t => t.toLowerCase().includes(filterMood.toLowerCase()))) || (r.vibe && r.vibe.toLowerCase().includes(filterMood.toLowerCase())) || (r.best_for && r.best_for.toLowerCase().includes(filterMood.toLowerCase())));
   const filteredSorted = [...filteredForDiscover].sort((a, b) => {
     const score = (r) => (userRatings[r.id] || 0) * 0.3 + r.rating * 0.7;
     return score(b) - score(a);
@@ -3230,105 +3232,102 @@ Return a JSON object with exactly these fields:
       {tab === "discover" && (
         discoverSearchMode === "restaurants" ? (
         <div style={{ paddingTop: headerHeight }}>
-          {/* Tier 1: venue type pills */}
-          <div style={{ display:"flex", gap:6, overflowX:"auto", padding:"10px 16px 4px", scrollbarWidth:"none" }} className="city-row">
-            {[
-              { id: "all", label: "All" },
-              { id: "restaurants", label: "Restaurants" },
-              { id: "bars", label: "Bars & Nightlife" },
-              { id: "coffee", label: "Coffee & Cafes" },
-            ].map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => {
-                  setVenueType(id);
-                  setSecondaryCuisine(null);
-                }}
-                style={{
-                  flexShrink:0,
-                  padding:"5px 12px",
-                  borderRadius:20,
-                  border:`1px solid ${venueType === id ? C.terracotta : C.border}`,
-                  background: venueType === id ? C.terracotta : "transparent",
-                  color: venueType === id ? "#fff" : C.dim,
-                  fontSize:11,
-                  fontFamily:"'DM Mono',monospace",
-                  cursor:"pointer",
-                  letterSpacing:"0.3px",
-                  transition:"all 0.15s",
-                }}
-              >{label}</button>
+          {/* Tabs + Filter */}
+          <div style={{ borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", padding:"0 16px" }}>
+            {["Places","People"].map((t) => (
+              <button key={t} type="button"
+                onClick={() => setDiscoverSearchMode(t === "People" ? "people" : "restaurants")}
+                style={{ padding:"10px 16px", fontSize:10, fontFamily:"'DM Mono',monospace", letterSpacing:"1.2px", textTransform:"uppercase", background:"none", border:"none", borderBottom: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? `2px solid ${C.terracotta}` : "2px solid transparent", color: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? C.terracotta : C.muted, cursor:"pointer", marginBottom:"-1px" }}>
+                {t}
+              </button>
             ))}
+            <div style={{ flex:1 }} />
+            <button type="button" onClick={() => setShowFilterSheet(true)}
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", border:`1px solid ${venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.border}`, borderRadius:10, background: venueType !== "all" || secondaryCuisine || filterMood ? `${C.terracotta}15` : "transparent", color: venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.muted, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+              Filter {(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0) > 0 ? `(${(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0)})` : ""}
+            </button>
           </div>
 
-          {/* Tier 2: cuisine/bar-type dropdown (only when Restaurants or Bars selected) */}
-          {(venueType === "restaurants" || venueType === "bars") && (
-            <div style={{ padding:"0 16px 8px", width:"100%", boxSizing:"border-box" }}>
-              <select
-                value={secondaryCuisine || ""}
-                onChange={(e) => setSecondaryCuisine(e.target.value || null)}
-                onFocus={(e) => e.target.style.borderColor = C.terracotta}
-                onBlur={(e) => e.target.style.borderColor = C.border}
-                style={{
-                  width:"100%",
-                  boxSizing:"border-box",
-                  padding:"8px 32px 8px 12px",
-                  borderRadius:10,
-                  border:`1px solid ${C.border}`,
-                  background:C.bg2,
-                  color:C.text,
-                  fontFamily:"'DM Sans',sans-serif",
-                  fontSize:12,
-                  cursor:"pointer",
-                  outline:"none",
-                  appearance:"none",
-                  backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%235a3a20' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
-                  backgroundRepeat:"no-repeat",
-                  backgroundPosition:"right 12px center",
-                  transition:"border-color 0.2s",
-                }}
-              >
-                <option value="">{venueType === "restaurants" ? "All Cuisines ▾" : "All Bar Types ▾"}</option>
-                {cuisineDropdownCategories.map(cat => (
-                  <option key={cat.label} value={cat.label}>{cat.label}</option>
-                ))}
-              </select>
+          {/* Search + active filter chips */}
+          <div style={{ padding:"10px 16px 8px" }}>
+            <div style={{ position:"relative", marginBottom: (venueType !== "all" || secondaryCuisine || filterMood) ? 8 : 0 }}>
+              <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:12, color:C.muted, pointerEvents:"none" }}>🔍</span>
+              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search by name, neighborhood, vibe..."
+                style={{ width:"100%", boxSizing:"border-box", padding:"11px 32px 11px 34px", borderRadius:14, border:`1.5px solid ${searchQuery ? C.terracotta : C.border}`, background:C.bg2, fontSize:14, color:C.text, fontFamily:"Cormorant Garamond,Georgia,serif", fontStyle:"italic", outline:"none" }}
+              />
+              {searchQuery && <button onClick={() => setSearchQuery("")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, lineHeight:1, padding:2 }}>×</button>}
             </div>
-          )}
-
-          {discoverModeSegmented}
-
-          {/* Search bar — small, under cuisine */}
-          <div style={{ margin:"0 16px 8px", position:"relative" }}>
-            <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", fontSize:11, color:C.muted, pointerEvents:"none" }}>🔍</span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search by name, neighborhood, vibe..."
-              style={{
-                width:"100%",
-                boxSizing:"border-box",
-                padding:"7px 28px 7px 26px",
-                borderRadius:10,
-                border:`1px solid ${searchQuery ? C.terracotta : C.border}`,
-                background:C.bg2,
-                fontSize:12,
-                color:C.text,
-                fontFamily:"Cormorant Garamond,Georgia,serif",
-                fontStyle:"italic",
-                outline:"none",
-                transition:"border-color 0.2s",
-              }}
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery("")} style={{
-                position:"absolute", right:9, top:"50%", transform:"translateY(-50%)",
-                background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:15, lineHeight:1, padding:2
-              }}>×</button>
+            {(venueType !== "all" || secondaryCuisine || filterMood) && (
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {venueType !== "all" && <button type="button" onClick={() => setVenueType("all")} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{venueType === "restaurants" ? "Restaurants" : venueType === "bars" ? "Bars" : "Coffee"} ×</button>}
+                {secondaryCuisine && <button type="button" onClick={() => setSecondaryCuisine(null)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{secondaryCuisine} ×</button>}
+                {filterMood && <button type="button" onClick={() => setFilterMood(null)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{filterMood} ×</button>}
+              </div>
             )}
           </div>
+
+          {/* Filter Sheet */}
+          {showFilterSheet && createPortal(
+            <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:99999, display:"flex", alignItems:"flex-end" }} onClick={() => setShowFilterSheet(false)}>
+              <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:480, margin:"0 auto", background:C.bg2, borderRadius:"20px 20px 0 0", maxHeight:"80vh", overflowY:"auto", paddingBottom:32 }}>
+                <div style={{ padding:"16px 18px 12px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:18, color:C.text }}>Filter</div>
+                  <div style={{ display:"flex", gap:12, alignItems:"center" }}>
+                    <button type="button" onClick={() => { setVenueType("all"); setSecondaryCuisine(null); setFilterMood(null); }} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Clear all</button>
+                    <button type="button" onClick={() => setShowFilterSheet(false)} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:22, lineHeight:1, padding:0 }}>×</button>
+                  </div>
+                </div>
+
+                {/* Type */}
+                <div style={{ padding:"16px 18px 8px" }}>
+                  <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Type</div>
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    {[{id:"all",label:"All"},{id:"restaurants",label:"Restaurant"},{id:"bars",label:"Bar"},{id:"coffee",label:"Coffee"}].map(({id,label}) => (
+                      <button key={id} type="button" onClick={() => setVenueType(id)}
+                        style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${venueType===id ? C.terracotta : C.border}`, background: venueType===id ? C.terracotta : "transparent", color: venueType===id ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Cuisine */}
+                <div style={{ padding:"16px 18px 8px", borderTop:`1px solid ${C.border}` }}>
+                  <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Cuisine</div>
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    {["Italian","Japanese","Mexican","American","French","Chinese","Korean","Thai","Indian","Mediterranean","Seafood","Steakhouse","Pizza","Vegan"].map(c => (
+                      <button key={c} type="button" onClick={() => setSecondaryCuisine(secondaryCuisine===c ? null : c)}
+                        style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${secondaryCuisine===c ? C.terracotta : C.border}`, background: secondaryCuisine===c ? C.terracotta : "transparent", color: secondaryCuisine===c ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Mood */}
+                <div style={{ padding:"16px 18px 8px", borderTop:`1px solid ${C.border}` }}>
+                  <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Mood</div>
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    {["Date Night","Business Dinner","Lunch","Brunch","Late Night","Group Friendly","Casual","Special Occasion","Outdoor","Bar Hopping"].map(m => (
+                      <button key={m} type="button" onClick={() => setFilterMood(filterMood===m ? null : m)}
+                        style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${filterMood===m ? C.terracotta : C.border}`, background: filterMood===m ? C.terracotta : "transparent", color: filterMood===m ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ padding:"16px 18px 0" }}>
+                  <button type="button" onClick={() => setShowFilterSheet(false)} style={{ width:"100%", padding:"14px", background:C.terracotta, border:"none", borderRadius:14, color:"#fff", fontSize:14, fontFamily:"Georgia,serif", fontStyle:"italic", cursor:"pointer" }}>
+                    Show results
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.getElementById('root')
+          )}
 
           {(() => {
             const lovedIds = heatResults.loved || [];
@@ -3345,11 +3344,12 @@ Return a JSON object with exactly these fields:
             };
             let pool = [];
             if (lovedIds.length === 0) {
-              pool = allRestaurants.filter(inCity).filter((r) => r?.name).sort((a, b) => ratingNum(b) - ratingNum(a));
+              pool = allRestaurants.filter(inCity).filter((r) => r?.name).filter(r => !filterMood || (r.tags && r.tags.some(t => t.toLowerCase().includes(filterMood.toLowerCase()))) || (r.vibe && r.vibe.toLowerCase().includes(filterMood.toLowerCase())) || (r.best_for && r.best_for.toLowerCase().includes(filterMood.toLowerCase()))).sort((a, b) => ratingNum(b) - ratingNum(a));
             } else {
               pool = allRestaurants
                 .filter(inCity)
                 .filter((r) => !lovedIds.includes(r.id) && !nopedIds.includes(r.id) && !findsSet.has(r.id) && !findsSet.has(Number(r.id)) && r?.name)
+                .filter(r => !filterMood || (r.tags && r.tags.some(t => t.toLowerCase().includes(filterMood.toLowerCase()))) || (r.vibe && r.vibe.toLowerCase().includes(filterMood.toLowerCase())) || (r.best_for && r.best_for.toLowerCase().includes(filterMood.toLowerCase())))
                 .sort(sortByHeatThenRating);
             }
             const top20 = pool.slice(0, 20);
