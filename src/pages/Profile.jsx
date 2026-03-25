@@ -137,11 +137,21 @@ export default function Profile({
         setCustomBanner(b);
       }
 
-      // Prefer Supabase photos (Discover uses Supabase as the photo cache source of truth).
-      if (data?.photos && typeof data.photos === "object" && Object.keys(data.photos).length > 0) {
-        setPhotoCache(data.photos);
-      } else {
-        setPhotoCache({});
+      // Load shared photos from restaurant_photos table (same source as Discover)
+      try {
+        const { loadSharedPhotos } = await import('../lib/supabase');
+        const sharedRows = await loadSharedPhotos();
+        const sharedMap = {};
+        for (const row of (sharedRows || [])) {
+          sharedMap[row.restaurant_id] = row.photo_url;
+          sharedMap[String(row.restaurant_id)] = row.photo_url;
+          sharedMap[Number(row.restaurant_id)] = row.photo_url;
+        }
+        const personalPhotos = (data?.photos && typeof data.photos === "object") ? data.photos : {};
+        setPhotoCache({ ...sharedMap, ...personalPhotos });
+      } catch {
+        const personalPhotos = (data?.photos && typeof data.photos === "object") ? data.photos : {};
+        setPhotoCache(personalPhotos);
       }
 
       if (data?.finds && Array.isArray(data.finds) && data.finds.length > 0) {
