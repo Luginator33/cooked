@@ -1749,7 +1749,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       );
     }
     return true;
-  }).filter(r => !filterMood || (r.tags && r.tags.some(t => t.toLowerCase().includes(filterMood.toLowerCase()))) || (r.vibe && r.vibe.toLowerCase().includes(filterMood.toLowerCase())) || (r.best_for && r.best_for.toLowerCase().includes(filterMood.toLowerCase())));
+  }).filter(r => !filterMood || (r.tags && r.tags.some(t => t.toLowerCase().includes(filterMood.toLowerCase()))) || (r.vibe && r.vibe.toLowerCase().includes(filterMood.toLowerCase())) || (r.best_for && (typeof r.best_for === 'string' ? r.best_for : Array.isArray(r.best_for) ? r.best_for.join(' ') : '').toLowerCase().includes(filterMood.toLowerCase())));
   const filteredSorted = [...filteredForDiscover].sort((a, b) => {
     const score = (r) => (userRatings[r.id] || 0) * 0.3 + r.rating * 0.7;
     return score(b) - score(a);
@@ -3296,12 +3296,12 @@ Return a JSON object with exactly these fields:
             };
             let pool = [];
             if (lovedIds.length === 0) {
-              pool = allRestaurants.filter(inCity).filter((r) => r?.name).filter(r => !filterMood || (r.tags && r.tags.some(t => t.toLowerCase().includes(filterMood.toLowerCase()))) || (r.vibe && r.vibe.toLowerCase().includes(filterMood.toLowerCase())) || (r.best_for && r.best_for.toLowerCase().includes(filterMood.toLowerCase()))).sort((a, b) => ratingNum(b) - ratingNum(a));
+              pool = allRestaurants.filter(inCity).filter((r) => r?.name).filter(r => !filterMood || (r.tags && r.tags.some(t => t.toLowerCase().includes(filterMood.toLowerCase()))) || (r.vibe && r.vibe.toLowerCase().includes(filterMood.toLowerCase())) || (r.best_for && (typeof r.best_for === 'string' ? r.best_for : Array.isArray(r.best_for) ? r.best_for.join(' ') : '').toLowerCase().includes(filterMood.toLowerCase()))).sort((a, b) => ratingNum(b) - ratingNum(a));
             } else {
               pool = allRestaurants
                 .filter(inCity)
                 .filter((r) => !lovedIds.includes(r.id) && !nopedIds.includes(r.id) && !findsSet.has(r.id) && !findsSet.has(Number(r.id)) && r?.name)
-                .filter(r => !filterMood || (r.tags && r.tags.some(t => t.toLowerCase().includes(filterMood.toLowerCase()))) || (r.vibe && r.vibe.toLowerCase().includes(filterMood.toLowerCase())) || (r.best_for && r.best_for.toLowerCase().includes(filterMood.toLowerCase())))
+                .filter(r => !filterMood || (r.tags && r.tags.some(t => t.toLowerCase().includes(filterMood.toLowerCase()))) || (r.vibe && r.vibe.toLowerCase().includes(filterMood.toLowerCase())) || (r.best_for && (typeof r.best_for === 'string' ? r.best_for : Array.isArray(r.best_for) ? r.best_for.join(' ') : '').toLowerCase().includes(filterMood.toLowerCase())))
                 .sort(sortByHeatThenRating);
             }
             const top20 = pool.slice(0, 20);
