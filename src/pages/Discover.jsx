@@ -2950,7 +2950,7 @@ Return a JSON object with exactly these fields:
         <PageHeader
           onLogoClick={() => setTab("home")}
           right={
-            <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
               {(tab === "home" || tab === "discover" || tab === "map") && (
                 <div style={{ position:"relative" }}>
                   <button onClick={() => setCityPickerOpen(v => !v)} style={{ display:"flex", alignItems:"center", gap:5, background:"none", border:"none", cursor:"pointer", padding:0, outline:"none" }}>
@@ -3254,7 +3254,7 @@ Return a JSON object with exactly these fields:
 
           {/* Search + Filter + chips */}
           <div style={{ padding:"10px 16px 8px" }}>
-            <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
               <div style={{ flex:1, position:"relative" }}>
                 <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:12, color:C.muted, pointerEvents:"none" }}>🔍</span>
                 <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
@@ -3265,13 +3265,13 @@ Return a JSON object with exactly these fields:
               </div>
               {discoverSearchMode !== "people" && (
                 <button type="button" onClick={() => setShowFilterSheet(true)}
-                  style={{ flexShrink:0, display:"flex", alignItems:"center", gap:5, padding:"10px 14px", border:`1px solid ${venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.border}`, borderRadius:14, background: venueType !== "all" || secondaryCuisine || filterMood ? `${C.terracotta}15` : C.bg2, color: venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.muted, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                  style={{ flexShrink:0, alignSelf:"flex-start", display:"flex", alignItems:"center", gap:5, padding:"10px 14px", border:`1px solid ${venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.border}`, borderRadius:14, background: venueType !== "all" || secondaryCuisine || filterMood ? `${C.terracotta}15` : C.bg2, color: venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.muted, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
                   {(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0) > 0 ? `(${(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0)})` : ""}
                 </button>
               )}
               {discoverSearchMode !== "people" && (venueType !== "all" || secondaryCuisine || filterMood) && (
-                <div style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center", flexShrink:0 }}>
+                <div style={{ display:"flex", flexDirection:"column", gap:4, alignItems:"flex-start", flexShrink:0 }}>
                   {venueType !== "all" && <button type="button" onClick={() => setVenueType("all")} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{venueType === "restaurants" ? "Restaurants" : venueType === "bars" ? "Bars" : venueType === "hotels" ? "Hotels" : "Coffee"} ×</button>}
                   {secondaryCuisine && <button type="button" onClick={() => setSecondaryCuisine(null)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{secondaryCuisine} ×</button>}
                   {filterMood && <button type="button" onClick={() => setFilterMood(null)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{filterMood} ×</button>}
@@ -3394,7 +3394,7 @@ Return a JSON object with exactly these fields:
           })()}
           <div style={{ padding:"16px 20px 10px", display:"flex", alignItems:"baseline", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
             <div style={{ fontFamily:"Cormorant Garamond,Georgia,serif", fontSize:24, fontWeight:700, fontStyle:"italic", color:C.text }}>
-              {searchQuery ? `"${searchQuery}"` : secondaryCuisine ? `${secondaryCuisine} in ${city}` : venueType !== "all" ? (venueType === "restaurants" ? "Restaurants" : venueType === "bars" ? "Bars & Nightlife" : "Coffee & Cafes") + ` in ${city}` : `Hot in ${city}`}
+              {searchQuery ? `"${searchQuery}"` : secondaryCuisine ? `${secondaryCuisine} in ${city}` : venueType !== "all" ? (venueType === "restaurants" ? "Restaurants" : venueType === "bars" ? "Bars & Nightlife" : venueType === "hotels" ? "Hotels" : venueType === "coffee" ? "Coffee & Cafes" : "Hot") + ` in ${city}` : `Hot in ${city}`}
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <div style={{ fontFamily:"'DM Mono',monospace", fontSize:11, color:C.muted }}>{filteredSorted.length} spots</div>
