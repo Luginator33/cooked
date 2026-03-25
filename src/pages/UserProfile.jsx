@@ -36,6 +36,8 @@ function FlameIcon({ size = 12, filled = true }) {
 }
 
 function RestCard({ r, onOpen }) {
+  const sharedPhotos = (() => { try { return JSON.parse(localStorage.getItem("cooked_shared_photos") || "{}"); } catch { return {}; } })();
+  const imgSrc = sharedPhotos[r.id] || sharedPhotos[String(r.id)] || r.img;
   const flameCount = Math.round((r.rating || 0) / 2);
   return (
     <div
@@ -52,7 +54,7 @@ function RestCard({ r, onOpen }) {
       }}
     >
       <div style={{ width: 54, height: 54, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "#221508" }}>
-        {r.img ? <img src={r.img} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+        {imgSrc ? <img src={imgSrc} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", fontSize: 17, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</div>
