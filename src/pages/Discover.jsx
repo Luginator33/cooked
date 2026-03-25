@@ -1704,6 +1704,9 @@ export default function Discover({ tasteProfile, initialTab }) {
     if (venueType === "coffee") {
       return cu.includes("coffee") || cu.includes("cafe");
     }
+    if (venueType === "hotels") {
+      return cu.includes("hotel") || cu.includes("resort") || r.isHotel === true;
+    }
     return true;
   };
   const filteredByVenue = filteredByCity.filter(passesVenueType);
@@ -1716,7 +1719,11 @@ export default function Discover({ tasteProfile, initialTab }) {
   const passesCuisineCategory = (r) => {
     if (!secondaryCuisine) return true;
     const cat = cuisineDropdownCategories.find(c => c.label === secondaryCuisine);
-    if (!cat) return true;
+    if (!cat) {
+      // Free text match from filter sheet
+      const rawLower = (r.cuisine || "").toLowerCase();
+      return rawLower.includes(secondaryCuisine.toLowerCase());
+    }
     const rawLower = (r.cuisine || "").toLowerCase();
     if (cat.label === "Other") {
       // Other = cuisine does not contain any raw value from the other restaurant categories
@@ -3400,22 +3407,6 @@ Return a JSON object with exactly these fields:
                 MAP
               </button>
             </div>
-          </div>
-          <div style={{ display:"flex", gap:6, overflowX:"auto", padding:"0 16px 14px", scrollbarWidth:"none", marginBottom:4 }} className="city-row">
-            {["date night","group friendly","outdoor seating","rooftop","late night","solo"].map(tag => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => setActiveFilter(prev => prev === tag ? null : tag)}
-                style={{
-                  flexShrink:0, padding:"6px 12px", borderRadius:16, border:`1px solid ${activeFilter === tag ? C.terracotta : C.border}`,
-                  background: activeFilter === tag ? C.bg3 : C.bg2, color: activeFilter === tag ? C.terracotta : C.muted,
-                  fontSize:11, fontFamily:"'DM Mono',monospace", cursor:"pointer", letterSpacing:"0.3px"
-                }}
-              >
-                {tag}
-              </button>
-            ))}
           </div>
           {filteredSorted.map((r, index) => (
             <RestCard
