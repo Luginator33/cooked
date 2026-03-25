@@ -1829,6 +1829,7 @@ export default function Discover({ tasteProfile, initialTab }) {
               if (row.clerk_user_id === user.id) return;
               const wl = Array.isArray(row.watchlist) ? row.watchlist : [];
               if (wl.map(String).includes(String(id))) {
+                console.log("match found! notifying:", row.clerk_user_id, "for restaurant:", id);
                 supabase.from("notifications").insert({
                   user_id: row.clerk_user_id,
                   type: "friend_loved_your_watchlist",
