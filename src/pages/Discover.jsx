@@ -3240,8 +3240,8 @@ Return a JSON object with exactly these fields:
         discoverSearchMode === "restaurants" ? (
         <div style={{ paddingTop: headerHeight }}>
           {/* Tabs row */}
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", borderBottom:`1px solid ${C.border}`, position:"relative" }}>
-            <div style={{ display:"flex", alignItems:"center" }}>
+          <div style={{ display:"flex", alignItems:"center", borderBottom:`1px solid ${C.border}`, padding:"0 16px" }}>
+            <div style={{ flex:1, display:"flex", justifyContent:"center" }}>
             {["Places","People"].map((t) => (
               <button key={t} type="button"
                 onClick={() => setDiscoverSearchMode(t === "People" ? "people" : "restaurants")}
@@ -3250,6 +3250,13 @@ Return a JSON object with exactly these fields:
               </button>
             ))}
             </div>
+            {discoverSearchMode !== "people" && (
+              <button type="button" onClick={() => setShowFilterSheet(true)}
+                style={{ flexShrink:0, display:"flex", alignItems:"center", gap:5, padding:"6px 12px", border:`1px solid ${venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.border}`, borderRadius:10, background:"transparent", color: venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.muted, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+                Filter {(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0) > 0 ? `(${(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0)})` : ""}
+              </button>
+            )}
           </div>
 
           {/* Search + Filter + chips */}
@@ -3259,17 +3266,10 @@ Return a JSON object with exactly these fields:
                 <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:12, color:C.muted, pointerEvents:"none" }}>🔍</span>
                 <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                   placeholder={discoverSearchMode === "people" ? "Search by username or name..." : "Search by name, neighborhood, vibe..."}
-                  style={{ width:"100%", boxSizing:"border-box", padding:"11px 32px 11px 34px", borderRadius:14, border:`1.5px solid ${searchQuery ? C.terracotta : C.border}`, background:C.bg2, fontSize:14, color:C.text, fontFamily:"Cormorant Garamond,Georgia,serif", fontStyle:"italic", outline:"none" }}
+                  style={{ width:"100%", boxSizing:"border-box", padding:"11px 32px 11px 34px", borderRadius:14, border:`1.5px solid ${C.border}`, background:C.bg2, fontSize:14, color:C.text, fontFamily:"Cormorant Garamond,Georgia,serif", fontStyle:"italic", outline:"none" }}
                 />
                 {searchQuery && <button onClick={() => setSearchQuery("")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, lineHeight:1, padding:2 }}>×</button>}
               </div>
-              {discoverSearchMode !== "people" && (
-                <button type="button" onClick={() => setShowFilterSheet(true)}
-                  style={{ flexShrink:0, alignSelf:"flex-start", display:"flex", alignItems:"center", gap:5, padding:"10px 14px", border:`1px solid ${venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.border}`, borderRadius:14, background: venueType !== "all" || secondaryCuisine || filterMood ? `${C.terracotta}15` : C.bg2, color: venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.muted, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
-                  {(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0) > 0 ? `(${(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0)})` : ""}
-                </button>
-              )}
               {discoverSearchMode !== "people" && (venueType !== "all" || secondaryCuisine || filterMood) && (
                 <div style={{ display:"flex", flexDirection:"column", gap:4, alignItems:"flex-start", flexShrink:0 }}>
                   {venueType !== "all" && <button type="button" onClick={() => setVenueType("all")} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{venueType === "restaurants" ? "Restaurants" : venueType === "bars" ? "Bars" : venueType === "hotels" ? "Hotels" : "Coffee"} ×</button>}
