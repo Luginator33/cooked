@@ -4716,12 +4716,14 @@ Return a JSON object with exactly these fields:
               {friendsBeenHere.list.map((f, idx) => (
                 <div
                   key={f.clerkUserId}
+                  onClick={() => { setFriendsBeenHereSheetOpen(false); setViewingUserId(f.clerkUserId); }}
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 12,
                     padding: "12px 0",
                     borderBottom: idx === friendsBeenHere.list.length - 1 ? "none" : "1px solid #2e1f0e",
+                    cursor: "pointer",
                   }}
                 >
                   <div
