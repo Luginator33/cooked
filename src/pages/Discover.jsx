@@ -1819,17 +1819,14 @@ export default function Discover({ tasteProfile, initialTab }) {
       if (user?.id) {
         if (nowLoved) {
           syncLove(user.id, id);
-          console.log("firing watchlist notification check for id:", id);
           // Notify followers who have this on their watchlist
           supabase.from("user_data").select("clerk_user_id, watchlist").then(({ data }) => {
-            console.log("user_data rows fetched:", data?.length, "error checking");
             if (!data) return;
             const restaurant = allRestaurants.find(r => r.id === id || r.id === Number(id));
             data.forEach(row => {
               if (row.clerk_user_id === user.id) return;
               const wl = Array.isArray(row.watchlist) ? row.watchlist : [];
               if (wl.map(String).includes(String(id))) {
-                console.log("match found! notifying:", row.clerk_user_id, "for restaurant:", id);
                 supabase.from("notifications").insert({
                   user_id: row.clerk_user_id,
                   type: "friend_loved_your_watchlist",
@@ -1837,7 +1834,7 @@ export default function Discover({ tasteProfile, initialTab }) {
                   restaurant_id: String(id),
                   restaurant_name: restaurant?.name || "",
                   read: false,
-                }).then(r => { if (r.error) console.error("notif insert error:", r.error); else console.log("notif inserted for", row.clerk_user_id); });
+                });
               }
             });
           });
@@ -4908,6 +4905,14 @@ Return a JSON object with exactly these fields:
                   return (
                     <div
                       key={n.id ?? `${n.created_at}-${n.type}`}
+                      onClick={() => {
+                        if (n.restaurant_id) {
+                          const r = allRestaurants.find(r => String(r.id) === String(n.restaurant_id));
+                          if (r) { setNotifSheetOpen(false); setDetailRestaurant(r); }
+                        } else if (n.from_user_id) {
+                          setNotifSheetOpen(false); setViewingUserId(n.from_user_id);
+                        }
+                      }}
                       style={{
                         display: "flex",
                         gap: 12,
@@ -4916,6 +4921,7 @@ Return a JSON object with exactly these fields:
                         borderBottom: `1px solid ${C.border}`,
                         borderLeft: unread ? `3px solid ${C.terracotta}` : "none",
                         paddingLeft: unread ? 11 : 14,
+                        cursor: "pointer",
                       }}
                     >
                       <div style={{ flexShrink: 0, marginTop: 2 }}>
