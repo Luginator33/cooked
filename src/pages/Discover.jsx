@@ -3240,16 +3240,17 @@ Return a JSON object with exactly these fields:
         discoverSearchMode === "restaurants" ? (
         <div style={{ paddingTop: headerHeight }}>
           {/* Tabs row */}
-          <div style={{ display:"flex", alignItems:"center", borderBottom:`1px solid ${C.border}`, padding:"0 16px" }}>
+          <div style={{ display:"flex", alignItems:"center", borderBottom:`1px solid ${C.border}`, padding:"10px 16px 0", position:"relative" }}>
             <div style={{ flex:1, display:"flex", justifyContent:"center" }}>
             {["Places","People"].map((t) => (
               <button key={t} type="button"
                 onClick={() => setDiscoverSearchMode(t === "People" ? "people" : "restaurants")}
-                style={{ padding:"12px 24px 11px", borderRadius:0, fontSize:10, fontFamily:"'DM Mono',monospace", letterSpacing:"1.2px", textTransform:"uppercase", background:"none", border:"none", borderBottom: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? `2px solid ${C.terracotta}` : "2px solid transparent", color: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? C.terracotta : C.muted, cursor:"pointer", marginBottom:"-1px", flexShrink:0, transition:"color 0.15s" }}>
+                style={{ padding:"12px 24px 11px", borderRadius:0, fontSize:10, fontFamily:"'DM Mono',monospace", letterSpacing:"1.2px", textTransform:"uppercase", background:"none", border:"none", borderBottom: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? `2px solid ${C.terracotta}` : `2px solid transparent`, color: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? C.terracotta : C.muted, cursor:"pointer", marginBottom:"-1px", flexShrink:0, transition:"color 0.15s" }}>
                 {t}
               </button>
             ))}
             </div>
+            <div style={{ position:"absolute", bottom:0, left:"10%", right:"10%", height:"1px", background:`linear-gradient(to right, transparent, ${C.border} 20%, ${C.border} 80%, transparent)` }} />
             {discoverSearchMode !== "people" && (
               <button type="button" onClick={() => setShowFilterSheet(true)}
                 style={{ flexShrink:0, display:"flex", alignItems:"center", gap:5, padding:"6px 12px", border:`1px solid ${venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.border}`, borderRadius:10, background:"transparent", color: venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.muted, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
@@ -3279,70 +3280,6 @@ Return a JSON object with exactly these fields:
               )}
             </div>
           </div>
-
-          {/* Filter Sheet */}
-          {showFilterSheet && createPortal(
-            <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:99999, display:"flex", alignItems:"flex-end" }} onClick={() => setShowFilterSheet(false)}>
-              <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:480, margin:"0 auto", background:C.bg2, borderRadius:"20px 20px 0 0", maxHeight:"80vh", overflowY:"auto", paddingBottom:32 }}>
-                <div style={{ padding:"16px 18px 12px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                  <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:18, color:C.text }}>Filter</div>
-                  <div style={{ display:"flex", gap:12, alignItems:"center" }}>
-                    <button type="button" onClick={() => { setVenueType("all"); setSecondaryCuisine(null); setFilterMood(null); }} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Clear all</button>
-                    <button type="button" onClick={() => setShowFilterSheet(false)} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:22, lineHeight:1, padding:0 }}>×</button>
-                  </div>
-                </div>
-
-                {/* Type */}
-                <div style={{ padding:"16px 18px 8px" }}>
-                  <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Type</div>
-                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                    {[{id:"all",label:"All"},{id:"restaurants",label:"Restaurant"},{id:"bars",label:"Bar"},{id:"hotels",label:"Hotel"},{id:"coffee",label:"Coffee"}].map(({id,label}) => (
-                      <button key={id} type="button" onClick={() => setVenueType(id)}
-                        style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${venueType===id ? C.terracotta : C.border}`, background: venueType===id ? C.terracotta : "transparent", color: venueType===id ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Cuisine */}
-                <div style={{ padding:"16px 18px 8px", borderTop:`1px solid ${C.border}` }}>
-                  <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Cuisine</div>
-                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                    {(venueType === "bars" ? ["Cocktail Bar","Wine Bar","Dive Bar","Sports Bar","Rooftop Bar","Jazz Bar","Speakeasy","Craft Beer","Sake Bar","Whiskey Bar"] :
-                      venueType === "coffee" ? ["Espresso Bar","Third Wave","Bakery Cafe","Specialty Coffee","Cold Brew","Matcha","Tea House"] :
-                      venueType === "hotels" ? ["Luxury","Boutique","Resort","Design Hotel","Historic","Budget"] :
-                      ["Italian","Japanese","Mexican","American","French","Chinese","Korean","Thai","Indian","Mediterranean","Seafood","Steakhouse","Pizza","Vegan","Middle Eastern","Spanish","Greek","Vietnamese","Turkish"]).map(c => (
-                      <button key={c} type="button" onClick={() => setSecondaryCuisine(secondaryCuisine===c ? null : c)}
-                        style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${secondaryCuisine===c ? C.terracotta : C.border}`, background: secondaryCuisine===c ? C.terracotta : "transparent", color: secondaryCuisine===c ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
-                        {c}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Mood */}
-                <div style={{ padding:"16px 18px 8px", borderTop:`1px solid ${C.border}` }}>
-                  <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Mood</div>
-                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                    {["Date Night","Business Dinner","Lunch","Brunch","Late Night","Group Friendly","Casual","Special Occasion","Outdoor","Bar Hopping"].map(m => (
-                      <button key={m} type="button" onClick={() => setFilterMood(filterMood===m ? null : m)}
-                        style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${filterMood===m ? C.terracotta : C.border}`, background: filterMood===m ? C.terracotta : "transparent", color: filterMood===m ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ padding:"16px 18px 0" }}>
-                  <button type="button" onClick={() => setShowFilterSheet(false)} style={{ width:"100%", padding:"14px", background:C.terracotta, border:"none", borderRadius:14, color:"#fff", fontSize:14, fontFamily:"Georgia,serif", fontStyle:"italic", cursor:"pointer" }}>
-                    Show results
-                  </button>
-                </div>
-              </div>
-            </div>,
-            document.getElementById('root')
-          )}
 
           {(() => {
             const lovedIds = heatResults.loved || [];
@@ -3431,51 +3368,43 @@ Return a JSON object with exactly these fields:
         </div>
         ) : (
           <div style={{ paddingTop: headerHeight }}>
-            {discoverModeSegmented}
-              <div style={{ margin: "0 16px 12px", position: "relative" }}>
-                <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: C.muted, pointerEvents: "none" }}>🔍</span>
-                <input
-                  type="text"
-                  value={peopleSearchInput}
-                  onChange={(e) => setPeopleSearchInput(e.target.value)}
-                  placeholder="Search by username or name..."
-                  style={{
-                    width: "100%",
-                    boxSizing: "border-box",
-                    padding: "7px 28px 7px 26px",
-                    borderRadius: 10,
-                    border: `1px solid ${peopleSearchInput ? C.terracotta : C.border}`,
-                    background: C.bg2,
-                    fontSize: 12,
-                    color: C.text,
-                    fontFamily: "Cormorant Garamond,Georgia,serif",
-                    fontStyle: "italic",
-                    outline: "none",
-                    transition: "border-color 0.2s",
-                  }}
-                />
-                {peopleSearchInput ? (
-                  <button
-                    type="button"
-                    onClick={() => setPeopleSearchInput("")}
-                    style={{
-                      position: "absolute",
-                      right: 9,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      color: C.muted,
-                      fontSize: 15,
-                      lineHeight: 1,
-                      padding: 2,
-                    }}
-                  >
-                    ×
-                  </button>
-                ) : null}
+            {/* Tabs row */}
+            <div style={{ display:"flex", alignItems:"center", borderBottom:`1px solid ${C.border}`, padding:"10px 16px 0", position:"relative" }}>
+              <div style={{ flex:1, display:"flex", justifyContent:"center" }}>
+              {["Places","People"].map((t) => (
+                <button key={t} type="button"
+                  onClick={() => setDiscoverSearchMode(t === "People" ? "people" : "restaurants")}
+                  style={{ padding:"12px 24px 11px", borderRadius:0, fontSize:10, fontFamily:"'DM Mono',monospace", letterSpacing:"1.2px", textTransform:"uppercase", background:"none", border:"none", borderBottom: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? `2px solid ${C.terracotta}` : `2px solid transparent`, color: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? C.terracotta : C.muted, cursor:"pointer", marginBottom:"-1px", flexShrink:0, transition:"color 0.15s" }}>
+                  {t}
+                </button>
+              ))}
               </div>
+              <div style={{ position:"absolute", bottom:0, left:"10%", right:"10%", height:"1px", background:`linear-gradient(to right, transparent, ${C.border} 20%, ${C.border} 80%, transparent)` }} />
+              {discoverSearchMode !== "people" && (
+                <button type="button" onClick={() => setShowFilterSheet(true)}
+                  style={{ flexShrink:0, display:"flex", alignItems:"center", gap:5, padding:"6px 12px", border:`1px solid ${venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.border}`, borderRadius:10, background:"transparent", color: venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.muted, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+                  Filter {(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0) > 0 ? `(${(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0)})` : ""}
+                </button>
+              )}
+            </div>
+            <div style={{ padding:"10px 16px 8px" }}>
+              <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+                <div style={{ flex:1, position:"relative" }}>
+                  <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:12, color:C.muted, pointerEvents:"none" }}>🔍</span>
+                  <input
+                    type="text"
+                    value={peopleSearchInput}
+                    onChange={(e) => setPeopleSearchInput(e.target.value)}
+                    placeholder="Search by username or name..."
+                    style={{ width:"100%", boxSizing:"border-box", padding:"11px 32px 11px 34px", borderRadius:14, border:`1.5px solid ${C.border}`, background:C.bg2, fontSize:14, color:C.text, fontFamily:"Cormorant Garamond,Georgia,serif", fontStyle:"italic", outline:"none" }}
+                  />
+                  {peopleSearchInput ? (
+                    <button type="button" onClick={() => setPeopleSearchInput("")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, lineHeight:1, padding:2 }}>×</button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
 
               {!peopleSearchInput.trim() ? (
                 followingPicksLoading ? (
@@ -3619,6 +3548,66 @@ Return a JSON object with exactly these fields:
               )}
           </div>
         )
+      )}
+
+      {showFilterSheet && createPortal(
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:99999, display:"flex", alignItems:"flex-end" }} onClick={() => setShowFilterSheet(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:480, margin:"0 auto", background:C.bg2, borderRadius:"20px 20px 0 0", maxHeight:"80vh", overflowY:"auto", paddingBottom:32 }}>
+            <div style={{ padding:"16px 18px 12px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:18, color:C.text }}>Filter</div>
+              <div style={{ display:"flex", gap:12, alignItems:"center" }}>
+                <button type="button" onClick={() => { setVenueType("all"); setSecondaryCuisine(null); setFilterMood(null); }} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Clear all</button>
+                <button type="button" onClick={() => setShowFilterSheet(false)} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:22, lineHeight:1, padding:0 }}>×</button>
+              </div>
+            </div>
+
+            <div style={{ padding:"16px 18px 8px" }}>
+              <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Type</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                {[{id:"all",label:"All"},{id:"restaurants",label:"Restaurant"},{id:"bars",label:"Bar"},{id:"hotels",label:"Hotel"},{id:"coffee",label:"Coffee"}].map(({id,label}) => (
+                  <button key={id} type="button" onClick={() => setVenueType(id)}
+                    style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${venueType===id ? C.terracotta : C.border}`, background: venueType===id ? C.terracotta : "transparent", color: venueType===id ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ padding:"16px 18px 8px", borderTop:`1px solid ${C.border}` }}>
+              <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Cuisine</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                {(venueType === "bars" ? ["Cocktail Bar","Wine Bar","Dive Bar","Sports Bar","Rooftop Bar","Jazz Bar","Speakeasy","Craft Beer","Sake Bar","Whiskey Bar"] :
+                  venueType === "coffee" ? ["Espresso Bar","Third Wave","Bakery Cafe","Specialty Coffee","Cold Brew","Matcha","Tea House"] :
+                  venueType === "hotels" ? ["Luxury","Boutique","Resort","Design Hotel","Historic","Budget"] :
+                  ["Italian","Japanese","Mexican","American","French","Chinese","Korean","Thai","Indian","Mediterranean","Seafood","Steakhouse","Pizza","Vegan","Middle Eastern","Spanish","Greek","Vietnamese","Turkish"]).map(c => (
+                  <button key={c} type="button" onClick={() => setSecondaryCuisine(secondaryCuisine===c ? null : c)}
+                    style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${secondaryCuisine===c ? C.terracotta : C.border}`, background: secondaryCuisine===c ? C.terracotta : "transparent", color: secondaryCuisine===c ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ padding:"16px 18px 8px", borderTop:`1px solid ${C.border}` }}>
+              <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Mood</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                {["Date Night","Business Dinner","Lunch","Brunch","Late Night","Group Friendly","Casual","Special Occasion","Outdoor","Bar Hopping"].map(m => (
+                  <button key={m} type="button" onClick={() => setFilterMood(filterMood===m ? null : m)}
+                    style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${filterMood===m ? C.terracotta : C.border}`, background: filterMood===m ? C.terracotta : "transparent", color: filterMood===m ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ padding:"16px 18px 0" }}>
+              <button type="button" onClick={() => setShowFilterSheet(false)} style={{ width:"100%", padding:"14px", background:C.terracotta, border:"none", borderRadius:14, color:"#fff", fontSize:14, fontFamily:"Georgia,serif", fontStyle:"italic", cursor:"pointer" }}>
+                Show results
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.getElementById("root") || document.body
       )}
 
       {/* Heat Tab */}
