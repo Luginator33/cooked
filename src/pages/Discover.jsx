@@ -3245,7 +3245,7 @@ Return a JSON object with exactly these fields:
             {["Places","People"].map((t) => (
               <button key={t} type="button"
                 onClick={() => setDiscoverSearchMode(t === "People" ? "people" : "restaurants")}
-                style={{ padding:"12px 20px 10px", fontSize:10, fontFamily:"'DM Mono',monospace", letterSpacing:"1.2px", textTransform:"uppercase", background:"none", border:"none", borderBottom: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? `2px solid ${C.terracotta}` : "2px solid transparent", color: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? C.terracotta : C.muted, cursor:"pointer", marginBottom:"-1px", flexShrink:0, transition:"color 0.15s" }}>
+                style={{ padding:"12px 24px 11px", borderRadius:0, fontSize:10, fontFamily:"'DM Mono',monospace", letterSpacing:"1.2px", textTransform:"uppercase", background:"none", border:"none", borderBottom: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? `2px solid ${C.terracotta}` : "2px solid transparent", color: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? C.terracotta : C.muted, cursor:"pointer", marginBottom:"-1px", flexShrink:0, transition:"color 0.15s" }}>
                 {t}
               </button>
             ))}
@@ -3270,14 +3270,14 @@ Return a JSON object with exactly these fields:
                   {(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0) > 0 ? `(${(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0)})` : ""}
                 </button>
               )}
+              {discoverSearchMode !== "people" && (venueType !== "all" || secondaryCuisine || filterMood) && (
+                <div style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center", flexShrink:0 }}>
+                  {venueType !== "all" && <button type="button" onClick={() => setVenueType("all")} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{venueType === "restaurants" ? "Restaurants" : venueType === "bars" ? "Bars" : venueType === "hotels" ? "Hotels" : "Coffee"} ×</button>}
+                  {secondaryCuisine && <button type="button" onClick={() => setSecondaryCuisine(null)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{secondaryCuisine} ×</button>}
+                  {filterMood && <button type="button" onClick={() => setFilterMood(null)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{filterMood} ×</button>}
+                </div>
+              )}
             </div>
-            {discoverSearchMode !== "people" && (venueType !== "all" || secondaryCuisine || filterMood) && (
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:8 }}>
-                {venueType !== "all" && <button type="button" onClick={() => setVenueType("all")} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{venueType === "restaurants" ? "Restaurants" : venueType === "bars" ? "Bars" : "Coffee"} ×</button>}
-                {secondaryCuisine && <button type="button" onClick={() => setSecondaryCuisine(null)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{secondaryCuisine} ×</button>}
-                {filterMood && <button type="button" onClick={() => setFilterMood(null)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{filterMood} ×</button>}
-              </div>
-            )}
           </div>
 
           {/* Filter Sheet */}
