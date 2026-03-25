@@ -1811,6 +1811,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       if (user?.id) {
         if (nowLoved) {
           syncLove(user.id, id);
+          supabase.from("notifications").insert({ user_id: user.id, type: "test_love", from_user_id: user.id, restaurant_id: String(id), read: false }).then(r => console.log("notif insert result:", JSON.stringify(r)));
           // Notify followers who have this on their watchlist
           supabase.from("user_data").select("clerk_user_id, watchlist").then(({ data }) => {
             if (!data) return;
