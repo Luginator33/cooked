@@ -3755,11 +3755,20 @@ Return a JSON object with exactly these fields:
               </button>
               {heatCityPickerOpen && (
                 <div style={{ position:"absolute", top:90, left:16, right:16, background:C.bg2, border:`1px solid ${C.border}`, borderRadius:14, zIndex:200, maxHeight:320, overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.4)" }}>
-                  {["All", ...getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults).flatMap(r => r.cities)].map(c => (
-                    <button key={c} type="button" onClick={() => { setHeatCity(c); setHeatCityPickerOpen(false); }}
-                      style={{ display:"block", width:"100%", padding:"10px 16px", textAlign:"left", background: heatCity===c ? `${C.terracotta}18` : "transparent", border:"none", color: heatCity===c ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
-                      {c === "All" ? "All Cities" : c}
-                    </button>
+                  <button type="button" onClick={() => { setHeatCity("All"); setHeatCityPickerOpen(false); }}
+                    style={{ display:"block", width:"100%", padding:"10px 16px", textAlign:"left", background: heatCity==="All" ? `${C.terracotta}18` : "transparent", border:"none", borderBottom:`1px solid ${C.border}`, color: heatCity==="All" ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                    All Cities
+                  </button>
+                  {getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults).map(({ region, cities }) => (
+                    <div key={region}>
+                      <div style={{ padding:"8px 16px 4px", fontSize:8, fontFamily:"'DM Mono',monospace", color:C.terracotta, letterSpacing:"1.8px", textTransform:"uppercase", borderTop:`1px solid ${C.border}` }}>{region}</div>
+                      {cities.map(c => (
+                        <button key={c} type="button" onClick={() => { setHeatCity(c); setHeatCityPickerOpen(false); }}
+                          style={{ display:"block", width:"100%", padding:"8px 16px", textAlign:"left", background: heatCity===c ? `${C.terracotta}18` : "transparent", border:"none", color: heatCity===c ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                          {c}
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}
