@@ -3233,20 +3233,22 @@ Return a JSON object with exactly these fields:
         discoverSearchMode === "restaurants" ? (
         <div style={{ paddingTop: headerHeight }}>
           {/* Tabs + Filter */}
-          <div style={{ borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", padding:"0 16px" }}>
+          <div style={{ borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", padding:"0 16px", gap:0 }}>
             {["Places","People"].map((t) => (
               <button key={t} type="button"
                 onClick={() => setDiscoverSearchMode(t === "People" ? "people" : "restaurants")}
-                style={{ padding:"10px 16px", fontSize:10, fontFamily:"'DM Mono',monospace", letterSpacing:"1.2px", textTransform:"uppercase", background:"none", border:"none", borderBottom: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? `2px solid ${C.terracotta}` : "2px solid transparent", color: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? C.terracotta : C.muted, cursor:"pointer", marginBottom:"-1px" }}>
+                style={{ padding:"10px 16px", fontSize:10, fontFamily:"'DM Mono',monospace", letterSpacing:"1.2px", textTransform:"uppercase", background:"none", border:"none", borderBottom: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? `2px solid ${C.terracotta}` : "2px solid transparent", color: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? C.terracotta : C.muted, cursor:"pointer", marginBottom:"-1px", flexShrink:0 }}>
                 {t}
               </button>
             ))}
             <div style={{ flex:1 }} />
+            {discoverSearchMode !== "people" && (
             <button type="button" onClick={() => setShowFilterSheet(true)}
               style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", border:`1px solid ${venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.border}`, borderRadius:10, background: venueType !== "all" || secondaryCuisine || filterMood ? `${C.terracotta}15` : "transparent", color: venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.muted, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
               Filter {(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0) > 0 ? `(${(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0)})` : ""}
             </button>
+            )}
           </div>
 
           {/* Search + active filter chips */}
@@ -3259,7 +3261,7 @@ Return a JSON object with exactly these fields:
               />
               {searchQuery && <button onClick={() => setSearchQuery("")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, lineHeight:1, padding:2 }}>×</button>}
             </div>
-            {(venueType !== "all" || secondaryCuisine || filterMood) && (
+            {discoverSearchMode !== "people" && (venueType !== "all" || secondaryCuisine || filterMood) && (
               <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 {venueType !== "all" && <button type="button" onClick={() => setVenueType("all")} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{venueType === "restaurants" ? "Restaurants" : venueType === "bars" ? "Bars" : "Coffee"} ×</button>}
                 {secondaryCuisine && <button type="button" onClick={() => setSecondaryCuisine(null)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{secondaryCuisine} ×</button>}
@@ -3284,7 +3286,7 @@ Return a JSON object with exactly these fields:
                 <div style={{ padding:"16px 18px 8px" }}>
                   <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Type</div>
                   <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                    {[{id:"all",label:"All"},{id:"restaurants",label:"Restaurant"},{id:"bars",label:"Bar"},{id:"coffee",label:"Coffee"}].map(({id,label}) => (
+                    {[{id:"all",label:"All"},{id:"restaurants",label:"Restaurant"},{id:"bars",label:"Bar"},{id:"hotels",label:"Hotel"},{id:"coffee",label:"Coffee"}].map(({id,label}) => (
                       <button key={id} type="button" onClick={() => setVenueType(id)}
                         style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${venueType===id ? C.terracotta : C.border}`, background: venueType===id ? C.terracotta : "transparent", color: venueType===id ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
                         {label}
@@ -3297,7 +3299,10 @@ Return a JSON object with exactly these fields:
                 <div style={{ padding:"16px 18px 8px", borderTop:`1px solid ${C.border}` }}>
                   <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Cuisine</div>
                   <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                    {["Italian","Japanese","Mexican","American","French","Chinese","Korean","Thai","Indian","Mediterranean","Seafood","Steakhouse","Pizza","Vegan"].map(c => (
+                    {(venueType === "bars" ? ["Cocktail Bar","Wine Bar","Dive Bar","Sports Bar","Rooftop Bar","Jazz Bar","Speakeasy","Craft Beer","Sake Bar","Whiskey Bar"] :
+                      venueType === "coffee" ? ["Espresso Bar","Third Wave","Bakery Cafe","Specialty Coffee","Cold Brew","Matcha","Tea House"] :
+                      venueType === "hotels" ? ["Luxury","Boutique","Resort","Design Hotel","Historic","Budget"] :
+                      ["Italian","Japanese","Mexican","American","French","Chinese","Korean","Thai","Indian","Mediterranean","Seafood","Steakhouse","Pizza","Vegan","Middle Eastern","Spanish","Greek","Vietnamese","Turkish"]).map(c => (
                       <button key={c} type="button" onClick={() => setSecondaryCuisine(secondaryCuisine===c ? null : c)}
                         style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${secondaryCuisine===c ? C.terracotta : C.border}`, background: secondaryCuisine===c ? C.terracotta : "transparent", color: secondaryCuisine===c ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
                         {c}
