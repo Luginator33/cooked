@@ -36,8 +36,24 @@ function FlameIcon({ size = 12, filled = true }) {
 }
 
 function RestCard({ r, onOpen }) {
-  const sharedPhotos = (() => { try { return JSON.parse(localStorage.getItem("cooked_shared_photos") || "{}"); } catch { return {}; } })();
-  const imgSrc = sharedPhotos[r.id] || sharedPhotos[String(r.id)] || r.img;
+  const [imgSrc, setImgSrc] = useState(() => {
+    try {
+      const cache = JSON.parse(localStorage.getItem("cooked_shared_photos") || "{}");
+      return cache[r.id] || cache[String(r.id)] || r.img;
+    } catch { return r.img; }
+  });
+  useEffect(() => {
+    const interval = setInterval(() => {
+      try {
+        const cache = JSON.parse(localStorage.getItem("cooked_shared_photos") || "{}");
+        const found = cache[r.id] || cache[String(r.id)];
+        if (found && found !== imgSrc) { setImgSrc(found); clearInterval(interval); }
+      } catch {}
+    }, 500);
+    setTimeout(() => clearInterval(interval), 5000);
+    return () => clearInterval(interval);
+  }, [r.id]);
+
   const flameCount = Math.round((r.rating || 0) / 2);
   return (
     <div
