@@ -439,16 +439,18 @@ function formatNotificationTime(iso) {
 }
 
 function notificationMessage(row) {
+  if (row?.type === "announcement" && row?.restaurant_name) return row.restaurant_name;
   if (row?.message != null && String(row.message).trim()) return String(row.message);
   if (row?.body != null && String(row.body).trim()) return String(row.body);
   if (row?.content != null && String(row.content).trim()) return String(row.content);
-  const name = row?.restaurant_name || "a restaurant";
+  const userName = row?._fromUser?.profile_name || "Someone";
+  const restName = row?.restaurant_name || "a restaurant";
   switch (row?.type) {
-    case "followed_you": return "Someone started following you";
-    case "friend_loved_your_watchlist": return `A friend loved ${name} — it's on your watchlist`;
-    case "friend_new_find": return `A friend added a new Find`;
-    case "friend_visited_city": return `A friend loved ${name} in a city you follow`;
-    case "restaurant_trending": return `${name} is trending`;
+    case "followed_you": return `${userName} started following you`;
+    case "friend_loved_your_watchlist": return `${userName} loved ${restName} — it's on your watchlist!`;
+    case "friend_new_find": return `${userName} added a new Find`;
+    case "friend_visited_city": return `${userName} loved ${restName} in a city you follow`;
+    case "restaurant_trending": return `${restName} is trending right now`;
     default: return "Notification";
   }
 }
@@ -1254,7 +1256,18 @@ export default function Discover({ tasteProfile, initialTab }) {
       .order("created_at", { ascending: false })
       .limit(20);
     const rows = data || [];
-    setNotifList(rows);
+    // Enrich notifications with user profile data
+    const userIds = [...new Set(rows.map(r => r.from_user_id).filter(Boolean))];
+    const userProfiles = {};
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase.from("user_data").select("clerk_user_id, profile_name, profile_username, profile_photo").in("clerk_user_id", userIds);
+      (profiles || []).forEach(p => { userProfiles[p.clerk_user_id] = p; });
+    }
+    const enriched = rows.map(r => ({
+      ...r,
+      _fromUser: r.from_user_id ? userProfiles[r.from_user_id] || null : null,
+    }));
+    setNotifList(enriched);
     setNotifLoading(false);
     // Let one paint so unread rows briefly show the terracotta accent before we mark read
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -5299,13 +5312,18 @@ Return a JSON object with exactly these fields:
               ) : (
                 notifList.map((n) => {
                   const unread = n.read === false;
+                  const fromUser = n._fromUser;
+                  const restaurant = n.restaurant_id ? allRestaurants.find(r => String(r.id) === String(n.restaurant_id)) : null;
+                  // Pick photo: user photo for follow, restaurant photo for restaurant events
+                  const photo = n.type === "followed_you" ? fromUser?.profile_photo : (restaurant ? getAnyCachedPhotoForId(restaurant.id) || restaurant.img : fromUser?.profile_photo);
                   return (
                     <div
                       key={n.id ?? `${n.created_at}-${n.type}`}
                       onClick={() => {
-                        if (n.restaurant_id) {
-                          const r = allRestaurants.find(r => String(r.id) === String(n.restaurant_id));
-                          if (r) { setNotifSheetOpen(false); setDetailRestaurant(r); }
+                        if (n.type === "followed_you" && n.from_user_id) {
+                          setNotifSheetOpen(false); setViewingUserId(n.from_user_id);
+                        } else if (n.restaurant_id) {
+                          if (restaurant) { setNotifSheetOpen(false); setDetailRestaurant(restaurant); }
                         } else if (n.from_user_id) {
                           setNotifSheetOpen(false); setViewingUserId(n.from_user_id);
                         }
@@ -5313,21 +5331,33 @@ Return a JSON object with exactly these fields:
                       style={{
                         display: "flex",
                         gap: 12,
-                        alignItems: "flex-start",
+                        alignItems: "center",
                         padding: "12px 0",
                         borderBottom: `1px solid ${C.border}`,
-                        borderLeft: unread ? `3px solid ${C.terracotta}` : "none",
-                        paddingLeft: unread ? 11 : 14,
                         cursor: "pointer",
+                        opacity: unread ? 1 : 0.7,
                       }}
                     >
-                      <div style={{ flexShrink: 0, marginTop: 2 }}>
-                        <NotificationTypeIcon type={n.type} size={18} />
+                      {/* Photo + icon badge */}
+                      <div style={{ position: "relative", flexShrink: 0 }}>
+                        <div style={{ width: 46, height: 46, borderRadius: n.type === "followed_you" ? "50%" : 10, overflow: "hidden", background: C.bg3, border: unread ? `2px solid ${C.terracotta}` : `1px solid ${C.border}` }}>
+                          {photo ? <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (
+                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <NotificationTypeIcon type={n.type} size={20} />
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ position: "absolute", bottom: -2, right: -2, width: 20, height: 20, borderRadius: "50%", background: C.bg2, border: `1.5px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <NotificationTypeIcon type={n.type} size={11} />
+                        </div>
                       </div>
+                      {/* Text */}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, color: C.text, fontFamily: "-apple-system,sans-serif", lineHeight: 1.45 }}>{notificationMessage(n)}</div>
-                        <div style={{ fontSize: 11, color: C.muted, fontFamily: "-apple-system,sans-serif", marginTop: 4 }}>{formatNotificationTime(n.created_at)}</div>
+                        <div style={{ fontSize: 13, color: C.text, fontFamily: "-apple-system,sans-serif", lineHeight: 1.4 }}>{notificationMessage(n)}</div>
+                        <div style={{ fontSize: 11, color: C.muted, fontFamily: "'DM Mono',monospace", marginTop: 3 }}>{formatNotificationTime(n.created_at)}</div>
                       </div>
+                      {/* Arrow */}
+                      <div style={{ color: C.dim, fontSize: 14, flexShrink: 0 }}>›</div>
                     </div>
                   );
                 })
