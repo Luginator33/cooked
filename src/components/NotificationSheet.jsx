@@ -323,8 +323,9 @@ export default function NotificationSheet({
                 return (
                   <div key={`section-${item._sectionHeader}`} style={{
                     padding: "14px 16px 6px",
-                    fontSize: 14, fontWeight: 700, color: C.text,
-                    fontFamily: "-apple-system,sans-serif",
+                    fontSize: 14, fontWeight: 700, color: C.muted,
+                    fontFamily: "Georgia,serif", fontStyle: "italic",
+                    letterSpacing: 0.3,
                   }}>
                     {item._sectionHeader}
                   </div>
@@ -394,9 +395,19 @@ export default function NotificationSheet({
                     </div>
                   </div>
 
-                  {/* Right side: Follow Back button OR restaurant thumbnail */}
-                  {isFollow && !alreadyFollowing ? (
-                    <FollowBackButton userId={item.from_user_id} onFollowBack={handleFollowBack} />
+                  {/* Right side: Follow Back / Following button OR restaurant thumbnail */}
+                  {isFollow ? (
+                    alreadyFollowing ? (
+                      <button type="button" disabled style={{
+                        height: 30, padding: "0 14px", borderRadius: 8, border: `1px solid ${C.border}`,
+                        background: "transparent", color: C.muted, fontSize: 12, fontWeight: 600,
+                        fontFamily: "-apple-system,sans-serif", cursor: "default", flexShrink: 0,
+                      }}>
+                        Following
+                      </button>
+                    ) : (
+                      <FollowBackButton userId={item.from_user_id} onFollowBack={handleFollowBack} />
+                    )
                   ) : showRestaurantThumb ? (
                     <SquareThumb src={restaurantPhotoSrc} size={44} />
                   ) : null}
