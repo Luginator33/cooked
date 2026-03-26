@@ -451,7 +451,12 @@ function notificationMessage(row) {
     case "friend_new_find": return `${userName} added a new Find`;
     case "friend_visited_city": return `${userName} loved ${restName} in a city you follow`;
     case "restaurant_trending": return `${restName} is trending right now`;
-    default: return "Notification";
+    default:
+      // Fallback: try to construct something useful from available fields
+      if (row?.restaurant_name && row?._fromUser?.profile_name) return `${userName} · ${restName}`;
+      if (row?.restaurant_name) return restName;
+      if (row?._fromUser?.profile_name) return `Activity from ${userName}`;
+      return "New activity";
   }
 }
 
