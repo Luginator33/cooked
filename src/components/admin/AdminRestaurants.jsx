@@ -206,7 +206,26 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
 
   const confirmImport = async () => {
     const photoUrl = importPhotos[selectedPhotoIdx] || importPreview.img;
-    const r = { ...importPreview, img: photoUrl, img2: photoUrl };
+    // Build restaurant object with only the fields the community_restaurants table accepts
+    const r = {
+      name: importPreview.name,
+      city: importPreview.city,
+      neighborhood: importPreview.neighborhood,
+      cuisine: importPreview.cuisine,
+      price: importPreview.price,
+      rating: importPreview.rating,
+      desc: importPreview.desc || importPreview.about || "",
+      tags: importPreview.tags,
+      lat: importPreview.lat,
+      lng: importPreview.lng,
+      address: importPreview.address,
+      phone: importPreview.phone,
+      website: importPreview.website,
+      img: photoUrl,
+      img2: photoUrl,
+      source: "Admin Import",
+      heat: importPreview.heat || "🔥🔥",
+    };
     try {
       const { data, error } = await addCommunityRestaurant(r);
       if (error) {
