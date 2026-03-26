@@ -44,7 +44,7 @@ import TasteProfile from "./TasteProfile";
 import UserProfile from "./UserProfile";
 import Onboarding from "./Onboarding";
 import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser, getAdminOverrides } from "../lib/supabase";
-import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities, syncRestaurant, seedAllRestaurants, getYoudLoveThis, getRisingRestaurants, getHiddenGems, getSixDegrees, getTasteFingerprint } from "../lib/neo4j";
+import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities, syncRestaurant, seedAllRestaurants, getYoudLoveThis, getRisingRestaurants, getHiddenGems, getSixDegrees, getTasteFingerprint, getPeopleLikeYou, getWhoToFollow } from "../lib/neo4j";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -684,6 +684,8 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [hiddenGems, setHiddenGems] = useState([]);
   const [sixDegreesResult, setSixDegreesResult] = useState(null);
   const [chatTasteProfile, setChatTasteProfile] = useState(null);
+  const [suggestedFriends, setSuggestedFriends] = useState([]);
+  const [peopleLikeYou, setPeopleLikeYou] = useState([]);
   const [sixDegreesTarget, setSixDegreesTarget] = useState(null);
   const [sixDegreesLoading, setSixDegreesLoading] = useState(false);
   const [showTasteProfile, setShowTasteProfile] = useState(false);
@@ -967,6 +969,8 @@ export default function Discover({ tasteProfile, initialTab }) {
       setRisingRestaurants(matched);
     });
     getTasteFingerprint(user.id).then(fp => setChatTasteProfile(fp)).catch(() => {});
+    getWhoToFollow(user.id, 8).then(setSuggestedFriends).catch(() => {});
+    getPeopleLikeYou(user.id, 8).then(setPeopleLikeYou).catch(() => {});
     getHiddenGems(8).then(results => {
       const matched = results
         .map(r => {
@@ -3573,44 +3577,113 @@ Return a JSON object with exactly these fields:
             </div>
 
               {!peopleSearchInput.trim() ? (
-                followingPicksLoading ? (
-                  <div style={{ textAlign: "center", padding: "40px 20px", color: C.muted, fontSize: 12, fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em" }}>LOADING PICKS…</div>
-                ) : followingPicksNoFollows ? (
-                  <div style={{ textAlign: "center", padding: "48px 24px", color: C.muted, fontSize: 14, fontFamily: "-apple-system,sans-serif" }}>Follow people to see their picks here</div>
-                ) : followingPicksRestaurants.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "48px 24px", color: C.muted, fontSize: 14, fontFamily: "-apple-system,sans-serif" }}>No picks from people you follow yet</div>
-                ) : (
-                  <div style={{ paddingBottom: 24 }}>
-                    <div
-                      style={{
-                        fontSize: 9,
-                        fontFamily: "'DM Mono',monospace",
-                        letterSpacing: "0.16em",
-                        textTransform: "uppercase",
-                        color: C.muted,
-                        padding: "4px 16px 10px",
-                      }}
-                    >
-                      FROM PEOPLE YOU FOLLOW
+                <div style={{ paddingBottom: 24 }}>
+                  {/* Suggested for You — friend of friend with taste overlap */}
+                  {suggestedFriends.length > 0 && (
+                    <div style={{ padding: "8px 16px 0" }}>
+                      <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, marginBottom: 10 }}>SUGGESTED FOR YOU</div>
+                      {suggestedFriends.map(person => (
+                        <div key={person.id} onClick={() => person.id && setViewingUserId(person.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                          <div style={{ width: 44, height: 44, borderRadius: "50%", border: `2px solid ${C.terracotta}`, background: C.bg3, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+                            <span style={{ fontSize: 16, color: C.terracotta, fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold" }}>{(person.name || "?")[0].toUpperCase()}</span>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: "Georgia,serif", fontWeight: 700, fontStyle: "italic", fontSize: 15, color: C.text }}>{person.name || "User"}</div>
+                            <div style={{ fontSize: 11, color: C.terracotta, marginTop: 2, fontFamily: "'DM Mono',monospace" }}>{person.sharedCount} restaurant{person.sharedCount !== 1 ? "s" : ""} in common</div>
+                            <div style={{ fontSize: 10, color: C.dim, marginTop: 1 }}>friend of a friend</div>
+                          </div>
+                          <button type="button" disabled={!user?.id} onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!user?.id || !person.id) return;
+                            await followUser(user.id, person.id);
+                            syncFollow(user.id, person.id);
+                            supabase.from("notifications").insert({ user_id: person.id, type: "followed_you", from_user_id: user.id, read: false });
+                            setSuggestedFriends(prev => prev.filter(p => p.id !== person.id));
+                          }} style={{ flexShrink: 0, padding: "6px 14px", borderRadius: 20, border: "none", background: C.terracotta, color: "#fff", fontSize: 12, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", fontWeight: 500 }}>
+                            Follow
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                    {followingPicksRestaurants.map((r, index) => (
-                      <RestCard
-                        key={`follow-pick-${r.id}-${photoCacheVersion}-${index}`}
-                        r={r}
-                        loved={heatResults.loved.includes(r.id)}
-                        watched={watchlist.includes(r.id)}
-                        onLove={() => toggleLove(r.id)}
-                        onWatch={() => toggleWatch(r.id)}
-                        onShare={share}
-                        onOpenDetail={setDetailRestaurant}
-                        onPhotoFetched={fetchAndCachePhoto}
-                        getCachedPhotoForId={getAnyCachedPhotoForId}
-                        photoCacheVersion={photoCacheVersion}
-                        usingSupabasePhotoCache={usingSupabasePhotoCache}
-                      />
-                    ))}
+                  )}
+
+                  {/* People Like You — shared taste */}
+                  {peopleLikeYou.length > 0 && (
+                    <div style={{ padding: "16px 16px 0" }}>
+                      <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, marginBottom: 10 }}>PEOPLE LIKE YOU</div>
+                      {peopleLikeYou.map(person => (
+                        <div key={person.id} onClick={() => person.id && setViewingUserId(person.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                          <div style={{ width: 44, height: 44, borderRadius: "50%", border: `2px solid ${C.border}`, background: C.bg3, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+                            <span style={{ fontSize: 16, color: C.muted, fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold" }}>{(person.name || "?")[0].toUpperCase()}</span>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: "Georgia,serif", fontWeight: 700, fontStyle: "italic", fontSize: 15, color: C.text }}>{person.name || "User"}</div>
+                            <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: "'DM Mono',monospace" }}>{person.sharedCount} restaurant{person.sharedCount !== 1 ? "s" : ""} in common</div>
+                          </div>
+                          <button type="button" disabled={!user?.id} onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!user?.id || !person.id) return;
+                            await followUser(user.id, person.id);
+                            syncFollow(user.id, person.id);
+                            supabase.from("notifications").insert({ user_id: person.id, type: "followed_you", from_user_id: user.id, read: false });
+                            setPeopleLikeYou(prev => prev.filter(p => p.id !== person.id));
+                          }} style={{ flexShrink: 0, padding: "6px 14px", borderRadius: 20, border: `1px solid ${C.terracotta}`, background: "transparent", color: C.terracotta, fontSize: 12, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", fontWeight: 500 }}>
+                            Follow
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Invite Friends */}
+                  <div style={{ padding: "16px 16px 0" }}>
+                    <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, marginBottom: 10 }}>INVITE FRIENDS</div>
+                    <button type="button" onClick={() => {
+                      const url = window.location.origin;
+                      if (navigator.share) {
+                        navigator.share({ title: "Join me on Cooked", text: "The restaurant app for people who care about where they eat.", url });
+                      } else {
+                        navigator.clipboard?.writeText(url);
+                      }
+                    }} style={{ width: "100%", padding: "14px 16px", borderRadius: 14, border: `1px solid ${C.border}`, background: C.bg2, color: C.text, fontSize: 14, fontFamily: "-apple-system,sans-serif", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 18 }}>📨</span>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>Share Cooked with a friend</div>
+                        <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Send them a link to join</div>
+                      </div>
+                    </button>
                   </div>
-                )
+
+                  {/* Following's Picks — existing feature, moved below */}
+                  {!followingPicksLoading && !followingPicksNoFollows && followingPicksRestaurants.length > 0 && (
+                    <div style={{ padding: "16px 0 0" }}>
+                      <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted, padding: "4px 16px 10px" }}>FROM PEOPLE YOU FOLLOW</div>
+                      {followingPicksRestaurants.map((r, index) => (
+                        <RestCard
+                          key={`follow-pick-${r.id}-${photoCacheVersion}-${index}`}
+                          r={r}
+                          loved={heatResults.loved.includes(r.id)}
+                          watched={watchlist.includes(r.id)}
+                          onLove={() => toggleLove(r.id)}
+                          onWatch={() => toggleWatch(r.id)}
+                          onShare={share}
+                          onOpenDetail={setDetailRestaurant}
+                          onPhotoFetched={fetchAndCachePhoto}
+                          getCachedPhotoForId={getAnyCachedPhotoForId}
+                          photoCacheVersion={photoCacheVersion}
+                          usingSupabasePhotoCache={usingSupabasePhotoCache}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Empty state when no suggestions and no following picks */}
+                  {suggestedFriends.length === 0 && peopleLikeYou.length === 0 && followingPicksRestaurants.length === 0 && !followingPicksLoading && (
+                    <div style={{ textAlign: "center", padding: "32px 24px", color: C.muted, fontSize: 14, fontFamily: "-apple-system,sans-serif" }}>
+                      Search for friends above or invite them to join Cooked
+                    </div>
+                  )}
+                </div>
               ) : peopleSearchLoading || peopleSearchInput.trim() !== peopleDebouncedQuery.trim() ? (
                 <div style={{ textAlign: "center", padding: "32px 20px", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Searching…</div>
               ) : peopleSearchResults.length === 0 ? (
