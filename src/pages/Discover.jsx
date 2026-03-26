@@ -1246,6 +1246,79 @@ export default function Discover({ tasteProfile, initialTab }) {
     return () => clearInterval(intervalId);
   }, [user?.id]);
 
+  // Poll for new followers and create "followed_you" notifications for any missing ones.
+  // Compares current follower set against a cached set so it works even if follows table
+  // has no created_at column. Catches follows where the inline insert failed.
+  const knownFollowersRef = useRef(null);
+  useEffect(() => {
+    if (!user?.id) return;
+    const checkNewFollowers = async () => {
+      try {
+        // Get all current followers
+        const { data: allFollows, error: fErr } = await supabase
+          .from("follows")
+          .select("follower_id")
+          .eq("following_id", user.id);
+        if (fErr || !allFollows) return;
+        const currentFollowerIds = allFollows.map(f => f.follower_id);
+        // First run: seed the known set and check for any followers without notifications
+        if (knownFollowersRef.current === null) {
+          knownFollowersRef.current = new Set(currentFollowerIds);
+          // On first load, check for followers that have no "followed_you" notification at all
+          if (currentFollowerIds.length > 0) {
+            const { data: existingNotifs } = await supabase
+              .from("notifications")
+              .select("from_user_id")
+              .eq("user_id", user.id)
+              .eq("type", "followed_you")
+              .in("from_user_id", currentFollowerIds);
+            const alreadyNotified = new Set((existingNotifs || []).map(n => n.from_user_id));
+            const missing = currentFollowerIds.filter(fid => !alreadyNotified.has(fid));
+            if (missing.length > 0) {
+              const rows = missing.map(fid => ({
+                user_id: user.id,
+                type: "followed_you",
+                from_user_id: fid,
+                read: false,
+              }));
+              await supabase.from("notifications").insert(rows);
+            }
+          }
+          return;
+        }
+        // Subsequent runs: detect new followers since last check
+        const newFollowers = currentFollowerIds.filter(fid => !knownFollowersRef.current.has(fid));
+        if (newFollowers.length > 0) {
+          // Double-check no notification already exists for these
+          const { data: existingNotifs } = await supabase
+            .from("notifications")
+            .select("from_user_id")
+            .eq("user_id", user.id)
+            .eq("type", "followed_you")
+            .in("from_user_id", newFollowers);
+          const alreadyNotified = new Set((existingNotifs || []).map(n => n.from_user_id));
+          const missing = newFollowers.filter(fid => !alreadyNotified.has(fid));
+          if (missing.length > 0) {
+            const rows = missing.map(fid => ({
+              user_id: user.id,
+              type: "followed_you",
+              from_user_id: fid,
+              read: false,
+            }));
+            await supabase.from("notifications").insert(rows);
+          }
+        }
+        knownFollowersRef.current = new Set(currentFollowerIds);
+      } catch (e) {
+        console.error("[Notif] follow poll error:", e);
+      }
+    };
+    // Run once on mount, then every 30 seconds
+    checkNewFollowers();
+    const pollId = setInterval(checkNewFollowers, 30000);
+    return () => clearInterval(pollId);
+  }, [user?.id]);
+
   const openNotificationsSheet = async () => {
     setNotifSheetOpen(true);
     if (!user?.id) {
@@ -3158,7 +3231,9 @@ Return a JSON object with exactly these fields:
               >
                 <NotificationBellIcon color={C.text} />
                 {notifUnreadCount > 0 ? (
-                  <span style={{ position:"absolute", top:6, right:6, width:8, height:8, borderRadius:"50%", background:C.terracotta, pointerEvents:"none" }} />
+                  <span style={{ position:"absolute", top:2, right:2, minWidth:16, height:16, borderRadius:8, background:C.terracotta, pointerEvents:"none", display:"flex", alignItems:"center", justifyContent:"center", padding:"0 4px", boxSizing:"border-box" }}>
+                    <span style={{ fontSize:9, fontWeight:700, color:"#fff", fontFamily:"'DM Sans',sans-serif", lineHeight:1 }}>{notifUnreadCount > 99 ? "99+" : notifUnreadCount}</span>
+                  </span>
                 ) : null}
               </button>
               <button
