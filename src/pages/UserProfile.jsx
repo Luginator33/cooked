@@ -287,12 +287,13 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
         setFollowersCount((n) => Math.max(0, n - 1));
       } else {
         syncFollow(currentUserClerkId, profileClerkId);
+        console.log("[Notif] sending follow notification to", profileClerkId, "from", currentUserClerkId);
         supabase.from("notifications").insert({
           user_id: profileClerkId,
           type: "followed_you",
           from_user_id: currentUserClerkId,
           read: false,
-        });
+        }).then(({ error }) => { if (error) console.error("[Notif] follow insert error:", error); else console.log("[Notif] follow notification sent!"); });
       }
     }
     setPendingFollow(false);

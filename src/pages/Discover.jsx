@@ -1977,13 +1977,16 @@ export default function Discover({ tasteProfile, initialTab }) {
           if (fullRest) syncRestaurant(fullRest);
           syncLove(user.id, id);
           // Notify followers who have this on their watchlist
-          supabase.from("user_data").select("clerk_user_id, watchlist").then(({ data }) => {
-            if (!data) return;
+          supabase.from("user_data").select("clerk_user_id, watchlist").then(({ data, error: selErr }) => {
+            if (selErr) { console.error("[Notif] user_data select error:", selErr); return; }
+            if (!data) { console.log("[Notif] no user_data rows"); return; }
             const restaurant = allRestaurants.find(r => r.id === id || r.id === Number(id));
+            console.log("[Notif] checking", data.length, "users for watchlist match on id:", id);
             data.forEach(row => {
               if (row.clerk_user_id === user.id) return;
               const wl = Array.isArray(row.watchlist) ? row.watchlist : [];
               if (wl.map(String).includes(String(id))) {
+                console.log("[Notif] sending watchlist notification to", row.clerk_user_id, "for", restaurant?.name);
                 supabase.from("notifications").insert({
                   user_id: row.clerk_user_id,
                   type: "friend_loved_your_watchlist",
@@ -1991,17 +1994,20 @@ export default function Discover({ tasteProfile, initialTab }) {
                   restaurant_id: String(id),
                   restaurant_name: restaurant?.name || "",
                   read: false,
-                });
+                }).then(({ error }) => { if (error) console.error("[Notif] insert error:", error); else console.log("[Notif] watchlist notification sent!"); });
               }
             });
           });
           // Notify followers who follow cities where this restaurant is located
           const restaurant = allRestaurants.find(r => r.id === id || r.id === Number(id));
           if (restaurant?.city) {
-            supabase.from("city_follows").select("clerk_user_id").eq("city", restaurant.city).then(({ data: cityFollowers }) => {
+            supabase.from("city_follows").select("clerk_user_id").eq("city", restaurant.city).then(({ data: cityFollowers, error: cfErr }) => {
+              if (cfErr) { console.error("[Notif] city_follows select error:", cfErr); return; }
               if (!cityFollowers) return;
+              console.log("[Notif] checking", cityFollowers.length, "city followers for", restaurant.city);
               cityFollowers.forEach(row => {
                 if (row.clerk_user_id === user.id) return;
+                console.log("[Notif] sending city notification to", row.clerk_user_id);
                 supabase.from("notifications").insert({
                   user_id: row.clerk_user_id,
                   type: "friend_visited_city",
@@ -2009,7 +2015,7 @@ export default function Discover({ tasteProfile, initialTab }) {
                   restaurant_id: String(id),
                   restaurant_name: restaurant.name,
                   read: false,
-                });
+                }).then(({ error }) => { if (error) console.error("[Notif] city insert error:", error); else console.log("[Notif] city notification sent!"); });
               });
             });
           }
