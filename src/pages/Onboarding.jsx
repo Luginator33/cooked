@@ -703,12 +703,122 @@ function JourneyDemo() {
   );
 }
 
+function ConciergeDemo() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", textAlign: "center" }}>
+      <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+        {/* Chat mockup */}
+        <div style={{
+          background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 16, padding: "14px 16px",
+          animation: "avatarPop 0.5s ease forwards", opacity: 0, transform: "scale(0)",
+        }}>
+          {/* User message */}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+            <div style={{ background: C.terracotta, borderRadius: "14px 14px 4px 14px", padding: "8px 12px", maxWidth: "75%", fontSize: 13, color: "#fff", fontFamily: "-apple-system, sans-serif" }}>
+              Date night tonight — somewhere moody with great pasta
+            </div>
+          </div>
+          {/* Bot response */}
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <div style={{ width: 24, height: 24, borderRadius: "50%", background: `linear-gradient(135deg, ${C.terracotta}, #c9973f)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, flexShrink: 0 }}>🍽</div>
+            <div style={{ background: C.bg, borderRadius: "14px 14px 14px 4px", padding: "8px 12px", fontSize: 13, color: C.text, fontFamily: "-apple-system, sans-serif", lineHeight: 1.45 }}>
+              <em style={{ fontWeight: 600 }}>Rezdôra</em>. Stefano Secchi's tortellini in brodo is the most comforting bowl in Manhattan. Candlelit, intimate, perfect for tonight.
+            </div>
+          </div>
+        </div>
+
+        {/* Feature highlights */}
+        {[
+          { icon: "✦", text: "Knows your taste — recommends based on what you love" },
+          { icon: "👥", text: "Knows your friends — 'Sarah loved this place last week'" },
+          { icon: "🔗", text: "Connects dots — same chef, same group, same energy" },
+        ].map((f, i) => (
+          <div key={i} style={{
+            background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 12,
+            padding: "10px 14px", display: "flex", gap: 10, alignItems: "center", textAlign: "left",
+            animation: "avatarPop 0.4s ease forwards", animationDelay: `${200 + i * 120}ms`, opacity: 0, transform: "scale(0)",
+          }}>
+            <span style={{ fontSize: 16 }}>{f.icon}</span>
+            <span style={{ fontSize: 12, color: C.text, fontFamily: "-apple-system, sans-serif" }}>{f.text}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 20, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
+        Your personal concierge
+      </div>
+      <div style={{ marginTop: 8, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
+        Ask anything — a vibe, a craving, a neighborhood. It knows <span style={{ color: C.terracotta }}>your taste, your friends, and every restaurant</span>.
+      </div>
+    </div>
+  );
+}
+
+function AddFriendsDemo() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", textAlign: "center" }}>
+      <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+        {/* Friend cards */}
+        {[
+          { name: "Sarah M.", initial: "S", bg: "#c4603a", loved: 42, cities: 5, mutual: "Nobu, Bestia" },
+          { name: "James K.", initial: "J", bg: "#8b5e3c", loved: 28, cities: 3, mutual: "Lucali, Atomix" },
+          { name: "Diana R.", initial: "D", bg: "#a05238", loved: 35, cities: 7, mutual: "Dishoom, Noma" },
+        ].map((f, i) => (
+          <div key={i} style={{
+            background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 14,
+            padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, textAlign: "left",
+            animation: "avatarPop 0.5s ease forwards", animationDelay: `${i * 150}ms`, opacity: 0, transform: "scale(0)",
+          }}>
+            <div style={{ width: 44, height: 44, borderRadius: "50%", background: f.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "#fff", fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: "bold", flexShrink: 0 }}>
+              {f.initial}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, color: C.text, fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: "bold" }}>{f.name}</div>
+              <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                {f.loved} loved · {f.cities} cities
+              </div>
+              <div style={{ fontSize: 10, color: C.terracotta, marginTop: 1 }}>
+                You both love: {f.mutual}
+              </div>
+            </div>
+            <div style={{
+              padding: "6px 14px", borderRadius: 20, background: C.terracotta,
+              color: "#fff", fontSize: 12, fontFamily: "-apple-system, sans-serif", fontWeight: 500, flexShrink: 0,
+            }}>
+              Follow
+            </div>
+          </div>
+        ))}
+
+        {/* Benefits */}
+        <div style={{
+          background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 12,
+          padding: "12px 14px", textAlign: "left",
+          animation: "avatarPop 0.5s ease forwards", animationDelay: "450ms", opacity: 0, transform: "scale(0)",
+        }}>
+          <div style={{ fontSize: 10, color: C.terracotta, fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", marginBottom: 6 }}>WHEN YOU FOLLOW FRIENDS</div>
+          <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5, fontFamily: "-apple-system, sans-serif" }}>
+            See where they eat. Get notified when they find a new spot. Discover restaurants in common. Trust real taste, not strangers.
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 20, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
+        Better with friends
+      </div>
+      <div style={{ marginTop: 8, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
+        Follow the people whose taste you trust. Their discoveries <span style={{ color: C.terracotta }}>become yours</span>.
+      </div>
+    </div>
+  );
+}
+
 export default function Onboarding({ onComplete }) {
   const [slide, setSlide] = useState(0);
   const [phase, setPhase] = useState("in");
   const [fontsReady, setFontsReady] = useState(false);
   const [mosaicPhotos, setMosaicPhotos] = useState([]);
-  const totalSlides = 5;
+  const totalSlides = 7;
 
   useEffect(() => {
     document.fonts.ready.then(() => setFontsReady(true));
@@ -746,7 +856,7 @@ export default function Onboarding({ onComplete }) {
     }, 180);
   };
 
-  const buttonText = ["Let's go", "Next", "Next", "Next", "Start swiping"][slide];
+  const buttonText = ["Let's go", "Next", "Next", "Next", "Next", "Next", "Start swiping"][slide];
   const content = useMemo(() => {
     if (slide === 0) {
       const photos = mosaicPhotos;
@@ -814,7 +924,9 @@ export default function Onboarding({ onComplete }) {
 
     if (slide === 2) return <DiscoveryDemo />;
     if (slide === 3) return <SocialDemo />;
-    if (slide === 4) return <JourneyDemo />;
+    if (slide === 4) return <ConciergeDemo />;
+    if (slide === 5) return <AddFriendsDemo />;
+    if (slide === 6) return <JourneyDemo />;
     return null;
   }, [slide, mosaicPhotos]);
 

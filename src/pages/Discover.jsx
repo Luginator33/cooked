@@ -44,7 +44,7 @@ import TasteProfile from "./TasteProfile";
 import UserProfile from "./UserProfile";
 import Onboarding from "./Onboarding";
 import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser, getAdminOverrides } from "../lib/supabase";
-import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities, syncRestaurant, seedAllRestaurants, getYoudLoveThis, getRisingRestaurants, getHiddenGems, getSixDegrees } from "../lib/neo4j";
+import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities, syncRestaurant, seedAllRestaurants, getYoudLoveThis, getRisingRestaurants, getHiddenGems, getSixDegrees, getTasteFingerprint } from "../lib/neo4j";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -683,6 +683,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [risingRestaurants, setRisingRestaurants] = useState([]);
   const [hiddenGems, setHiddenGems] = useState([]);
   const [sixDegreesResult, setSixDegreesResult] = useState(null);
+  const [chatTasteProfile, setChatTasteProfile] = useState(null);
   const [sixDegreesTarget, setSixDegreesTarget] = useState(null);
   const [sixDegreesLoading, setSixDegreesLoading] = useState(false);
   const [showTasteProfile, setShowTasteProfile] = useState(false);
@@ -965,6 +966,7 @@ export default function Discover({ tasteProfile, initialTab }) {
         .filter(Boolean);
       setRisingRestaurants(matched);
     });
+    getTasteFingerprint(user.id).then(fp => setChatTasteProfile(fp)).catch(() => {});
     getHiddenGems(8).then(results => {
       const matched = results
         .map(r => {
@@ -3152,7 +3154,7 @@ Return a JSON object with exactly these fields:
 
           {/* Inline chat (replaces hero card); key remounts on each Home visit to re-randomize chips */}
           <div style={{ marginTop: 12 }}>
-            <ChatBot key={homeChatKey} inline allRestaurants={allRestaurants} initialInput={chatInput} initialMessages={restoredMessages} />
+            <ChatBot key={homeChatKey} inline allRestaurants={allRestaurants} initialInput={chatInput} initialMessages={restoredMessages} userId={user?.id} lovedRestaurants={lovedRestaurants} watchlist={watchlist} followedCities={followedCities} tasteProfile={chatTasteProfile} />
           </div>
 
           {(() => {
