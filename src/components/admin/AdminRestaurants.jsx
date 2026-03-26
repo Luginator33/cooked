@@ -113,14 +113,21 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
       const priceMap = { PRICE_LEVEL_FREE: "$", PRICE_LEVEL_INEXPENSIVE: "$", PRICE_LEVEL_MODERATE: "$$", PRICE_LEVEL_EXPENSIVE: "$$$", PRICE_LEVEL_VERY_EXPENSIVE: "$$$$" };
       const price = priceMap[d.priceLevel] || "$$";
 
-      // Fetch photos
+      // Fetch photos — use direct media URL (no skipHttpRedirect, just the image URL)
       const photos = [];
       for (const p of (d.photos || []).slice(0, 8)) {
         try {
+          // Try the JSON approach first
           const photoRes = await fetch(`https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&skipHttpRedirect=true`, { headers: { "X-Goog-Api-Key": GOOGLE_KEY } });
-          const photoData = await photoRes.json();
-          if (photoData.photoUri) photos.push(photoData.photoUri);
-        } catch {}
+          if (photoRes.ok) {
+            const photoData = await photoRes.json();
+            if (photoData.photoUri) { photos.push(photoData.photoUri); continue; }
+          }
+          // Fallback: construct direct URL
+          photos.push(`https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${GOOGLE_KEY}`);
+        } catch {
+          photos.push(`https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${GOOGLE_KEY}`);
+        }
       }
       setImportPhotos(photos);
 
@@ -198,22 +205,35 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
   };
 
   const confirmImport = async () => {
-    const r = { ...importPreview, img: importPhotos[selectedPhotoIdx] || importPreview.img };
-    const { data } = await addCommunityRestaurant(r);
-    if (importPhotos[selectedPhotoIdx]) {
-      const newId = data?.[0]?.id || r.id;
-      await saveSharedPhoto(String(newId), importPhotos[selectedPhotoIdx]);
+    const photoUrl = importPhotos[selectedPhotoIdx] || importPreview.img;
+    const r = { ...importPreview, img: photoUrl, img2: photoUrl };
+    try {
+      const { data, error } = await addCommunityRestaurant(r);
+      if (error) {
+        console.error("Import error:", error);
+        showToast("Save failed: " + (error.message || "unknown error"), "error");
+        return;
+      }
+      const savedId = data?.[0]?.id || r.id;
+      if (photoUrl) {
+        await saveSharedPhoto(String(savedId), photoUrl);
+      }
+      // Sync to Neo4j with the saved ID
+      await syncRestaurant({ ...r, id: savedId });
+      await logAdminAction("restaurant_smart_import", userId, "restaurant", String(savedId), { name: r.name, city: r.city });
+      showToast(`Imported ${r.name} (ID: ${savedId})`);
+      setImportPreview(null);
+      setImportStage(null);
+      setImportSearch("");
+      setImportCity("");
+      setPlacesResults([]);
+      setImportPhotos([]);
+      setSelectedPhotoIdx(0);
+      onRestaurantsChanged?.();
+    } catch (e) {
+      console.error("Import exception:", e);
+      showToast("Import failed: " + e.message, "error");
     }
-    await syncRestaurant(r);
-    await logAdminAction("restaurant_smart_import", userId, "restaurant", null, { name: r.name, city: r.city });
-    showToast(`Imported ${r.name}`);
-    setImportPreview(null);
-    setImportStage(null);
-    setImportSearch("");
-    setImportCity("");
-    setPlacesResults([]);
-    setImportPhotos([]);
-    onRestaurantsChanged?.();
   };
 
   // ── MERGE ──
