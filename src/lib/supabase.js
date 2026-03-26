@@ -210,3 +210,160 @@ export async function getUserProfile(clerkUserId) {
     .single()
   return { data, error }
 }
+
+// ── ADMIN FUNCTIONS ──────────────────────────────────────────
+
+// Admin overrides (edit/remove/merge static restaurants at runtime)
+export async function getAdminOverrides() {
+  const { data, error } = await supabase.from('admin_overrides').select('*');
+  if (error) console.error('getAdminOverrides:', error);
+  return data || [];
+}
+
+export async function upsertAdminOverride(restaurantId, action, overrideData, adminId) {
+  const { error } = await supabase.from('admin_overrides').upsert({
+    restaurant_id: String(restaurantId), action, override_data: overrideData || null,
+    merged_into_id: null, created_by: adminId, updated_at: new Date().toISOString(),
+  }, { onConflict: 'restaurant_id' });
+  if (error) console.error('upsertAdminOverride:', error);
+  return { error };
+}
+
+export async function deleteAdminOverride(restaurantId) {
+  const { error } = await supabase.from('admin_overrides').delete().eq('restaurant_id', String(restaurantId));
+  return { error };
+}
+
+// Blocked users
+export async function blockUser(clerkUserId, adminId, reason) {
+  const { error } = await supabase.from('blocked_users').upsert({
+    clerk_user_id: clerkUserId, blocked_by: adminId, reason: reason || null,
+  }, { onConflict: 'clerk_user_id' });
+  return { error };
+}
+
+export async function unblockUser(clerkUserId) {
+  const { error } = await supabase.from('blocked_users').delete().eq('clerk_user_id', clerkUserId);
+  return { error };
+}
+
+export async function getBlockedUsers() {
+  const { data, error } = await supabase.from('blocked_users').select('*').order('blocked_at', { ascending: false });
+  return data || [];
+}
+
+export async function isUserBlocked(clerkUserId) {
+  const { data } = await supabase.from('blocked_users').select('clerk_user_id').eq('clerk_user_id', clerkUserId).single();
+  return !!data;
+}
+
+// Activity log
+export async function logAdminAction(action, actorId, targetType, targetId, details) {
+  await supabase.from('activity_log').insert({ action, actor_id: actorId, target_type: targetType, target_id: targetId, details: details || null });
+}
+
+export async function getActivityLog(limit = 50, offset = 0) {
+  const { data, error } = await supabase.from('activity_log').select('*').order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+  return data || [];
+}
+
+// Reports
+export async function getReports(status = 'pending') {
+  const { data } = await supabase.from('reports').select('*').eq('status', status).order('created_at', { ascending: false });
+  return data || [];
+}
+
+export async function resolveReport(reportId, adminId, resolution) {
+  const { error } = await supabase.from('reports').update({ status: resolution, resolved_by: adminId, resolved_at: new Date().toISOString() }).eq('id', reportId);
+  return { error };
+}
+
+export async function submitReport(reporterId, targetType, targetId, reason) {
+  const { error } = await supabase.from('reports').insert({ reporter_id: reporterId, target_type: targetType, target_id: targetId, reason });
+  return { error };
+}
+
+// Feature flags
+export async function getFeatureFlags() {
+  const { data } = await supabase.from('feature_flags').select('*').order('key');
+  return data || [];
+}
+
+export async function setFeatureFlag(key, enabled, adminId, description) {
+  const { error } = await supabase.from('feature_flags').upsert({
+    key, enabled, description: description || null, updated_by: adminId, updated_at: new Date().toISOString(),
+  }, { onConflict: 'key' });
+  return { error };
+}
+
+// Photo submissions / moderation
+export async function getPhotoSubmissions(status = 'pending') {
+  const { data } = await supabase.from('photo_submissions').select('*').eq('status', status).order('created_at', { ascending: false });
+  return data || [];
+}
+
+export async function reviewPhotoSubmission(submissionId, approved, adminId) {
+  const update = { status: approved ? 'approved' : 'rejected', reviewed_by: adminId, reviewed_at: new Date().toISOString() };
+  const { error } = await supabase.from('photo_submissions').update(update).eq('id', submissionId);
+  return { error };
+}
+
+// User management
+export async function getAllUsers(limit = 100, offset = 0, search = '') {
+  let query = supabase.from('user_data').select('clerk_user_id, profile_name, profile_username, profile_photo, is_admin, updated_at').order('updated_at', { ascending: false });
+  if (search) query = query.or(`profile_name.ilike.%${search}%,profile_username.ilike.%${search}%`);
+  const { data, error } = await query.range(offset, offset + limit - 1);
+  return data || [];
+}
+
+export async function setUserAdmin(clerkUserId, isAdmin) {
+  const { error } = await supabase.from('user_data').update({ is_admin: isAdmin }).eq('clerk_user_id', clerkUserId);
+  return { error };
+}
+
+export async function deleteUserData(clerkUserId) {
+  await supabase.from('follows').delete().eq('follower_id', clerkUserId);
+  await supabase.from('follows').delete().eq('following_id', clerkUserId);
+  await supabase.from('city_follows').delete().eq('clerk_user_id', clerkUserId);
+  await supabase.from('notifications').delete().eq('user_id', clerkUserId);
+  const { error } = await supabase.from('user_data').delete().eq('clerk_user_id', clerkUserId);
+  return { error };
+}
+
+// Analytics
+export async function getAnalytics() {
+  const [usersRes, photosRes] = await Promise.all([
+    supabase.from('user_data').select('clerk_user_id, profile_name, loved, updated_at'),
+    supabase.from('restaurant_photos').select('restaurant_id', { count: 'exact', head: true }),
+  ]);
+  const users = usersRes.data || [];
+  const totalUsers = users.length;
+  let totalLoves = 0;
+  const cityLoves = {};
+  users.forEach(u => {
+    const loved = Array.isArray(u.loved) ? u.loved : (u.loved?.loved || []);
+    totalLoves += loved.length;
+  });
+  return { totalUsers, totalLoves, totalPhotos: photosRes.count || 0 };
+}
+
+// Send notification to specific users or all
+export async function sendBroadcastNotification(adminId, message, targetUserIds) {
+  const rows = targetUserIds.map(uid => ({
+    user_id: uid, type: 'announcement', from_user_id: adminId,
+    restaurant_name: message, read: false,
+  }));
+  const { error } = await supabase.from('notifications').insert(rows);
+  return { error };
+}
+
+// Community restaurant management
+export async function updateCommunityRestaurant(id, updates) {
+  const { error } = await supabase.from('community_restaurants').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id);
+  return { error };
+}
+
+export async function deleteCommunityRestaurant(id) {
+  const { error } = await supabase.from('community_restaurants').delete().eq('id', id);
+  return { error };
+}

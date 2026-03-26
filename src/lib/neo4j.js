@@ -436,3 +436,40 @@ export async function getSixDegrees(restaurantId1, restaurantId2) {
     pathLength: records[0].get('pathLength').toNumber(),
   };
 }
+
+// ── ADMIN FUNCTIONS ──────────────────────────────────────────
+
+export async function getGraphStats() {
+  const [users, restaurants, loves, follows, cities] = await Promise.all([
+    runQuery('MATCH (u:User) RETURN count(u) AS c'),
+    runQuery('MATCH (r:Restaurant) RETURN count(r) AS c'),
+    runQuery('MATCH ()-[l:LOVED]->() RETURN count(l) AS c'),
+    runQuery('MATCH ()-[f:FOLLOWS]->() RETURN count(f) AS c'),
+    runQuery('MATCH (c:City) RETURN count(c) AS c'),
+  ]);
+  return {
+    users: users[0]?.get('c')?.toNumber() || 0,
+    restaurants: restaurants[0]?.get('c')?.toNumber() || 0,
+    loves: loves[0]?.get('c')?.toNumber() || 0,
+    follows: follows[0]?.get('c')?.toNumber() || 0,
+    cities: cities[0]?.get('c')?.toNumber() || 0,
+  };
+}
+
+export async function transferLoves(fromId, toId) {
+  await runQuery(
+    `MATCH (u:User)-[l:LOVED]->(from:Restaurant {id: $fromId})
+     MERGE (to:Restaurant {id: $toId})
+     MERGE (u)-[nl:LOVED]->(to)
+     SET nl.timestamp = l.timestamp
+     DELETE l`,
+    { fromId: String(fromId), toId: String(toId) }
+  );
+}
+
+export async function deleteUserFromGraph(clerkUserId) {
+  await runQuery(
+    `MATCH (u:User {id: $userId}) DETACH DELETE u`,
+    { userId: clerkUserId }
+  );
+}

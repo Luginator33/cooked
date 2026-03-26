@@ -43,7 +43,7 @@ import Profile from "./Profile";
 import TasteProfile from "./TasteProfile";
 import UserProfile from "./UserProfile";
 import Onboarding from "./Onboarding";
-import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser } from "../lib/supabase";
+import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser, getAdminOverrides } from "../lib/supabase";
 import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities, syncRestaurant, seedAllRestaurants, getYoudLoveThis, getRisingRestaurants, getHiddenGems, getSixDegrees } from "../lib/neo4j";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -1280,6 +1280,26 @@ export default function Discover({ tasteProfile, initialTab }) {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Apply admin overrides (edits/deletions) from Supabase
+  useEffect(() => {
+    getAdminOverrides().then(overrides => {
+      if (!overrides || overrides.length === 0) return;
+      setAllRestaurants(prev => {
+        let result = prev;
+        const deleteIds = new Set();
+        const edits = {};
+        overrides.forEach(o => {
+          if (o.action === "delete" || o.action === "merge_into") deleteIds.add(String(o.restaurant_id));
+          if (o.action === "edit" && o.override_data) edits[String(o.restaurant_id)] = o.override_data;
+        });
+        if (deleteIds.size > 0) result = result.filter(r => !deleteIds.has(String(r.id)));
+        if (Object.keys(edits).length > 0) result = result.map(r => edits[String(r.id)] ? { ...r, ...edits[String(r.id)] } : r);
+        return result;
+      });
+    });
+  }, []);
+
   useEffect(() => { safeSetItem("cooked_ratings", JSON.stringify(userRatings)); }, [userRatings]);
   useEffect(() => { safeSetItem("cooked_notes", JSON.stringify(userNotes)); }, [userNotes]);
   useEffect(() => { safeSetItem("cooked_lists", JSON.stringify(userLists)); }, [userLists]);

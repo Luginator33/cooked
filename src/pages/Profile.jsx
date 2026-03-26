@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { getFollowers, getFollowing, getUserProfile, saveSharedPhoto, saveUserData, saveUserPhotos, supabase } from "../lib/supabase";
 import { getCookedScore, getCityReadiness } from "../lib/neo4j";
+import AdminPanel from "../components/admin/AdminPanel";
 
 function safeSetItem(key, value) {
   try {
@@ -98,6 +99,7 @@ export default function Profile({
   const [photoSyncMessage, setPhotoSyncMessage] = useState(null);
   const [cookedScore, setCookedScore] = useState(0);
   const [cityReadiness, setCityReadiness] = useState([]);
+  const [adminOpen, setAdminOpen] = useState(false);
 
   useEffect(() => {
     if (!clerkName) return;
@@ -831,6 +833,13 @@ export default function Profile({
                     {photoSyncMessage}
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={() => { setSettingsOpen(false); setAdminOpen(true); }}
+                  style={{ width: "100%", padding: "14px 16px", background: C.terracotta, border: "none", borderRadius: 12, color: "#fff", fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 10, fontWeight: 600 }}
+                >
+                  Admin Panel
+                </button>
               </>
             )}
 
@@ -920,6 +929,9 @@ export default function Profile({
           </div>
         </div>
       )}
+
+      {/* Admin Panel */}
+      {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} allRestaurants={allRestaurants} userId={user?.id} />}
 
       {/* Edit profile modal */}
       {editing && (
