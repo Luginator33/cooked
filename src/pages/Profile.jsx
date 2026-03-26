@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { getFollowers, getFollowing, getUserProfile, saveSharedPhoto, saveUserData, saveUserPhotos, supabase } from "../lib/supabase";
-import { getCookedScore } from "../lib/neo4j";
+import { getCookedScore, getCityReadiness } from "../lib/neo4j";
 
 function safeSetItem(key, value) {
   try {
@@ -97,6 +97,7 @@ export default function Profile({
   const [photoSyncTotal, setPhotoSyncTotal] = useState(0);
   const [photoSyncMessage, setPhotoSyncMessage] = useState(null);
   const [cookedScore, setCookedScore] = useState(0);
+  const [cityReadiness, setCityReadiness] = useState([]);
 
   useEffect(() => {
     if (!clerkName) return;
@@ -409,6 +410,7 @@ export default function Profile({
   useEffect(() => {
     if (!user?.id) { setCookedScore(0); return; }
     getCookedScore(user.id).then((score) => setCookedScore(score));
+    getCityReadiness(user.id).then((data) => setCityReadiness(data || []));
   }, [user?.id]);
 
   const openSocialList = async (kind) => {
@@ -622,6 +624,46 @@ export default function Profile({
           </button>
         </div>
       ) : null}
+
+      {/* City Readiness */}
+      {cityReadiness.length > 0 && (
+        <div style={{ padding: "12px 18px 0" }}>
+          <div style={{ fontSize: 10, color: C.muted, fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
+            City readiness
+          </div>
+          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
+            {cityReadiness.map(c => {
+              const pct = Math.round((c.pctExplored || 0) * 100);
+              const circumference = 2 * Math.PI * 22;
+              const offset = circumference - (pct / 100) * circumference;
+              return (
+                <div key={c.city} style={{ minWidth: 110, maxWidth: 110, flexShrink: 0, background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 10px", textAlign: "center" }}>
+                  <svg width="52" height="52" viewBox="0 0 52 52" style={{ display: "block", margin: "0 auto 6px" }}>
+                    <circle cx="26" cy="26" r="22" fill="none" stroke={C.dim} strokeWidth="4" />
+                    <circle cx="26" cy="26" r="22" fill="none" stroke={C.terracotta} strokeWidth="4"
+                      strokeDasharray={circumference} strokeDashoffset={offset}
+                      strokeLinecap="round" transform="rotate(-90 26 26)" />
+                    <text x="26" y="28" textAnchor="middle" fill={C.text} fontSize="13" fontFamily="Georgia,serif" fontWeight="bold">
+                      {pct}%
+                    </text>
+                  </svg>
+                  <div style={{ fontSize: 12, color: C.text, fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", marginBottom: 2 }}>
+                    {c.city}
+                  </div>
+                  <div style={{ fontSize: 9, color: C.muted }}>
+                    {c.lovedInCity}/{c.totalInCity} spots
+                  </div>
+                  {c.untriedCuisines.length > 0 && (
+                    <div style={{ fontSize: 8, color: C.terracotta, marginTop: 4, lineHeight: 1.3 }}>
+                      Try: {c.untriedCuisines.slice(0, 2).join(", ")}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Username */}
       <div style={{ padding: "10px 18px 0", fontSize: 12, color: C.muted, fontFamily: "-apple-system,sans-serif" }}>{username}</div>

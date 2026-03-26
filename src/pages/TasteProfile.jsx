@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
-import { getTasteFingerprint, getCookedScore, getPeopleLikeYou, getWhoToFollow } from "../lib/neo4j";
+import { getTasteFingerprint, getCookedScore, getPeopleLikeYou, getWhoToFollow, getYoudLoveThis } from "../lib/neo4j";
 
 const C = {
   bg: "#0f0c09",
@@ -24,12 +24,13 @@ function initialsFromPerson(person) {
   return s.slice(0, 2).toUpperCase();
 }
 
-export default function TasteProfile({ onBack, onViewUser, allRestaurants = [] }) {
+export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRestaurants = [] }) {
   const { user } = useUser();
   const [fingerprint, setFingerprint] = useState(null);
   const [cookedScore, setCookedScore] = useState(0);
   const [peopleLikeYou, setPeopleLikeYou] = useState([]);
   const [whoToFollow, setWhoToFollow] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cuisineBarsReady, setCuisineBarsReady] = useState(false);
 
@@ -40,11 +41,19 @@ export default function TasteProfile({ onBack, onViewUser, allRestaurants = [] }
       getCookedScore(user.id),
       getPeopleLikeYou(user.id, 5),
       getWhoToFollow(user.id, 5),
-    ]).then(([fp, score, people, follow]) => {
+      getYoudLoveThis(user.id, 6),
+    ]).then(([fp, score, people, follow, recs]) => {
       setFingerprint(fp);
       setCookedScore(score);
       setPeopleLikeYou(people);
       setWhoToFollow(follow);
+      const matched = (recs || [])
+        .map(r => {
+          const full = allRestaurants.find(ar => String(ar.id) === String(r.id));
+          return full ? { ...full, _weight: r.weight, _recommenders: r.recommenders } : null;
+        })
+        .filter(Boolean);
+      setRecommendations(matched);
       setLoading(false);
     });
   }, [user?.id]);
@@ -105,11 +114,13 @@ export default function TasteProfile({ onBack, onViewUser, allRestaurants = [] }
   return (
     <>
       <style>{`
-        @keyframes taste-flame-flicker {
-          0%, 100% { transform: scaleY(1) scaleX(1); opacity: 1; filter: brightness(1); }
-          25% { transform: scaleY(1.08) scaleX(0.96); opacity: 0.95; filter: brightness(1.15); }
-          50% { transform: scaleY(0.94) scaleX(1.04); opacity: 1; filter: brightness(0.9); }
-          75% { transform: scaleY(1.05) scaleX(0.98); opacity: 0.92; filter: brightness(1.1); }
+        @keyframes orb-pulse {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 20px 6px rgba(196,96,58,0.4), 0 0 40px 12px rgba(196,96,58,0.15); }
+          50% { transform: scale(1.1); box-shadow: 0 0 28px 10px rgba(228,110,50,0.5), 0 0 56px 20px rgba(196,96,58,0.2); }
+        }
+        @keyframes orb-inner {
+          0%, 100% { opacity: 0.6; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.15); }
         }
         @keyframes taste-skeleton-pulse {
           0%, 100% { opacity: 0.45; }
@@ -125,36 +136,31 @@ export default function TasteProfile({ onBack, onViewUser, allRestaurants = [] }
         .taste-flame {
           position: relative;
           width: 56px;
-          height: 72px;
+          height: 56px;
           flex-shrink: 0;
-          animation: taste-flame-flicker 1.2s ease-in-out infinite;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
-        .taste-flame span {
+        .taste-flame .orb-outer {
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          background: radial-gradient(circle at 40% 38%, #ff9a4a 0%, #c4603a 45%, #8b2a12 100%);
+          animation: orb-pulse 2.4s ease-in-out infinite;
+        }
+        .taste-flame .orb-inner {
           position: absolute;
-          bottom: 0;
-          border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
-        }
-        .taste-flame .f1 {
+          top: 50%;
           left: 50%;
-          transform: translateX(-50%);
+          margin-top: -14px;
+          margin-left: -14px;
           width: 28px;
-          height: 52px;
-          background: radial-gradient(ellipse at 50% 100%, #ff9a4a 0%, #e85d2a 40%, #c43020 100%);
-          box-shadow: 0 0 20px rgba(228, 90, 40, 0.5);
-        }
-        .taste-flame .f2 {
-          left: 8px;
-          width: 18px;
-          height: 40px;
-          background: radial-gradient(ellipse at 50% 100%, #ffd080 0%, #ff7a3a 55%, transparent 100%);
-          opacity: 0.9;
-        }
-        .taste-flame .f3 {
-          right: 6px;
-          width: 16px;
-          height: 36px;
-          background: radial-gradient(ellipse at 50% 100%, #fff5e0 0%, #ffb040 50%, transparent 100%);
-          opacity: 0.75;
+          height: 28px;
+          border-radius: 50%;
+          background: radial-gradient(circle at 45% 42%, #ffe0b0 0%, #ffaa50 40%, #c4603a 100%);
+          animation: orb-inner 2.4s ease-in-out infinite;
+          animation-delay: 0.3s;
         }
       `}</style>
       <div
@@ -346,12 +352,52 @@ export default function TasteProfile({ onBack, onViewUser, allRestaurants = [] }
                 </div>
                 <div style={{ display: "flex", alignItems: "center", paddingTop: 8 }}>
                   <div className="taste-flame" aria-hidden>
-                    <span className="f1" />
-                    <span className="f2" />
-                    <span className="f3" />
+                    <div className="orb-outer" />
+                    <div className="orb-inner" />
                   </div>
                 </div>
               </div>
+
+              {/* You'd Love This */}
+              {recommendations.length > 0 && (
+                <section style={{ marginBottom: 28 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, fontFamily: "'DM Mono', monospace", marginBottom: 10 }}>
+                    YOU'D LOVE THIS
+                  </div>
+                  <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch", marginLeft: -16, paddingLeft: 16, marginRight: -16, paddingRight: 16 }}>
+                    {recommendations.map(r => {
+                      let imgSrc = r.img;
+                      try {
+                        const cache = JSON.parse(localStorage.getItem("cooked_shared_photos") || "{}");
+                        imgSrc = cache[r.id] || cache[String(r.id)] || r.img;
+                      } catch {}
+                      return (
+                        <div
+                          key={r.id}
+                          onClick={() => onOpenDetail?.(r)}
+                          style={{ minWidth: 130, maxWidth: 130, flexShrink: 0, cursor: "pointer" }}
+                        >
+                          <div style={{ width: 130, height: 130, borderRadius: 14, overflow: "hidden", background: C.bg2, border: `1px solid ${C.border}`, position: "relative" }}>
+                            {imgSrc ? <img src={imgSrc} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                            <div style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,0.5)", borderRadius: 8, padding: "2px 6px", fontSize: 11, color: C.terracotta, fontFamily: "Georgia,serif", fontWeight: "bold" }}>
+                              {r.rating}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 12, color: C.text, fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", marginTop: 6, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {r.name}
+                          </div>
+                          <div style={{ fontSize: 9, color: C.muted, marginTop: 2 }}>
+                            {r.cuisine} · {r.city}
+                          </div>
+                          <div style={{ fontSize: 9, color: C.terracotta, marginTop: 2, fontFamily: "'DM Mono', monospace" }}>
+                            {r._weight} {r._weight === 1 ? "taste match" : "taste matches"}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
 
               {/* Top Cuisines */}
               {cuisinesFiltered.length > 0 && (

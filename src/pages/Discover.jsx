@@ -44,7 +44,7 @@ import TasteProfile from "./TasteProfile";
 import UserProfile from "./UserProfile";
 import Onboarding from "./Onboarding";
 import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser } from "../lib/supabase";
-import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities } from "../lib/neo4j";
+import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities, syncRestaurant, seedAllRestaurants, getYoudLoveThis, getRisingRestaurants, getHiddenGems, getSixDegrees } from "../lib/neo4j";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -679,6 +679,12 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [city, setCity] = useState("Los Angeles");
   const [followedCities, setFollowedCities] = useState([]);
   const [trendingInCities, setTrendingInCities] = useState([]);
+  const [youdLoveThis, setYoudLoveThis] = useState([]);
+  const [risingRestaurants, setRisingRestaurants] = useState([]);
+  const [hiddenGems, setHiddenGems] = useState([]);
+  const [sixDegreesResult, setSixDegreesResult] = useState(null);
+  const [sixDegreesTarget, setSixDegreesTarget] = useState(null);
+  const [sixDegreesLoading, setSixDegreesLoading] = useState(false);
   const [showTasteProfile, setShowTasteProfile] = useState(false);
   const [watchlist, setWatchlist] = useState(() => {
     try { return JSON.parse(safeLocalStorageGetItem("cooked_watchlist") || "[]"); } catch { return []; }
@@ -927,6 +933,48 @@ export default function Discover({ tasteProfile, initialTab }) {
       }
     });
   }, [user?.id, followedCities.length]);
+
+  // One-time seed: enrich all restaurants in Neo4j graph
+  useEffect(() => {
+    if (safeLocalStorageGetItem("cooked_graph_seeded_v2")) return;
+    if (!import.meta.env.VITE_NEO4J_URI) return;
+    seedAllRestaurants(allRestaurants).then(() => {
+      try { window.localStorage.setItem("cooked_graph_seeded_v2", "1"); } catch {}
+      console.log("[Neo4j] Graph seeded with", allRestaurants.length, "restaurants");
+    }).catch(e => console.error("[Neo4j] Seed error:", e));
+  }, []);
+
+  // Fetch Neo4j-powered discovery feeds
+  useEffect(() => {
+    if (!user?.id) return;
+    getYoudLoveThis(user.id, 8).then(results => {
+      const matched = results
+        .map(r => {
+          const full = allRestaurants.find(ar => String(ar.id) === String(r.id));
+          return full ? { ...full, _weight: r.weight, _recommenders: r.recommenders } : null;
+        })
+        .filter(Boolean);
+      setYoudLoveThis(matched);
+    });
+    getRisingRestaurants(8).then(results => {
+      const matched = results
+        .map(r => {
+          const full = allRestaurants.find(ar => String(ar.id) === String(r.id));
+          return full ? { ...full, _recentLoves: r.recentLoves } : null;
+        })
+        .filter(Boolean);
+      setRisingRestaurants(matched);
+    });
+    getHiddenGems(8).then(results => {
+      const matched = results
+        .map(r => {
+          const full = allRestaurants.find(ar => String(ar.id) === String(r.id));
+          return full ? { ...full, _loveCount: r.loveCount } : null;
+        })
+        .filter(Boolean);
+      setHiddenGems(matched);
+    });
+  }, [user?.id]);
 
   const toggleCityFollow = async (cityName, e) => {
     e.preventDefault();
@@ -1860,6 +1908,8 @@ export default function Discover({ tasteProfile, initialTab }) {
       const nowLoved = !isLoved;
       if (user?.id) {
         if (nowLoved) {
+          const fullRest = allRestaurants.find(r => r.id === id || r.id === Number(id));
+          if (fullRest) syncRestaurant(fullRest);
           syncLove(user.id, id);
           // Notify followers who have this on their watchlist
           supabase.from("user_data").select("clerk_user_id, watchlist").then(({ data }) => {
@@ -3205,6 +3255,100 @@ Return a JSON object with exactly these fields:
             </div>
           ) : null}
 
+          {/* You'd Love This — collaborative filtering */}
+          {youdLoveThis.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <div style={{ padding: "0 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontFamily: "Cormorant Garamond", fontStyle: "italic", fontSize: 22, color: C.text }}>You'd love this</span>
+              </div>
+              <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingLeft: 16, paddingRight: 16, paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
+                {youdLoveThis.map(r => (
+                  <HomePhotoCard
+                    key={`rec-${r.id}-${photoCacheVersion}`}
+                    r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }}
+                    onClick={() => setDetailRestaurant(r)}
+                    style={{ minWidth: 170, maxWidth: 170, height: 220, borderRadius: 14, flexShrink: 0 }}
+                  >
+                    <div style={{ position: "absolute", top: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 15, color: "#c4603a" }}>
+                      {r.rating}
+                    </div>
+                    <div style={{ position: "absolute", bottom: 40, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
+                      {r.name}
+                    </div>
+                    <div style={{ position: "absolute", bottom: 24, left: 10, fontSize: 11, color: "rgba(240,235,226,0.6)" }}>
+                      {r.cuisine || ""}
+                    </div>
+                    <div style={{ position: "absolute", bottom: 8, left: 10, fontSize: 10, color: "#c4603a", fontFamily: "'DM Mono', monospace" }}>
+                      {r._weight} {r._weight === 1 ? "match" : "matches"}
+                    </div>
+                  </HomePhotoCard>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Rising — trending last 30 days */}
+          {risingRestaurants.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <div style={{ padding: "0 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontFamily: "Cormorant Garamond", fontStyle: "italic", fontSize: 22, color: C.text }}>Rising</span>
+                <span style={{ fontSize: 11, color: "#5a3a20", fontFamily: "'DM Mono', monospace" }}>last 30 days</span>
+              </div>
+              <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingLeft: 16, paddingRight: 16, paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
+                {risingRestaurants.map(r => (
+                  <HomePhotoCard
+                    key={`rise-${r.id}-${photoCacheVersion}`}
+                    r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }}
+                    onClick={() => setDetailRestaurant(r)}
+                    style={{ minWidth: 150, maxWidth: 150, height: 200, borderRadius: 14, flexShrink: 0 }}
+                  >
+                    <div style={{ position: "absolute", top: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 15, color: "#c4603a" }}>
+                      {r.rating}
+                    </div>
+                    <div style={{ position: "absolute", bottom: 28, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
+                      {r.name}
+                    </div>
+                    <div style={{ position: "absolute", bottom: 10, left: 10, fontSize: 10, color: "rgba(240,235,226,0.6)" }}>
+                      {r._recentLoves} recent {r._recentLoves === 1 ? "love" : "loves"}
+                    </div>
+                  </HomePhotoCard>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Hidden Gems — high rated, few loves */}
+          {hiddenGems.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <div style={{ padding: "0 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontFamily: "Cormorant Garamond", fontStyle: "italic", fontSize: 22, color: C.text }}>Hidden gems</span>
+              </div>
+              <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingLeft: 16, paddingRight: 16, paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
+                {hiddenGems.map(r => (
+                  <HomePhotoCard
+                    key={`gem-${r.id}-${photoCacheVersion}`}
+                    r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }}
+                    onClick={() => setDetailRestaurant(r)}
+                    style={{ minWidth: 170, maxWidth: 170, height: 220, borderRadius: 14, flexShrink: 0 }}
+                  >
+                    <div style={{ position: "absolute", top: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 15, color: "#c4603a" }}>
+                      {r.rating}
+                    </div>
+                    <div style={{ position: "absolute", bottom: 40, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
+                      {r.name}
+                    </div>
+                    <div style={{ position: "absolute", bottom: 24, left: 10, fontSize: 11, color: "rgba(240,235,226,0.6)" }}>
+                      {r.cuisine || ""}
+                    </div>
+                    <div style={{ position: "absolute", bottom: 8, left: 10, fontSize: 10, color: "#c4603a", fontFamily: "'DM Mono', monospace" }}>
+                      {r.city}
+                    </div>
+                  </HomePhotoCard>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={{ marginTop: 20 }}>
             <div style={{ padding: "0 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", fontSize: 20, color: "#f0ebe2" }}>Hot right now</span>
@@ -4392,7 +4536,7 @@ Return a JSON object with exactly these fields:
               <div style={{ position:"absolute", inset:0, background:"linear-gradient(to bottom, rgba(5,3,1,0.08) 0%, rgba(5,3,1,0.15) 25%, rgba(5,3,1,0.72) 60%, rgba(5,3,1,0.97) 100%)" }} />
               {/* top bar */}
               <div style={{ position:"absolute", top:16, left:16, right:16, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                <button type="button" onClick={() => setDetailRestaurant(null)} style={{ width:30, height:30, minWidth:30, minHeight:30, maxWidth:30, maxHeight:30, borderRadius:"50%", background:"rgba(0,0,0,0.4)", border:"1px solid rgba(255,255,255,0.22)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#ffffff", fontSize:16, lineHeight:1, padding:0, boxSizing:"border-box", flexShrink:0, textAlign:"center" }}>‹</button>
+                <button type="button" onClick={() => { setDetailRestaurant(null); setSixDegreesResult(null); setSixDegreesTarget(null); setSixDegreesLoading(false); }} style={{ width:30, height:30, minWidth:30, minHeight:30, maxWidth:30, maxHeight:30, borderRadius:"50%", background:"rgba(0,0,0,0.4)", border:"1px solid rgba(255,255,255,0.22)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#ffffff", fontSize:16, lineHeight:1, padding:0, boxSizing:"border-box", flexShrink:0, textAlign:"center" }}>‹</button>
                 {/* Cooked logo top right */}
                 <div style={{ background:"rgba(5,3,1,0.65)", border:"1px solid rgba(240,235,226,0.15)", borderRadius:20, padding:"5px 12px", display:"flex", alignItems:"center" }}>
                   <span style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontWeight:"bold", fontSize:13, color:"#f0ebe2", letterSpacing:"-0.5px" }}>cook</span><span style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontWeight:"bold", fontSize:13, color:"#c4603a", letterSpacing:"-0.5px" }}>ed</span>
@@ -4528,6 +4672,115 @@ Return a JSON object with exactly these fields:
                 </div>
               </button>
             )}
+
+            {/* 6 DEGREES — find connection to another restaurant */}
+            <div style={{ background: "#130d06", borderBottom: "1px solid #2e1f0e", padding: "12px 18px" }}>
+              {!sixDegreesResult && !sixDegreesLoading && !sixDegreesTarget && (
+                <button
+                  type="button"
+                  onClick={() => setSixDegreesTarget(detail)}
+                  style={{
+                    width: "100%", background: "transparent", border: "1px solid #2e1f0e",
+                    borderRadius: 10, padding: "10px 14px", color: "#c4603a", fontSize: 13,
+                    fontFamily: "'DM Mono', monospace", cursor: "pointer", textAlign: "left",
+                    display: "flex", alignItems: "center", gap: 8,
+                  }}
+                >
+                  <span style={{ fontSize: 16 }}>&#x1f517;</span>
+                  <span>Find a connection to another restaurant</span>
+                </button>
+              )}
+              {sixDegreesTarget && !sixDegreesResult && !sixDegreesLoading && (
+                <div>
+                  <div style={{ fontSize: 10, color: "#5a3a20", fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
+                    6 DEGREES — pick a restaurant
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {allRestaurants
+                      .filter(r => String(r.id) !== String(detail.id))
+                      .slice(0, 12)
+                      .map(r => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => {
+                            setSixDegreesLoading(true);
+                            getSixDegrees(detail.id, r.id).then(result => {
+                              setSixDegreesResult(result);
+                              setSixDegreesLoading(false);
+                            });
+                          }}
+                          style={{
+                            background: "#1a1208", border: "1px solid #2e1f0e", borderRadius: 8,
+                            padding: "6px 10px", color: "#f0ebe2", fontSize: 12, cursor: "pointer",
+                            fontFamily: "'DM Sans', sans-serif",
+                          }}
+                        >
+                          {r.name}
+                        </button>
+                      ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSixDegreesTarget(null)}
+                    style={{ background: "none", border: "none", color: "#5a3a20", fontSize: 11, marginTop: 8, cursor: "pointer" }}
+                  >
+                    cancel
+                  </button>
+                </div>
+              )}
+              {sixDegreesLoading && (
+                <div style={{ color: "#5a3a20", fontSize: 13, fontFamily: "'DM Mono', monospace", padding: "8px 0" }}>
+                  Finding connection...
+                </div>
+              )}
+              {sixDegreesResult && (
+                <div>
+                  <div style={{ fontSize: 10, color: "#5a3a20", fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>
+                    THE CHAIN
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                    {sixDegreesResult.chain.map((node, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{
+                          width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                          background: node.type === "restaurant" ? "#c4603a" : "#2e1f0e",
+                          color: "#f0ebe2", fontSize: 12, fontWeight: "bold", flexShrink: 0,
+                        }}>
+                          {node.type === "restaurant" ? "R" : "U"}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, color: "#f0ebe2", fontFamily: "'DM Sans', sans-serif", fontWeight: node.type === "restaurant" ? "bold" : "normal" }}>
+                            {node.name || "Unknown"}
+                          </div>
+                          <div style={{ fontSize: 10, color: "#5a3a20" }}>
+                            {node.type === "restaurant" ? (node.city || "") : "loved both"}
+                          </div>
+                        </div>
+                        {i < sixDegreesResult.chain.length - 1 && (
+                          <div style={{ position: "absolute", left: 31, marginTop: 36, width: 1, height: 12, background: "#2e1f0e" }} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 11, color: "#c4603a", fontFamily: "'DM Mono', monospace" }}>
+                    {Math.floor(sixDegreesResult.pathLength / 2)} degree{Math.floor(sixDegreesResult.pathLength / 2) !== 1 ? "s" : ""} of separation
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setSixDegreesResult(null); setSixDegreesTarget(null); }}
+                    style={{ background: "none", border: "none", color: "#5a3a20", fontSize: 11, marginTop: 6, cursor: "pointer" }}
+                  >
+                    try another
+                  </button>
+                </div>
+              )}
+              {sixDegreesResult === null && sixDegreesLoading === false && sixDegreesTarget && (
+                <div style={{ color: "#5a3a20", fontSize: 12, fontStyle: "italic", marginTop: 4 }}>
+                  No connection found yet
+                </div>
+              )}
+            </div>
 
             {/* SECTION 4 — DESCRIPTION */}
             {detail.desc && (
@@ -4880,6 +5133,7 @@ Return a JSON object with exactly these fields:
         <TasteProfile
           onBack={() => setShowTasteProfile(false)}
           onViewUser={(id) => setViewingUserId(id)}
+          onOpenDetail={(r) => { setShowTasteProfile(false); setDetailRestaurant(r); }}
           allRestaurants={allRestaurants}
         />
       )}

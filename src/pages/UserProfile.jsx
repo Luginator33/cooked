@@ -12,7 +12,7 @@ import {
   supabase,
   unfollowUser,
 } from "../lib/supabase";
-import { syncFollow, removeFollow } from "../lib/neo4j";
+import { syncFollow, removeFollow, getOverlapRestaurants } from "../lib/neo4j";
 
 const C = {
   bg: "#0f0c09",
@@ -105,6 +105,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
   const [citiesSheetList, setCitiesSheetList] = useState([]);
   const [sheetLoading, setSheetLoading] = useState(false);
   const [followedCitiesCount, setFollowedCitiesCount] = useState(0);
+  const [overlapRestaurants, setOverlapRestaurants] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +128,17 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
       if (user?.id && user.id !== clerkUserId) {
         const followState = await isFollowing(user.id, clerkUserId);
         if (!cancelled) setIsFollowingUser(!!followState?.isFollowing);
+        getOverlapRestaurants(user.id, clerkUserId).then(results => {
+          if (!cancelled) {
+            const matched = results
+              .map(r => {
+                const full = RESTAURANTS.find(ar => String(ar.id) === String(r.id));
+                return full || null;
+              })
+              .filter(Boolean);
+            setOverlapRestaurants(matched);
+          }
+        });
       } else {
         setIsFollowingUser(false);
       }
@@ -403,6 +415,43 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
             </button>
           </div>
         ) : null}
+
+        {/* Restaurants in Common */}
+        {user?.id && user.id !== clerkUserId && overlapRestaurants.length > 0 && (
+          <div style={{ padding: "14px 18px 0" }}>
+            <div style={{ fontSize: 10, color: C.muted, fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
+              {overlapRestaurants.length} {overlapRestaurants.length === 1 ? "restaurant" : "restaurants"} in common
+            </div>
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
+              {overlapRestaurants.slice(0, 10).map(r => {
+                let imgSrc = r.img;
+                try {
+                  const cache = JSON.parse(localStorage.getItem("cooked_shared_photos") || "{}");
+                  imgSrc = cache[r.id] || cache[String(r.id)] || r.img;
+                } catch {}
+                return (
+                  <div
+                    key={r.id}
+                    onClick={() => onOpenDetail?.(r)}
+                    style={{
+                      minWidth: 100, maxWidth: 100, flexShrink: 0, cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ width: 100, height: 100, borderRadius: 12, overflow: "hidden", background: C.bg2, border: `1px solid ${C.border}` }}>
+                      {imgSrc ? <img src={imgSrc} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.text, fontFamily: "Georgia,serif", fontStyle: "italic", marginTop: 4, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {r.name}
+                    </div>
+                    <div style={{ fontSize: 9, color: C.muted, marginTop: 1 }}>
+                      {r.city}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {!loading && !canViewContent ? (
           <div style={{ textAlign: "center", padding: "56px 20px", color: C.muted }}>
