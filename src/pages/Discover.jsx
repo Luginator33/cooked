@@ -947,10 +947,10 @@ export default function Discover({ tasteProfile, initialTab }) {
     }).catch(e => console.error("[Neo4j] Seed error:", e));
   }, []);
 
-  // Fetch Neo4j-powered discovery feeds
+  // Fetch Neo4j-powered discovery feeds (global, then filter by city client-side)
   useEffect(() => {
     if (!user?.id) return;
-    getYoudLoveThis(user.id, 8).then(results => {
+    getYoudLoveThis(user.id, 30).then(results => {
       const matched = results
         .map(r => {
           const full = allRestaurants.find(ar => String(ar.id) === String(r.id));
@@ -959,7 +959,7 @@ export default function Discover({ tasteProfile, initialTab }) {
         .filter(Boolean);
       setYoudLoveThis(matched);
     });
-    getRisingRestaurants(8).then(results => {
+    getRisingRestaurants(30).then(results => {
       const matched = results
         .map(r => {
           const full = allRestaurants.find(ar => String(ar.id) === String(r.id));
@@ -971,7 +971,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     getTasteFingerprint(user.id).then(fp => setChatTasteProfile(fp)).catch(() => {});
     getWhoToFollow(user.id, 8).then(setSuggestedFriends).catch(() => {});
     getPeopleLikeYou(user.id, 8).then(setPeopleLikeYou).catch(() => {});
-    getHiddenGems(8).then(results => {
+    getHiddenGems(30).then(results => {
       const matched = results
         .map(r => {
           const full = allRestaurants.find(ar => String(ar.id) === String(r.id));
@@ -981,6 +981,25 @@ export default function Discover({ tasteProfile, initialTab }) {
       setHiddenGems(matched);
     });
   }, [user?.id]);
+
+  // Filter Neo4j sections by selected city
+  const youdLoveFiltered = useMemo(() => {
+    if (!city || city === "All") return youdLoveThis.slice(0, 8);
+    const filtered = youdLoveThis.filter(r => r.city === city);
+    return filtered.length > 0 ? filtered.slice(0, 8) : youdLoveThis.slice(0, 8);
+  }, [youdLoveThis, city]);
+
+  const risingFiltered = useMemo(() => {
+    if (!city || city === "All") return risingRestaurants.slice(0, 8);
+    const filtered = risingRestaurants.filter(r => r.city === city);
+    return filtered.length > 0 ? filtered.slice(0, 8) : risingRestaurants.slice(0, 8);
+  }, [risingRestaurants, city]);
+
+  const hiddenGemsFiltered = useMemo(() => {
+    if (!city || city === "All") return hiddenGems.slice(0, 8);
+    const filtered = hiddenGems.filter(r => r.city === city);
+    return filtered.length > 0 ? filtered.slice(0, 8) : hiddenGems.slice(0, 8);
+  }, [hiddenGems, city]);
 
   const toggleCityFollow = async (cityName, e) => {
     e.preventDefault();
@@ -3282,13 +3301,13 @@ Return a JSON object with exactly these fields:
           ) : null}
 
           {/* You'd Love This — collaborative filtering */}
-          {youdLoveThis.length > 0 && (
+          {youdLoveFiltered.length > 0 && (
             <div style={{ marginTop: 20 }}>
               <div style={{ padding: "0 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontFamily: "Cormorant Garamond", fontStyle: "italic", fontSize: 22, color: C.text }}>You'd love this</span>
               </div>
               <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingLeft: 16, paddingRight: 16, paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
-                {youdLoveThis.map(r => (
+                {youdLoveFiltered.map(r => (
                   <HomePhotoCard
                     key={`rec-${r.id}-${photoCacheVersion}`}
                     r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }}
@@ -3314,14 +3333,14 @@ Return a JSON object with exactly these fields:
           )}
 
           {/* Rising — trending last 30 days */}
-          {risingRestaurants.length > 0 && (
+          {risingFiltered.length > 0 && (
             <div style={{ marginTop: 20 }}>
               <div style={{ padding: "0 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontFamily: "Cormorant Garamond", fontStyle: "italic", fontSize: 22, color: C.text }}>Rising</span>
                 <span style={{ fontSize: 11, color: "#5a3a20", fontFamily: "'DM Mono', monospace" }}>last 30 days</span>
               </div>
               <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingLeft: 16, paddingRight: 16, paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
-                {risingRestaurants.map(r => (
+                {risingFiltered.map(r => (
                   <HomePhotoCard
                     key={`rise-${r.id}-${photoCacheVersion}`}
                     r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }}
@@ -3344,13 +3363,13 @@ Return a JSON object with exactly these fields:
           )}
 
           {/* Hidden Gems — high rated, few loves */}
-          {hiddenGems.length > 0 && (
+          {hiddenGemsFiltered.length > 0 && (
             <div style={{ marginTop: 20 }}>
               <div style={{ padding: "0 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontFamily: "Cormorant Garamond", fontStyle: "italic", fontSize: 22, color: C.text }}>Hidden gems</span>
               </div>
               <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingLeft: 16, paddingRight: 16, paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
-                {hiddenGems.map(r => (
+                {hiddenGemsFiltered.map(r => (
                   <HomePhotoCard
                     key={`gem-${r.id}-${photoCacheVersion}`}
                     r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }}
