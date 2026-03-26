@@ -359,7 +359,7 @@ const INITIAL_ASSISTANT_MESSAGE = {
 
 export default function ChatBot({
   onClose, allRestaurants = [], initialInput = "", initialMessages, inline = false,
-  userId, lovedRestaurants, watchlist, followedCities, tasteProfile,
+  userId, lovedRestaurants, watchlist, followedCities, tasteProfile, selectedCity,
 }) {
   const [messages, setMessages] = useState(initialMessages?.length > 0 ? initialMessages : [INITIAL_ASSISTANT_MESSAGE])
   const [input, setInput] = useState("")
@@ -432,15 +432,18 @@ export default function ChatBot({
     if (textareaRef.current) textareaRef.current.style.height = "36px"
 
     try {
-      // Detect city from conversation
+      // Detect city from conversation, fall back to selected city in header
       const allText = newMessages.map(m => m.content).join(" ");
-      const detectedCity = detectCity(allText, allRestaurants, followedCities);
+      const detectedCity = detectCity(allText, allRestaurants, followedCities) || selectedCity || null;
 
       // Build dynamic KB from live restaurant data
       const dynamicKB = buildDynamicKB(allRestaurants, detectedCity);
 
-      // Build user context
-      const userContext = buildUserContext(lovedRestaurants, watchlist, followedCities, tasteProfile, allRestaurants);
+      // Build user context — include selected city
+      let userContext = buildUserContext(lovedRestaurants, watchlist, followedCities, tasteProfile, allRestaurants);
+      if (selectedCity) {
+        userContext += `\nTheir app is currently set to ${selectedCity}. If they don't specify a city, assume they mean ${selectedCity} — but mention it naturally, like "since you're looking at ${selectedCity}..." so they know you're assuming.\n`;
+      }
 
       // Build Neo4j context
       const neo4j = neo4jCacheRef.current || {};

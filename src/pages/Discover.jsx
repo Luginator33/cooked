@@ -3154,7 +3154,7 @@ Return a JSON object with exactly these fields:
 
           {/* Inline chat (replaces hero card); key remounts on each Home visit to re-randomize chips */}
           <div style={{ marginTop: 12 }}>
-            <ChatBot key={homeChatKey} inline allRestaurants={allRestaurants} initialInput={chatInput} initialMessages={restoredMessages} userId={user?.id} lovedRestaurants={lovedRestaurants} watchlist={watchlist} followedCities={followedCities} tasteProfile={chatTasteProfile} />
+            <ChatBot key={homeChatKey} inline allRestaurants={allRestaurants} initialInput={chatInput} initialMessages={restoredMessages} userId={user?.id} lovedRestaurants={lovedRestaurants} watchlist={watchlist} followedCities={followedCities} tasteProfile={chatTasteProfile} selectedCity={city} />
           </div>
 
           {(() => {
