@@ -24,8 +24,11 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
   const [importPhotos, setImportPhotos] = useState([]);
   const [selectedPhotoIdx, setSelectedPhotoIdx] = useState(0);
 
-  // Bulk import
-  const [bulkJson, setBulkJson] = useState("");
+  // Bulk import via Google Maps links
+  const [bulkLinks, setBulkLinks] = useState("");
+  const [bulkQueue, setBulkQueue] = useState([]); // array of { name, placeId, status, data, photos, selectedPhoto }
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [bulkCurrentIdx, setBulkCurrentIdx] = useState(-1);
 
   // Merge
   const [mergeFrom, setMergeFrom] = useState("");
@@ -498,21 +501,195 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
       {section === "bulk" && (
         <div>
           <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontSize: 20, color: C.text, marginBottom: 6 }}>Bulk Import</div>
-          <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Paste a JSON array of restaurant objects.</div>
-          <textarea value={bulkJson} onChange={e => setBulkJson(e.target.value)} placeholder='[{"name":"...","city":"...","cuisine":"..."}]' style={{ ...inputStyle, minHeight: 150, fontFamily: "'DM Mono', monospace", fontSize: 11, resize: "vertical" }} />
-          <button type="button" onClick={async () => {
-            try {
-              const arr = JSON.parse(bulkJson);
-              if (!Array.isArray(arr)) throw new Error("Must be a JSON array");
-              for (const r of arr) await addCommunityRestaurant(r);
-              await logAdminAction("restaurant_bulk_import", userId, "restaurant", null, { count: arr.length });
-              showToast(`Imported ${arr.length} restaurants`);
-              setBulkJson("");
-              onRestaurantsChanged?.();
-            } catch (e) { showToast(e.message, "error"); }
-          }} style={{ ...btnPrimary, width: "100%", marginTop: 10 }} disabled={!bulkJson.trim()}>
-            Import All
-          </button>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Paste Google Maps links (one per line). We'll fetch details, photos, and AI enrichment for each.</div>
+
+          {bulkQueue.length === 0 && (
+            <>
+              <textarea value={bulkLinks} onChange={e => setBulkLinks(e.target.value)} placeholder={"https://maps.google.com/?cid=...\nhttps://www.google.com/maps/place/...\nhttps://maps.app.goo.gl/..."} style={{ ...inputStyle, minHeight: 150, fontFamily: "'DM Mono', monospace", fontSize: 11, resize: "vertical" }} />
+              <button type="button" onClick={async () => {
+                const lines = bulkLinks.split("\n").map(l => l.trim()).filter(Boolean);
+                if (lines.length === 0) return;
+                setBulkProcessing(true);
+                const queue = [];
+                for (const link of lines) {
+                  // Extract place name from link for display
+                  const nameMatch = link.match(/place\/([^/]+)/);
+                  const displayName = nameMatch ? decodeURIComponent(nameMatch[1]).replace(/\+/g, " ") : link.slice(0, 40);
+                  queue.push({ link, displayName, status: "pending", data: null, photos: [], selectedPhoto: 0 });
+                }
+                setBulkQueue(queue);
+                // Process each one
+                for (let i = 0; i < queue.length; i++) {
+                  setBulkCurrentIdx(i);
+                  queue[i].status = "processing";
+                  setBulkQueue([...queue]);
+                  try {
+                    // Search Google Places using the link text as query
+                    const searchQuery = queue[i].displayName;
+                    const searchRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", "X-Goog-Api-Key": GOOGLE_KEY, "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.rating,places.photos" },
+                      body: JSON.stringify({ textQuery: searchQuery, maxResultCount: 1 }),
+                    });
+                    const searchData = await searchRes.json();
+                    const place = searchData.places?.[0];
+                    if (!place) { queue[i].status = "error"; queue[i].error = "Not found"; setBulkQueue([...queue]); continue; }
+
+                    // Fetch details
+                    const detailRes = await fetch(`https://places.googleapis.com/v1/places/${place.id}`, {
+                      headers: { "X-Goog-Api-Key": GOOGLE_KEY, "X-Goog-FieldMask": "displayName,formattedAddress,nationalPhoneNumber,internationalPhoneNumber,regularOpeningHours,websiteUri,location,photos,rating,userRatingCount,priceLevel,addressComponents" },
+                    });
+                    const d = await detailRes.json();
+                    let city = "", neighborhood = "";
+                    (d.addressComponents || []).forEach(c => {
+                      if (c.types?.includes("locality")) city = c.longText;
+                      if (c.types?.includes("neighborhood")) neighborhood = c.longText;
+                      if (!neighborhood && c.types?.includes("sublocality")) neighborhood = c.longText;
+                    });
+                    const priceMap = { PRICE_LEVEL_FREE: "$", PRICE_LEVEL_INEXPENSIVE: "$", PRICE_LEVEL_MODERATE: "$$", PRICE_LEVEL_EXPENSIVE: "$$$", PRICE_LEVEL_VERY_EXPENSIVE: "$$$$" };
+
+                    // Fetch photos
+                    const photos = [];
+                    for (const p of (d.photos || []).slice(0, 8)) {
+                      try {
+                        const pr = await fetch(`https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&skipHttpRedirect=true`, { headers: { "X-Goog-Api-Key": GOOGLE_KEY } });
+                        if (pr.ok) { const pd = await pr.json(); if (pd.photoUri) { photos.push(pd.photoUri); continue; } }
+                        photos.push(`https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${GOOGLE_KEY}`);
+                      } catch { photos.push(`https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${GOOGLE_KEY}`); }
+                    }
+
+                    // AI enrichment
+                    let aiData = {};
+                    try {
+                      const baseName = d.displayName?.text || searchQuery;
+                      const aiRes = await fetch(ANTHROPIC_PROXY, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "anthropic-version": "2023-06-01" },
+                        body: JSON.stringify({
+                          model: "claude-sonnet-4-20250514", max_tokens: 1024,
+                          system: "You are a food critic and restaurant expert. Return ONLY valid JSON, no markdown.",
+                          messages: [{ role: "user", content: `Tell me about "${baseName}" in ${city}. Return JSON: cuisine, tags (array of 3), desc (one poetic sentence), about (2-3 sentences)` }],
+                        }),
+                      });
+                      const aj = await aiRes.json();
+                      let text = aj.content?.[0]?.text?.trim() || "{}";
+                      if (text.includes("```")) text = text.split("```")[1].replace(/^json/, "").trim();
+                      aiData = JSON.parse(text);
+                    } catch {}
+
+                    queue[i].data = {
+                      name: d.displayName?.text || searchQuery, city, neighborhood,
+                      address: d.formattedAddress || "", phone: d.nationalPhoneNumber || "",
+                      website: d.websiteUri || "", lat: d.location?.latitude || 0, lng: d.location?.longitude || 0,
+                      rating: d.rating ? Math.min(10, Math.round(d.rating * 2 * 10) / 10) : 8.5,
+                      price: priceMap[d.priceLevel] || "$$", placeId: place.id,
+                      cuisine: aiData.cuisine || "", tags: aiData.tags || [], desc: aiData.desc || "",
+                      source: "Admin Import", heat: "🔥🔥",
+                    };
+                    queue[i].photos = photos;
+                    queue[i].status = "ready";
+                  } catch (e) {
+                    queue[i].status = "error";
+                    queue[i].error = e.message;
+                  }
+                  setBulkQueue([...queue]);
+                }
+                setBulkProcessing(false);
+                setBulkCurrentIdx(-1);
+              }} style={{ ...btnPrimary, width: "100%", marginTop: 10 }} disabled={!bulkLinks.trim()}>
+                Process All Links
+              </button>
+            </>
+          )}
+
+          {/* Queue display */}
+          {bulkQueue.length > 0 && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ fontSize: 12, color: C.muted }}>
+                  {bulkQueue.filter(q => q.status === "ready").length} ready · {bulkQueue.filter(q => q.status === "imported").length} imported · {bulkQueue.filter(q => q.status === "error").length} errors
+                </div>
+                {!bulkProcessing && <button type="button" onClick={() => { setBulkQueue([]); setBulkLinks(""); }} style={btnSmall}>Start Over</button>}
+              </div>
+
+              {bulkQueue.map((item, idx) => (
+                <div key={idx} style={{ ...cardStyle, opacity: item.status === "imported" ? 0.5 : 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: item.status === "ready" ? 8 : 0 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, color: C.text, fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: "bold" }}>
+                        {item.data?.name || item.displayName}
+                      </div>
+                      {item.data && <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{item.data.cuisine} · {item.data.city} · {item.data.price}</div>}
+                    </div>
+                    <div style={{
+                      fontSize: 10, fontFamily: "'DM Mono', monospace", padding: "2px 8px", borderRadius: 6,
+                      background: item.status === "ready" ? C.terracotta : item.status === "imported" ? C.green : item.status === "error" ? C.red : item.status === "processing" ? C.blue : C.dim,
+                      color: "#fff",
+                    }}>
+                      {item.status === "processing" ? "processing..." : item.status}
+                    </div>
+                  </div>
+
+                  {/* Photo picker for ready items */}
+                  {item.status === "ready" && item.photos.length > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ display: "flex", gap: 4, overflowX: "auto", marginBottom: 8 }}>
+                        {item.photos.map((url, pi) => (
+                          <img key={pi} src={url} alt="" onClick={() => {
+                            const q = [...bulkQueue]; q[idx].selectedPhoto = pi; setBulkQueue(q);
+                          }} style={{
+                            width: 56, height: 56, borderRadius: 8, objectFit: "cover", cursor: "pointer", flexShrink: 0,
+                            border: pi === (item.selectedPhoto || 0) ? `2px solid ${C.terracotta}` : "2px solid transparent",
+                            opacity: pi === (item.selectedPhoto || 0) ? 1 : 0.5,
+                          }} onError={e => { e.target.style.display = "none"; }} />
+                        ))}
+                      </div>
+                      <button type="button" onClick={async () => {
+                        const photoUrl = item.photos[item.selectedPhoto || 0] || "";
+                        const r = { ...item.data, img: photoUrl, img2: photoUrl };
+                        const { data, error } = await addCommunityRestaurant(r);
+                        if (error) { showToast(`Failed: ${error.message}`, "error"); return; }
+                        const savedId = data?.[0]?.id || r.id;
+                        if (photoUrl) await saveSharedPhoto(String(savedId), photoUrl);
+                        await syncRestaurant({ ...r, id: savedId });
+                        const q = [...bulkQueue]; q[idx].status = "imported"; setBulkQueue(q);
+                        showToast(`Imported ${r.name}`);
+                      }} style={{ ...btnPrimary, width: "100%", fontSize: 12 }}>
+                        Import {item.data?.name}
+                      </button>
+                    </div>
+                  )}
+
+                  {item.status === "error" && <div style={{ fontSize: 10, color: C.red, marginTop: 4 }}>{item.error}</div>}
+                </div>
+              ))}
+
+              {/* Import all ready */}
+              {!bulkProcessing && bulkQueue.some(q => q.status === "ready") && (
+                <button type="button" onClick={async () => {
+                  for (let i = 0; i < bulkQueue.length; i++) {
+                    if (bulkQueue[i].status !== "ready") continue;
+                    const item = bulkQueue[i];
+                    const photoUrl = item.photos[item.selectedPhoto || 0] || "";
+                    const r = { ...item.data, img: photoUrl, img2: photoUrl };
+                    const { data, error } = await addCommunityRestaurant(r);
+                    if (!error) {
+                      const savedId = data?.[0]?.id || r.id;
+                      if (photoUrl) await saveSharedPhoto(String(savedId), photoUrl);
+                      await syncRestaurant({ ...r, id: savedId });
+                      bulkQueue[i].status = "imported";
+                      setBulkQueue([...bulkQueue]);
+                    }
+                  }
+                  await logAdminAction("bulk_import", userId, "restaurant", null, { count: bulkQueue.filter(q => q.status === "imported").length });
+                  showToast(`Imported ${bulkQueue.filter(q => q.status === "imported").length} restaurants`);
+                  onRestaurantsChanged?.();
+                }} style={{ ...btnPrimary, width: "100%", marginTop: 10, padding: "14px", fontSize: 15 }}>
+                  Import All Ready ({bulkQueue.filter(q => q.status === "ready").length})
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
