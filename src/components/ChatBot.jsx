@@ -296,7 +296,7 @@ function normalizeOpenTableUrl(urlOrSlug, restaurantName) {
   return "https://www.opentable.com/" + raw.replace(/^\/+/, "");
 }
 
-function renderMessageContent(content) {
+function renderMessageContent(content, onRestaurantClick) {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = content.split(urlRegex);
   return parts.map((part, i) => {
@@ -321,13 +321,19 @@ function renderMessageContent(content) {
     const segments = part.split(italicRegex);
     return (
       <span key={i}>
-        {segments.map((seg, j) => j % 2 === 1 ? <em key={j} style={{ fontStyle: "italic", fontWeight: 600, color: "#1e1208" }}>{seg}</em> : seg)}
+        {segments.map((seg, j) => j % 2 === 1 ? (
+          <em
+            key={j}
+            onClick={() => onRestaurantClick?.(seg)}
+            style={{ fontStyle: "italic", fontWeight: 700, color: "#c4603a", cursor: onRestaurantClick ? "pointer" : "default", textDecoration: "none", borderBottom: "1px solid rgba(196,96,58,0.3)" }}
+          >{seg}</em>
+        ) : seg)}
       </span>
     );
   });
 }
 
-function MessageBubble({ message }) {
+function MessageBubble({ message, onRestaurantClick }) {
   const isUser = message.role === "user"
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start", marginBottom: 4, paddingLeft: isUser ? 60 : 0, paddingRight: isUser ? 0 : 60 }}>
@@ -336,7 +342,7 @@ function MessageBubble({ message }) {
           <div style={{ width: 28, height: 28, borderRadius: "50%", background: `linear-gradient(135deg, ${C.terracotta}, ${C.gold})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>🍽</div>
           <div style={{ background: "#e5e5ea", borderRadius: "18px 18px 18px 4px", padding: "10px 14px", maxWidth: "100%" }}>
             <p style={{ margin: 0, fontSize: 15, lineHeight: 1.45, color: "#000", fontFamily: "-apple-system, sans-serif", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-              <span style={{ display: "flex", flexDirection: "column", gap: 4 }}>{renderMessageContent(renderText(message.content))}</span>
+              <span style={{ display: "flex", flexDirection: "column", gap: 4 }}>{renderMessageContent(renderText(message.content), onRestaurantClick)}</span>
             </p>
           </div>
         </div>
@@ -360,6 +366,7 @@ const INITIAL_ASSISTANT_MESSAGE = {
 export default function ChatBot({
   onClose, allRestaurants = [], initialInput = "", initialMessages, inline = false,
   userId, lovedRestaurants, watchlist, followedCities, tasteProfile, selectedCity,
+  onOpenDetail,
 }) {
   const [messages, setMessages] = useState(initialMessages?.length > 0 ? initialMessages : [INITIAL_ASSISTANT_MESSAGE])
   const [input, setInput] = useState("")
@@ -408,6 +415,12 @@ export default function ChatBot({
       };
     });
   }, [userId]);
+
+  const handleRestaurantClick = (name) => {
+    const normalized = name.toLowerCase().trim();
+    const match = allRestaurants.find(r => r.name?.toLowerCase().trim() === normalized);
+    if (match && onOpenDetail) onOpenDetail(match);
+  };
 
   const clearConversation = () => { setMessages([INITIAL_ASSISTANT_MESSAGE]); setInput(""); setShowSuggestions(true); }
 
@@ -517,7 +530,7 @@ export default function ChatBot({
             {messages.map((msg, i) => (
               <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
                 <div style={{ maxWidth: "85%", borderRadius: 12, padding: "8px 12px", background: msg.role === "user" ? "#c4603a" : "#2e1f0e", color: msg.role === "user" ? "#fff" : "#f0ebe2", fontSize: 14, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "-apple-system, sans-serif" }}>
-                  {msg.role === "user" ? msg.content : <span style={{ display: "flex", flexDirection: "column", gap: 4 }}>{renderMessageContent(renderText(msg.content))}</span>}
+                  {msg.role === "user" ? msg.content : <span style={{ display: "flex", flexDirection: "column", gap: 4 }}>{renderMessageContent(renderText(msg.content), handleRestaurantClick)}</span>}
                 </div>
               </div>
             ))}
@@ -556,7 +569,7 @@ export default function ChatBot({
         {/* Messages */}
         <div style={{ flex: 1, overflowY: "auto", padding: "16px 12px 8px", display: "flex", flexDirection: "column" }}>
           <div style={{ textAlign: "center", marginBottom: 16, fontFamily: "-apple-system, sans-serif", fontSize: 12, color: C.muted, fontWeight: 500 }}>Today</div>
-          {messages.map((msg, i) => <MessageBubble key={i} message={msg} />)}
+          {messages.map((msg, i) => <MessageBubble key={i} message={msg} onRestaurantClick={handleRestaurantClick} />)}
           {loading && <TypingIndicator />}
           {showSuggestions && messages.length <= 1 && (
             <div style={{ marginTop: 20 }}>
