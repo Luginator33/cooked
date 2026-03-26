@@ -19,6 +19,7 @@ export default function AdminPhotos({ allRestaurants, userId }) {
   const [wrongSelected, setWrongSelected] = useState(null);
   const [googlePhotos, setGooglePhotos] = useState([]);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [previewPhoto, setPreviewPhoto] = useState(null); // photo URL pending confirmation
 
   const showToast = (msg, type = "success") => { setToast({ message: msg, type }); setTimeout(() => setToast(null), 2500); };
 
@@ -94,12 +95,13 @@ export default function AdminPhotos({ allRestaurants, userId }) {
     setGoogleLoading(false);
   };
 
-  const selectNewPhoto = async (url) => {
+  const confirmPhoto = async (url) => {
     if (!wrongSelected) return;
     await saveSharedPhoto(String(wrongSelected.id), url);
     await logAdminAction("photo_replace", userId, "restaurant", String(wrongSelected.id), { name: wrongSelected.name });
     setSharedPhotos(prev => ({ ...prev, [String(wrongSelected.id)]: url }));
-    showToast(`Photo updated for ${wrongSelected.name}`);
+    showToast(`Photo saved for ${wrongSelected.name}`);
+    setPreviewPhoto(null);
     setWrongSelected(null);
     setGooglePhotos([]);
     setWrongSearch("");
@@ -202,11 +204,25 @@ export default function AdminPhotos({ allRestaurants, userId }) {
             </div>
           )}
 
-          {!googleLoading && googlePhotos.length > 0 && (
+          {/* Preview selected photo */}
+          {previewPhoto && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 10, color: C.terracotta, fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", marginBottom: 6 }}>NEW PHOTO PREVIEW</div>
+              <div style={{ borderRadius: 14, overflow: "hidden", height: 200, marginBottom: 10, border: `2px solid ${C.terracotta}` }}>
+                <img src={previewPhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" onClick={() => setPreviewPhoto(null)} style={{ ...btnOutline, flex: 1 }}>Pick Different</button>
+                <button type="button" onClick={() => confirmPhoto(previewPhoto)} style={{ ...btnPrimary, flex: 1 }}>Confirm & Save</button>
+              </div>
+            </div>
+          )}
+
+          {!previewPhoto && !googleLoading && googlePhotos.length > 0 && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 14 }}>
               {googlePhotos.map((url, i) => (
                 <div
-                  key={i} onClick={() => selectNewPhoto(url)}
+                  key={i} onClick={() => setPreviewPhoto(url)}
                   style={{ borderRadius: 10, overflow: "hidden", height: 100, cursor: "pointer", border: `2px solid transparent`, position: "relative" }}
                 >
                   <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.target.style.display = "none"; }} />
@@ -216,15 +232,17 @@ export default function AdminPhotos({ allRestaurants, userId }) {
             </div>
           )}
 
-          {!googleLoading && googlePhotos.length === 0 && (
+          {!previewPhoto && !googleLoading && googlePhotos.length === 0 && (
             <div style={{ color: C.muted, fontSize: 13, marginBottom: 14 }}>No photos found. You can paste a URL instead:</div>
           )}
 
           {/* Manual URL fallback */}
-          <div style={{ display: "flex", gap: 8 }}>
-            <input type="text" value={photoUrl} onChange={e => setPhotoUrl(e.target.value)} placeholder="Or paste a photo URL..." style={{ ...inputStyle, flex: 1 }} />
-            <button type="button" onClick={() => { if (photoUrl.trim()) selectNewPhoto(photoUrl.trim()); }} style={btnPrimary} disabled={!photoUrl.trim()}>Save</button>
-          </div>
+          {!previewPhoto && (
+            <div style={{ display: "flex", gap: 8 }}>
+              <input type="text" value={photoUrl} onChange={e => setPhotoUrl(e.target.value)} placeholder="Or paste a photo URL..." style={{ ...inputStyle, flex: 1 }} />
+              <button type="button" onClick={() => { if (photoUrl.trim()) setPreviewPhoto(photoUrl.trim()); }} style={btnPrimary} disabled={!photoUrl.trim()}>Preview</button>
+            </div>
+          )}
         </div>
       )}
 
