@@ -39,6 +39,7 @@ function getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResult
   }));
 }
 import ChatBot from "../components/ChatBot";
+import NotificationSheet from "../components/NotificationSheet";
 import Profile from "./Profile";
 import TasteProfile from "./TasteProfile";
 import UserProfile from "./UserProfile";
@@ -1332,7 +1333,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(50);
     const rows = data || [];
     // Enrich notifications with user profile data
     const userIds = [...new Set(rows.map(r => r.from_user_id).filter(Boolean))];
@@ -3231,8 +3232,8 @@ Return a JSON object with exactly these fields:
               >
                 <NotificationBellIcon color={C.text} />
                 {notifUnreadCount > 0 ? (
-                  <span style={{ position:"absolute", top:2, right:2, minWidth:16, height:16, borderRadius:8, background:C.terracotta, pointerEvents:"none", display:"flex", alignItems:"center", justifyContent:"center", padding:"0 4px", boxSizing:"border-box" }}>
-                    <span style={{ fontSize:9, fontWeight:700, color:"#fff", fontFamily:"'DM Sans',sans-serif", lineHeight:1 }}>{notifUnreadCount > 99 ? "99+" : notifUnreadCount}</span>
+                  <span style={{ position:"absolute", top:0, right:0, minWidth:18, height:18, borderRadius:9, background:"#FF3B30", pointerEvents:"none", display:"flex", alignItems:"center", justifyContent:"center", padding:"0 5px", boxSizing:"border-box", border:`2px solid ${C.bg}` }}>
+                    <span style={{ fontSize:10, fontWeight:700, color:"#fff", fontFamily:"-apple-system,sans-serif", lineHeight:1 }}>{notifUnreadCount > 99 ? "99+" : notifUnreadCount}</span>
                   </span>
                 ) : null}
               </button>
@@ -5361,98 +5362,16 @@ Return a JSON object with exactly these fields:
         />
       )}
 
-      {notifSheetOpen && createPortal(
-        <div
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1001, display: "flex", alignItems: "flex-end" }}
-          onClick={() => setNotifSheetOpen(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "100%",
-              maxWidth: 480,
-              margin: "0 auto",
-              background: C.bg2,
-              borderRadius: "20px 20px 0 0",
-              maxHeight: "75vh",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-            }}
-          >
-            <div style={{ padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Notifications</div>
-              <button
-                type="button"
-                onClick={() => setNotifSheetOpen(false)}
-                style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}
-              >
-                ×
-              </button>
-            </div>
-            <div style={{ overflowY: "auto", flex: 1, padding: "8px 18px 24px", WebkitOverflowScrolling: "touch" }}>
-              {notifLoading ? (
-                <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Loading…</div>
-              ) : notifList.length === 0 ? (
-                <div style={{ padding: "24px 0", textAlign: "center", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>No notifications yet</div>
-              ) : (
-                notifList.map((n) => {
-                  const unread = n.read === false;
-                  const fromUser = n._fromUser;
-                  const restaurant = n.restaurant_id ? allRestaurants.find(r => String(r.id) === String(n.restaurant_id)) : null;
-                  // Pick photo: user photo for follow, restaurant photo for restaurant events
-                  const photo = n.type === "followed_you" ? fromUser?.profile_photo : (restaurant ? getAnyCachedPhotoForId(restaurant.id) || restaurant.img : fromUser?.profile_photo);
-                  return (
-                    <div
-                      key={n.id ?? `${n.created_at}-${n.type}`}
-                      onClick={() => {
-                        if (n.type === "followed_you" && n.from_user_id) {
-                          setNotifSheetOpen(false); setViewingUserId(n.from_user_id);
-                        } else if (n.restaurant_id) {
-                          if (restaurant) { setNotifSheetOpen(false); setDetailRestaurant(restaurant); }
-                        } else if (n.from_user_id) {
-                          setNotifSheetOpen(false); setViewingUserId(n.from_user_id);
-                        }
-                      }}
-                      style={{
-                        display: "flex",
-                        gap: 12,
-                        alignItems: "center",
-                        padding: "12px 0",
-                        borderBottom: `1px solid ${C.border}`,
-                        cursor: "pointer",
-                        opacity: unread ? 1 : 0.7,
-                      }}
-                    >
-                      {/* Photo + icon badge */}
-                      <div style={{ position: "relative", flexShrink: 0 }}>
-                        <div style={{ width: 46, height: 46, borderRadius: n.type === "followed_you" ? "50%" : 10, overflow: "hidden", background: C.bg3, border: unread ? `2px solid ${C.terracotta}` : `1px solid ${C.border}` }}>
-                          {photo ? <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (
-                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                              <NotificationTypeIcon type={n.type} size={20} />
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ position: "absolute", bottom: -2, right: -2, width: 20, height: 20, borderRadius: "50%", background: C.bg2, border: `1.5px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <NotificationTypeIcon type={n.type} size={11} />
-                        </div>
-                      </div>
-                      {/* Text */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, color: C.text, fontFamily: "-apple-system,sans-serif", lineHeight: 1.4 }}>{notificationMessage(n)}</div>
-                        <div style={{ fontSize: 11, color: C.muted, fontFamily: "'DM Mono',monospace", marginTop: 3 }}>{formatNotificationTime(n.created_at)}</div>
-                      </div>
-                      {/* Arrow */}
-                      <div style={{ color: C.dim, fontSize: 14, flexShrink: 0 }}>›</div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      <NotificationSheet
+        open={notifSheetOpen}
+        onClose={() => setNotifSheetOpen(false)}
+        notifications={notifList}
+        loading={notifLoading}
+        onViewUser={(id) => { setNotifSheetOpen(false); setViewingUserId(id); }}
+        onViewRestaurant={(r) => { setNotifSheetOpen(false); setDetailRestaurant(r); }}
+        allRestaurants={allRestaurants}
+        getPhotoForId={getAnyCachedPhotoForId}
+      />
     </div>
     </div>
     </SignedIn>
