@@ -131,7 +131,7 @@ export async function getCommunityRestaurants() {
 export async function followUser(followerClerkId, followingClerkId) {
   const { error } = await supabase
     .from('follows')
-    .insert({ follower_id: followerClerkId, following_id: followingClerkId })
+    .upsert({ follower_id: followerClerkId, following_id: followingClerkId }, { onConflict: 'follower_id,following_id', ignoreDuplicates: true })
   return { error }
 }
 

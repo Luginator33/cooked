@@ -283,18 +283,17 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
       setFollowersCount((n) => n + 1);
       const { error } = await followUser(user.id, clerkUserId);
       if (error) {
-        setIsFollowingUser(false);
-        setFollowersCount((n) => Math.max(0, n - 1));
-      } else {
-        syncFollow(currentUserClerkId, profileClerkId);
-        console.log("[Notif] sending follow notification to", profileClerkId, "from", currentUserClerkId);
-        supabase.from("notifications").insert({
-          user_id: profileClerkId,
-          type: "followed_you",
-          from_user_id: currentUserClerkId,
-          read: false,
-        }).then(({ error }) => { if (error) console.error("[Notif] follow insert error:", error); else console.log("[Notif] follow notification sent!"); });
+        console.log("[Notif] followUser error:", error.message, "— still sending notification");
+        // Still try to send notification even if follow had a constraint error (re-follow)
       }
+      syncFollow(currentUserClerkId, profileClerkId);
+      console.log("[Notif] sending follow notification to", profileClerkId, "from", currentUserClerkId);
+      supabase.from("notifications").insert({
+        user_id: profileClerkId,
+        type: "followed_you",
+        from_user_id: currentUserClerkId,
+        read: false,
+      }).then(({ error: notifErr }) => { if (notifErr) console.error("[Notif] follow insert error:", notifErr); else console.log("[Notif] follow notification sent!"); });
     }
     setPendingFollow(false);
   };
