@@ -361,14 +361,14 @@ export async function getRisingRestaurants(limit = 10) {
   }));
 }
 
-// Hidden Gems — high rated, few loves
+// Hidden Gems — good rated spots that haven't been widely discovered yet
 export async function getHiddenGems(limit = 10) {
   const records = await runQuery(
     `MATCH (r:Restaurant)
-     WHERE r.rating >= 8.5
+     WHERE r.rating >= 8.0 AND r.rating < 9.5
      OPTIONAL MATCH (u:User)-[:LOVED]->(r)
      WITH r, count(u) AS loveCount
-     WHERE loveCount <= 3
+     WHERE loveCount <= 2
      RETURN r.id AS id, r.name AS name, r.city AS city, r.cuisine AS cuisine,
             r.rating AS rating, r.price AS price, r.neighborhood AS neighborhood,
             loveCount

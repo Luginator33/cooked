@@ -982,24 +982,26 @@ export default function Discover({ tasteProfile, initialTab }) {
     });
   }, [user?.id]);
 
-  // Filter Neo4j sections by selected city
+  // Filter Neo4j sections by selected city — show nothing if no city matches (don't fall back to global)
   const youdLoveFiltered = useMemo(() => {
     if (!city || city === "All") return youdLoveThis.slice(0, 8);
-    const filtered = youdLoveThis.filter(r => r.city === city);
-    return filtered.length > 0 ? filtered.slice(0, 8) : youdLoveThis.slice(0, 8);
+    return youdLoveThis.filter(r => r.city === city).slice(0, 8);
   }, [youdLoveThis, city]);
 
   const risingFiltered = useMemo(() => {
     if (!city || city === "All") return risingRestaurants.slice(0, 8);
-    const filtered = risingRestaurants.filter(r => r.city === city);
-    return filtered.length > 0 ? filtered.slice(0, 8) : risingRestaurants.slice(0, 8);
+    return risingRestaurants.filter(r => r.city === city).slice(0, 8);
   }, [risingRestaurants, city]);
 
   const hiddenGemsFiltered = useMemo(() => {
     if (!city || city === "All") return hiddenGems.slice(0, 8);
-    const filtered = hiddenGems.filter(r => r.city === city);
-    return filtered.length > 0 ? filtered.slice(0, 8) : hiddenGems.slice(0, 8);
+    return hiddenGems.filter(r => r.city === city).slice(0, 8);
   }, [hiddenGems, city]);
+
+  const trendingFiltered = useMemo(() => {
+    if (!city || city === "All") return trendingInCities;
+    return trendingInCities.filter(r => r.city === city);
+  }, [trendingInCities, city]);
 
   const toggleCityFollow = async (cityName, e) => {
     e.preventDefault();
@@ -3267,14 +3269,14 @@ Return a JSON object with exactly these fields:
             ) : null}
           </div>
 
-          {trendingInCities.length > 0 ? (
+          {trendingFiltered.length > 0 ? (
             <div style={{ padding: "0 16px", marginBottom: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <span style={{ fontFamily: "Cormorant Garamond", fontStyle: "italic", fontSize: 22, color: C.text }}>
                   Trending in your cities
                 </span>
               </div>
-              {trendingInCities.map((r, i) => (
+              {trendingFiltered.map((r, i) => (
                 <HomePhotoCard
                   key={`${r.id}-${photoCacheVersion}`}
                   r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }}
@@ -3283,7 +3285,7 @@ Return a JSON object with exactly these fields:
                     width: "100%",
                     height: 200,
                     borderRadius: 14,
-                    marginBottom: i < trendingInCities.length - 1 ? 12 : 0,
+                    marginBottom: i < trendingFiltered.length - 1 ? 12 : 0,
                   }}
                 >
                   <div style={{ position: "absolute", top: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 15, color: "#c4603a" }}>
