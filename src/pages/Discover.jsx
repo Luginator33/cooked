@@ -1248,16 +1248,6 @@ export default function Discover({ tasteProfile, initialTab }) {
 
   const openNotificationsSheet = async () => {
     setNotifSheetOpen(true);
-    // Debug: test insert to see if notifications table accepts writes
-    if (user?.id) {
-      const testResult = await supabase.from("notifications").insert({
-        user_id: user.id,
-        type: "followed_you",
-        from_user_id: user.id,
-        read: false,
-      });
-      console.log("[Notif DEBUG] test insert result:", testResult.error ? testResult.error : "SUCCESS");
-    }
     if (!user?.id) {
       setNotifList([]);
       setNotifLoading(false);
