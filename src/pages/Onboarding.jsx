@@ -1,4 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { loadSharedPhotos } from "../lib/supabase";
+
+// 21 curated restaurant IDs for the onboarding mosaic
+const MOSAIC_IDS = [18014,18016,22001,22014,25001,8,21007,203,24003,18003,37099,7013,23005,7011,30012,29001,17001,4,1,502,37016,901,106,1503,7001];
+
+function shuffleAndPick(arr, n) {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, n);
+}
 
 const C = {
   bg: "#0f0c09",
@@ -323,17 +336,399 @@ function SwipeDemoCard() {
   );
 }
 
+function SwipeDemo() {
+  const restaurants = [
+    { name: "Nobu Malibu", meta: "Japanese · Malibu", rating: 4, img: "https://lh3.googleusercontent.com/places/ANXAkqFb-Sy4KjQqFn41w9FdRk-qRwiVdsQSfio9Z0Sr_KpSJCHF030lxrOklxmAQydwGy0IOjiULp5y2zmD0Jwqb6h1UleMeWS2xK8=s4800-w800" },
+    { name: "Bestia", meta: "Italian · Arts District", rating: 5, img: "https://lh3.googleusercontent.com/places/ANXAkqGq6FcrvIKJMmHXJxLDnBwWQU_iNRUbBAT5yWuaf-H_h86pHW4SVUUJtVQn9HI0iPxrYshTvxMBmbNvI54Sl5W1RM_7JXI18JA=s4800-w800" },
+    { name: "République", meta: "French · Mid-City", rating: 4, img: "https://lh3.googleusercontent.com/places/ANXAkqG32fnvcCWL3_hHS5Pt4ea_BiMQSovPUdJ2p27xeEz97H0vI4NNBfrQPLLlxRdVgZaUItE3UcRnqsBqOaOkgAjfIfRsAQOJ9o0=s4800-w800" },
+  ];
+  const swipeActions = ["right", "left", "up"];
+  const [cardIdx, setCardIdx] = useState(0);
+  const [swipeDir, setSwipeDir] = useState(null);
+
+  useEffect(() => {
+    if (swipeDir) {
+      const timer = setTimeout(() => {
+        setSwipeDir(null);
+        setCardIdx(i => (i + 1) % restaurants.length);
+      }, 550);
+      return () => clearTimeout(timer);
+    } else {
+      const action = swipeActions[cardIdx % swipeActions.length];
+      const timer = setTimeout(() => setSwipeDir(action), 1300);
+      return () => clearTimeout(timer);
+    }
+  }, [swipeDir, cardIdx]);
+
+  const r = restaurants[cardIdx % restaurants.length];
+  const nextR = restaurants[(cardIdx + 1) % restaurants.length];
+
+  const topTransform = swipeDir === "right"
+    ? "translateX(130%) rotate(18deg)"
+    : swipeDir === "left"
+      ? "translateX(-130%) rotate(-18deg)"
+      : swipeDir === "up"
+        ? "translateY(-140%)"
+        : "translateX(0) rotate(0deg)";
+
+  const renderCard = (rest) => (
+    <>
+      <img src={rest.img} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,6,3,0.95) 0%, rgba(10,6,3,0.4) 40%, transparent 100%)" }} />
+      <div style={{ position: "absolute", bottom: 20, left: 20, right: 20, textAlign: "left" }}>
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: "0.14em", color: "rgba(240,235,226,0.5)", textTransform: "uppercase" }}>{rest.meta}</div>
+        <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text, lineHeight: 1, marginTop: 5 }}>{rest.name}</div>
+        <div style={{ display: "flex", gap: 3, marginTop: 8 }}>
+          {[0,1,2,3,4].map(n => <FlameIcon key={n} size={12} filled={n < rest.rating} color={n < rest.rating ? C.terracotta : C.dim} />)}
+        </div>
+      </div>
+    </>
+  );
+
+  const stampStyle = (visible, rotation) => ({
+    position: "absolute", top: "50%", left: "50%",
+    transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+    zIndex: 5, pointerEvents: "none",
+    opacity: visible ? 1 : 0,
+    transition: visible ? "opacity 0.1s ease" : "none",
+  });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", textAlign: "center" }}>
+      {/* Card stack — overflow hidden clips swiped cards */}
+      <div style={{ position: "relative", width: "86%", aspectRatio: "3/4", maxHeight: "55%", margin: "0 auto", overflow: "hidden", borderRadius: 20 }}>
+
+        {/* Back card — static underneath */}
+        <div style={{
+          position: "absolute", inset: 0, borderRadius: 20, overflow: "hidden",
+          zIndex: 1, background: C.bg2,
+        }}>
+          {renderCard(nextR)}
+        </div>
+
+        {/* Top card — swipes away */}
+        <div style={{
+          position: "absolute", inset: 0, borderRadius: 20, overflow: "hidden",
+          zIndex: 2, background: C.bg2,
+          transform: topTransform,
+          transition: swipeDir ? "transform 0.5s cubic-bezier(0.32, 0, 0.67, 0)" : "none",
+        }}>
+          {renderCard(r)}
+
+          {/* HEAT stamp */}
+          <div style={stampStyle(swipeDir === "right", -16)}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(196,96,58,0.2)", border: "3px solid #c4603a", borderRadius: 14, padding: "12px 28px" }}>
+              <FlameIcon size={22} filled color="#c4603a" />
+              <span style={{ color: "#c4603a", fontFamily: "'DM Mono', monospace", fontSize: 28, fontWeight: 700, letterSpacing: "0.12em" }}>HEAT</span>
+            </div>
+          </div>
+
+          {/* PASS stamp */}
+          <div style={stampStyle(swipeDir === "left", 16)}>
+            <div style={{ border: "3px solid #5a3a20", background: "rgba(90,58,32,0.2)", borderRadius: 14, padding: "12px 28px" }}>
+              <span style={{ color: "#5a3a20", fontFamily: "'DM Mono', monospace", fontSize: 28, fontWeight: 700, letterSpacing: "0.12em" }}>PASS</span>
+            </div>
+          </div>
+
+          {/* BEEN HERE stamp */}
+          <div style={stampStyle(swipeDir === "up", 0)}>
+            <div style={{ border: "3px solid #4a7aab", background: "rgba(74,122,171,0.2)", borderRadius: 14, padding: "12px 24px", whiteSpace: "nowrap" }}>
+              <span style={{ color: "#4a7aab", fontFamily: "'DM Mono', monospace", fontSize: 24, fontWeight: 700, letterSpacing: "0.12em" }}>BEEN HERE</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div style={{ display: "flex", gap: 20, marginTop: 14, justifyContent: "center" }}>
+        {[
+          { label: "PASS", borderColor: C.border, icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg> },
+          { label: "WATCH", borderColor: "#4a7aab", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4a7aab" strokeWidth="2" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg> },
+          { label: "HEAT", borderColor: C.terracotta, bg: C.terracotta, icon: <FlameIcon size={14} filled color="#fff" /> },
+        ].map(a => (
+          <div key={a.label} style={{ textAlign: "center" }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: "50%",
+              border: `1.5px solid ${a.borderColor}`,
+              background: a.bg || "transparent",
+              display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto",
+            }}>
+              {a.icon}
+            </div>
+            <div style={{ marginTop: 4, color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: "0.1em" }}>{a.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 14, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
+        Swipe to build your taste
+      </div>
+      <div style={{ marginTop: 6, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
+        We serve you restaurants one by one. <span style={{ color: C.terracotta }}>Heat</span> it, pass it, or mark it as been — your taste profile builds with every swipe.
+      </div>
+    </div>
+  );
+}
+
+function DiscoveryDemo() {
+  const items = [
+    {
+      label: "YOU'D LOVE THIS", desc: "Nobu Malibu, Bestia, and 4 more", sub: "Based on 8 taste matches",
+      img: "https://lh3.googleusercontent.com/places/ANXAkqFb-Sy4KjQqFn41w9FdRk-qRwiVdsQSfio9Z0Sr_KpSJCHF030lxrOklxmAQydwGy0IOjiULp5y2zmD0Jwqb6h1UleMeWS2xK8=s4800-w800",
+    },
+    {
+      label: "RISING", desc: "Sqirl just got 5 loves this week", sub: "Trending in the last 30 days",
+      img: "https://lh3.googleusercontent.com/places/ANXAkqEYbgJ0fDVWQIfNZr0XHjQ8Te5Se0NOdDSiIM53H_1hGJbpUvStJrHyn_SS1kXU47CyBNKMh69LD9RAf8ndqenu5Q_SV3XLtA8=s4800-w800",
+    },
+    {
+      label: "HIDDEN GEM", desc: "Shunji — rated 9.4, only 2 loves", sub: "High rated, under the radar",
+      img: "https://lh3.googleusercontent.com/places/ANXAkqG32fnvcCWL3_hHS5Pt4ea_BiMQSovPUdJ2p27xeEz97H0vI4NNBfrQPLLlxRdVgZaUItE3UcRnqsBqOaOkgAjfIfRsAQOJ9o0=s4800-w800",
+    },
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", textAlign: "center" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", marginTop: 4 }}>
+        {items.map((f, i) => (
+          <div
+            key={f.label}
+            style={{
+              background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 14,
+              padding: "12px 14px", textAlign: "left", display: "flex", gap: 12, alignItems: "center",
+              animation: "avatarPop 0.5s ease forwards", animationDelay: `${i * 150}ms`,
+              opacity: 0, transform: "scale(0)",
+            }}
+          >
+            <div style={{ width: 52, height: 52, borderRadius: 12, flexShrink: 0, overflow: "hidden", border: `1.5px solid ${C.border}` }}>
+              <img src={f.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: "0.14em", color: C.terracotta, textTransform: "uppercase" }}>{f.label}</div>
+              <div style={{ fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: "bold", fontSize: 15, color: C.text, marginTop: 2 }}>{f.desc}</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{f.sub}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 20, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
+        Discovery, not search
+      </div>
+      <div style={{ marginTop: 8, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
+        We learn your taste and surface restaurants you'll love — <span style={{ color: C.terracotta }}>before you search for them</span>.
+      </div>
+    </div>
+  );
+}
+
+function SocialDemo() {
+  const overlapPhotos = [
+    "https://lh3.googleusercontent.com/places/ANXAkqFb-Sy4KjQqFn41w9FdRk-qRwiVdsQSfio9Z0Sr_KpSJCHF030lxrOklxmAQydwGy0IOjiULp5y2zmD0Jwqb6h1UleMeWS2xK8=s4800-w800",
+    "https://lh3.googleusercontent.com/places/ANXAkqGq6FcrvIKJMmHXJxLDnBwWQU_iNRUbBAT5yWuaf-H_h86pHW4SVUUJtVQn9HI0iPxrYshTvxMBmbNvI54Sl5W1RM_7JXI18JA=s4800-w800",
+    "https://lh3.googleusercontent.com/places/ANXAkqEYbgJ0fDVWQIfNZr0XHjQ8Te5Se0NOdDSiIM53H_1hGJbpUvStJrHyn_SS1kXU47CyBNKMh69LD9RAf8ndqenu5Q_SV3XLtA8=s4800-w800",
+  ];
+  const chainNodes = [
+    { type: "r", label: "Nobu", img: overlapPhotos[0] },
+    { type: "u", label: "S" },
+    { type: "r", label: "Lucali", img: "https://lh3.googleusercontent.com/places/ANXAkqG32fnvcCWL3_hHS5Pt4ea_BiMQSovPUdJ2p27xeEz97H0vI4NNBfrQPLLlxRdVgZaUItE3UcRnqsBqOaOkgAjfIfRsAQOJ9o0=s4800-w800" },
+    { type: "u", label: "J" },
+    { type: "r", label: "Atomix", img: "https://lh3.googleusercontent.com/place-photos/AL8-SNFEolRLj9P0lhEbfgemsDrLr5h6SNsR1r3FkVfcMOy7qT835X1uXrIZWBcPg7naQkJoYjgSCgXo3G1LCRw5mpXTgzf_AtCkIOJKrAlUHOmRH-qNI3AEQNZ-tcWyOmOKMTF54HCGg8uX0l-l1-1ZUawj=s4800-w800" },
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", textAlign: "center" }}>
+      <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+        {/* Overlap */}
+        <div style={{
+          background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", textAlign: "left",
+          animation: "avatarPop 0.5s ease forwards", opacity: 0, transform: "scale(0)",
+        }}>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: "0.14em", color: C.terracotta, textTransform: "uppercase", marginBottom: 8 }}>RESTAURANTS IN COMMON</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {overlapPhotos.map((src, i) => (
+              <div key={i} style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden", border: `1.5px solid ${C.border}`, flexShrink: 0 }}>
+                <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              </div>
+            ))}
+            <div style={{ width: 56, height: 56, borderRadius: 10, background: C.bg, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: C.muted, fontFamily: "'DM Mono', monospace" }}>+4</div>
+          </div>
+        </div>
+
+        {/* Friends who loved */}
+        <div style={{
+          background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", textAlign: "left",
+          display: "flex", alignItems: "center", gap: 12,
+          animation: "avatarPop 0.5s ease forwards", animationDelay: "150ms", opacity: 0, transform: "scale(0)",
+        }}>
+          <div style={{ display: "flex", marginRight: -4 }}>
+            {[
+              { initial: "L", bg: "#c4603a" },
+              { initial: "M", bg: "#8b5e3c" },
+              { initial: "D", bg: "#a05238" },
+            ].map((u, i) => (
+              <div key={u.initial} style={{
+                width: 34, height: 34, borderRadius: "50%", border: `2px solid ${C.terracotta}`,
+                background: u.bg, display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 14, color: "#fff", fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: "bold",
+                marginLeft: i > 0 ? -10 : 0, zIndex: 3 - i,
+              }}>
+                {u.initial}
+              </div>
+            ))}
+          </div>
+          <div>
+            <div style={{ fontSize: 14, color: C.text, fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: "bold" }}>3 friends loved Bestia</div>
+            <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>See who's been where</div>
+          </div>
+        </div>
+
+        {/* 6 Degrees */}
+        <div style={{
+          background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", textAlign: "left",
+          animation: "avatarPop 0.5s ease forwards", animationDelay: "300ms", opacity: 0, transform: "scale(0)",
+        }}>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: "0.14em", color: C.terracotta, textTransform: "uppercase", marginBottom: 8 }}>THE CHAIN</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {chainNodes.map((node, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: node.type === "r" ? 8 : "50%", flexShrink: 0, overflow: "hidden",
+                  background: node.type === "u" ? C.terracotta : C.bg,
+                  border: node.type === "r" ? `1.5px solid ${C.border}` : "none",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 14, color: "#fff", fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: "bold",
+                }}>
+                  {node.img ? <img src={node.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : node.label}
+                </div>
+                {i < chainNodes.length - 1 && <div style={{ width: 6, height: 1.5, background: C.dim, flexShrink: 0 }} />}
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: C.muted, marginTop: 6 }}>2 degrees of separation</div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 20, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
+        Your people, your places
+      </div>
+      <div style={{ marginTop: 8, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
+        See where your friends eat, find restaurants in common, and trace the <span style={{ color: C.terracotta }}>chain between any two spots on earth</span>.
+      </div>
+    </div>
+  );
+}
+
+function JourneyDemo() {
+  const pct = 42;
+  const circumference = 2 * Math.PI * 22;
+  const offset = circumference - (pct / 100) * circumference;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", textAlign: "center" }}>
+      <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+        {/* Cooked Score */}
+        <div style={{
+          background: "radial-gradient(ellipse 120% 100% at 50% 30%, #2a1810 0%, #120c08 45%, #0a0806 100%)",
+          border: `1px solid ${C.border}`, borderRadius: 18, padding: "20px 18px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          animation: "avatarPop 0.5s ease forwards", opacity: 0, transform: "scale(0)",
+        }}>
+          <div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: "0.14em", color: C.muted, textTransform: "uppercase" }}>COOKED SCORE</div>
+            <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 600, fontSize: 52, color: C.terracotta, lineHeight: 1 }}>247</div>
+            <div style={{ fontSize: 10, color: C.muted, marginTop: 4 }}>Based on 34 loves across 8 cities</div>
+          </div>
+          <div style={{
+            width: 44, height: 44, borderRadius: "50%",
+            background: `radial-gradient(circle at 40% 38%, #ff9a4a 0%, #c4603a 45%, #8b2a12 100%)`,
+            boxShadow: "0 0 20px 6px rgba(196,96,58,0.3)",
+          }} />
+        </div>
+
+        {/* City Readiness */}
+        <div style={{
+          background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px",
+          animation: "avatarPop 0.5s ease forwards", animationDelay: "150ms", opacity: 0, transform: "scale(0)",
+        }}>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: "0.14em", color: C.terracotta, textTransform: "uppercase", marginBottom: 10 }}>CITY READINESS</div>
+          <div style={{ display: "flex", gap: 14, justifyContent: "center" }}>
+            {[
+              { city: "LA", pct: 42 },
+              { city: "NYC", pct: 28 },
+              { city: "London", pct: 15 },
+            ].map(c => {
+              const circ = 2 * Math.PI * 18;
+              const off = circ - (c.pct / 100) * circ;
+              return (
+                <div key={c.city} style={{ textAlign: "center" }}>
+                  <svg width="44" height="44" viewBox="0 0 44 44">
+                    <circle cx="22" cy="22" r="18" fill="none" stroke={C.border} strokeWidth="3" />
+                    <circle cx="22" cy="22" r="18" fill="none" stroke={C.terracotta} strokeWidth="3"
+                      strokeDasharray={circ} strokeDashoffset={off}
+                      strokeLinecap="round" transform="rotate(-90 22 22)" />
+                    <text x="22" y="24" textAnchor="middle" fill={C.text} fontSize="11" fontFamily="Georgia,serif" fontWeight="bold">{c.pct}%</text>
+                  </svg>
+                  <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{c.city}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 10, color: C.muted, marginTop: 8 }}>Track how explored each city is</div>
+        </div>
+
+        {/* Taste Profile teaser */}
+        <div style={{
+          background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", textAlign: "left",
+          animation: "avatarPop 0.5s ease forwards", animationDelay: "300ms", opacity: 0, transform: "scale(0)",
+        }}>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: "0.14em", color: C.terracotta, textTransform: "uppercase", marginBottom: 8 }}>YOUR TASTE DNA</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {["Italian", "Japanese", "Mexican", "Bakery", "French"].map((t, i) => (
+              <span key={t} style={{
+                padding: "4px 10px", borderRadius: 12, fontSize: 11,
+                background: i === 0 ? C.terracotta : "transparent",
+                color: i === 0 ? "#fff" : C.muted,
+                border: i === 0 ? "none" : `1px solid ${C.border}`,
+              }}>
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 20, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
+        Your eating journey
+      </div>
+      <div style={{ marginTop: 8, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
+        Build your Cooked Score, track your cities, and watch your <span style={{ color: C.terracotta }}>taste profile evolve</span> with every restaurant you love.
+      </div>
+    </div>
+  );
+}
+
 export default function Onboarding({ onComplete }) {
   const [slide, setSlide] = useState(0);
   const [phase, setPhase] = useState("in");
   const [fontsReady, setFontsReady] = useState(false);
-  const totalSlides = 4;
+  const [mosaicPhotos, setMosaicPhotos] = useState([]);
+  const totalSlides = 5;
 
   useEffect(() => {
     document.fonts.ready.then(() => setFontsReady(true));
-    // Fallback in case fonts.ready never fires
     const t = setTimeout(() => setFontsReady(true), 2000);
     return () => clearTimeout(t);
+  }, []);
+
+  // Load photos from Supabase and pick 6 random ones from our curated list
+  useEffect(() => {
+    loadSharedPhotos().then(photoMap => {
+      const available = MOSAIC_IDS
+        .map(id => photoMap[String(id)] || photoMap[id])
+        .filter(Boolean);
+      if (available.length >= 6) {
+        setMosaicPhotos(shuffleAndPick(available, 6));
+      } else {
+        // Fallback to whatever we have
+        setMosaicPhotos(available.length > 0 ? available.slice(0, 6) : []);
+      }
+    });
   }, []);
 
   const finish = () => {
@@ -351,73 +746,62 @@ export default function Onboarding({ onComplete }) {
     }, 180);
   };
 
-  const buttonText = ["Let's go", "Next", "Next", "Start swiping"][slide];
+  const buttonText = ["Let's go", "Next", "Next", "Next", "Start swiping"][slide];
   const content = useMemo(() => {
     if (slide === 0) {
+      const photos = mosaicPhotos;
+      if (photos.length === 0) {
+        // Still loading — show minimal splash
+        return (
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+            <div style={{ fontSize: 72, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, lineHeight: 1 }}>
+              <span style={{ color: "#f0ebe2" }}>cook</span><span style={{ color: "#c4603a" }}>ed</span>
+            </div>
+          </div>
+        );
+      }
       return (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            textAlign: "center",
-            padding: "0 36px",
-            border: "none",
-            borderTop: "none",
-            borderBottom: "none",
-            outline: "none",
-            boxShadow: "none",
-            background: "transparent",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-              alignItems: "center",
-              width: "100%",
-              marginTop: -80,
-            }}
-          >
-            <div
-              className="cormorant"
-              style={{
-                fontSize: 76,
-                fontFamily: "'Cormorant Garamond', Georgia, serif",
-                fontStyle: "italic",
-                fontWeight: 700,
-                lineHeight: 1,
-              }}
-            >
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column" }}>
+          {/* Photo mosaic background */}
+          <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gridTemplateRows: "1fr 1fr", gap: 3, height: "55%", padding: 3 }}>
+              {photos.map((src, i) => (
+                <div key={i} style={{
+                  borderRadius: i === 0 ? "16px 4px 4px 4px" : i === 2 ? "4px 16px 4px 4px" : i === 3 ? "4px 4px 4px 16px" : i === 5 ? "4px 4px 16px 4px" : 4,
+                  overflow: "hidden",
+                  animation: "avatarPop 0.6s ease forwards",
+                  animationDelay: `${i * 80}ms`,
+                  opacity: 0, transform: "scale(0)",
+                }}>
+                  <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                </div>
+              ))}
+            </div>
+            {/* Gradient overlay fading photos into background */}
+            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(15,12,9,0) 0%, rgba(15,12,9,0.3) 35%, rgba(15,12,9,0.85) 50%, rgba(15,12,9,1) 60%)" }} />
+          </div>
+
+          {/* Content over gradient */}
+          <div style={{
+            position: "absolute", bottom: 130, left: 0, right: 0,
+            display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "0 36px",
+          }}>
+            <div style={{
+              fontSize: 72, fontFamily: "'Cormorant Garamond', Georgia, serif",
+              fontStyle: "italic", fontWeight: 700, lineHeight: 1,
+            }}>
               <span style={{ color: "#f0ebe2" }}>cook</span>
               <span style={{ color: "#c4603a" }}>ed</span>
             </div>
-            <div className="dm-mono" style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", color: "#5a3a20" }}>
-              YOUR TABLE IS WAITING
-            </div>
-            <div style={{ width: "100%", height: "1px", background: "linear-gradient(to right, transparent, #3d2a18 50%, transparent)", margin: "4px 0" }} />
-            <p
-              className="cormorant"
-              style={{
-                fontFamily: "'Cormorant Garamond', Georgia, serif",
-                fontStyle: "italic",
-                fontWeight: 700,
-                fontSize: 24,
-                lineHeight: 1.3,
-                color: "#f0ebe2",
-                textAlign: "center",
-                margin: 0,
-                maxWidth: 320,
-              }}
-            >
-              The restaurant app for people who care.
+            <div style={{ width: "80%", height: "1px", background: "linear-gradient(to right, transparent, #3d2a18 50%, transparent)", margin: "14px 0" }} />
+            <p style={{
+              fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700,
+              fontSize: 22, lineHeight: 1.35, color: "#f0ebe2", margin: 0, maxWidth: 300,
+            }}>
+              Your personal concierge
             </p>
-            <div className="dm-sans" style={{ fontSize: 14, fontFamily: "'DM Sans', -apple-system, sans-serif", color: "#5a3a20", lineHeight: 1.6 }}>
-              Not crowd-sourced. Not algorithmic. <span style={{ color: "#c4603a" }}>Curated by taste.</span>
+            <div style={{ fontSize: 13, fontFamily: "'DM Sans', sans-serif", color: C.muted, lineHeight: 1.6, marginTop: 10 }}>
+              Not crowd-sourced. Not algorithmic. <span style={{ color: C.terracotta }}>Curated by taste.</span>
             </div>
           </div>
         </div>
@@ -425,108 +809,14 @@ export default function Onboarding({ onComplete }) {
     }
 
     if (slide === 1) {
-      return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-          <SwipeDemoCard />
-          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ width: 52, height: 52, borderRadius: "50%", border: `1.5px solid ${C.border}`, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
-              </div>
-              <div style={{ marginTop: 6, color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase" }}>Pass</div>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ width: 52, height: 52, borderRadius: "50%", border: "1.5px solid #4a7aab", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4a7aab" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-              </div>
-              <div style={{ marginTop: 6, color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase" }}>Watch</div>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ width: 52, height: 52, borderRadius: "50%", background: C.terracotta, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
-                <FlameIcon size={18} filled color="#fff" />
-              </div>
-              <div style={{ marginTop: 6, color: C.muted, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase" }}>Heat</div>
-            </div>
-          </div>
-          <div style={{ marginTop: 14, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
-            Swipe to build your taste
-          </div>
-          <div style={{ marginTop: 6, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
-            Heat it, watch it, pass, or mark it as been. Your stack gets smarter every swipe.
-          </div>
-        </div>
-      );
+      return <SwipeDemo />;
     }
 
-    if (slide === 2) {
-      return (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", textAlign: "center" }}>
-          <div style={{ position: "relative", width: 280, height: 210, marginTop: 10 }}>
-            <div style={{ position: "absolute", left: "50%", top: 86, transform: "translateX(-50%)", width: 250, background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px" }}>
-              <div style={{ fontFamily: "'DM Mono', monospace", color: C.muted, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>BESTIA · ARTS DISTRICT</div>
-              <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, color: C.text, fontSize: 26, lineHeight: 1 }}>Bestia</div>
-            </div>
-            {[
-              { k: "L", x: 46, y: 36, d: "0ms" },
-              { k: "M", x: 138, y: 10, d: "150ms" },
-              { k: "D", x: 228, y: 36, d: "300ms" },
-            ].map((a) => (
-              <div key={a.k}>
-                <div style={{ position: "absolute", left: a.x, top: a.y + 44, width: 1, height: 38, background: C.border }} />
-                <div
-                  style={{
-                    position: "absolute",
-                    left: a.x - 22,
-                    top: a.y - 22,
-                    width: 44,
-                    height: 44,
-                    borderRadius: "50%",
-                    border: `1.5px solid ${C.terracotta}`,
-                    background: C.bg2,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: C.terracotta,
-                    fontFamily: "'Cormorant Garamond', Georgia, serif",
-                    fontStyle: "italic",
-                    fontWeight: 700,
-                    fontSize: 18,
-                    animation: `avatarPop 0.5s ease forwards`,
-                    animationDelay: a.d,
-                    opacity: 0,
-                    transform: "scale(0)",
-                  }}
-                >
-                  {a.k}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 4, background: `${C.terracotta}1f`, border: `1px solid ${C.terracotta}`, borderRadius: 999, padding: "4px 10px", color: C.terracotta, fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-            3 friends loved this
-          </div>
-          <div style={{ marginTop: 16, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
-            Follow friends. Trust their taste.
-          </div>
-          <div style={{ marginTop: 8, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
-            See exactly where people you trust have been - and what they <span style={{ color: C.terracotta }}>actually thought</span>. Yelp reviews are a fever dream.
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", textAlign: "center" }}>
-        <GraphCanvas active />
-        <div style={{ marginTop: 8, fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 28, color: C.text }}>
-          The restaurant graph
-        </div>
-        <div style={{ marginTop: 8, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, color: C.muted, lineHeight: 1.45 }}>
-          People, places, cities - all connected. Powers <span style={{ color: C.terracotta }}>friends who've been here</span>, <span style={{ color: C.terracotta }}>trending near you</span>, and six degrees of any restaurant on earth.
-        </div>
-      </div>
-    );
-  }, [slide]);
+    if (slide === 2) return <DiscoveryDemo />;
+    if (slide === 3) return <SocialDemo />;
+    if (slide === 4) return <JourneyDemo />;
+    return null;
+  }, [slide, mosaicPhotos]);
 
   return (
     <div style={{ opacity: fontsReady ? 1 : 0, transition: "opacity 0.3s ease" }}>
@@ -572,7 +862,7 @@ export default function Onboarding({ onComplete }) {
 
         <div style={{ position: "absolute", left: 28, right: 28, bottom: 34, zIndex: 6 }}>
           <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 14 }}>
-            {Array.from({ length: 4 }).map((_, i) =>
+            {Array.from({ length: totalSlides }).map((_, i) =>
               i === slide ? (
                 <div key={i} style={{ width: 20, height: 8, borderRadius: 999, background: C.terracotta }} />
               ) : (
