@@ -28,11 +28,6 @@ body {
   min-height: 100vh;
 }
 
-/* Zoom on all cover-fit images to crop out baked-in letterbox bars */
-img[style*="object-fit"] {
-  transform: scale(1.15);
-}
-
 h1 {
   font-size: 3.2em;
   line-height: 1.1;
