@@ -2033,6 +2033,8 @@ export default function Discover({ tasteProfile, initialTab }) {
     const score = (r) => (userRatings[r.id] || 0) * 0.3 + r.rating * 0.7;
     return score(b) - score(a);
   });
+  const isInWatchlist = (id) => watchlist.includes(id) || watchlist.includes(Number(id)) || watchlist.includes(String(id));
+  const isLovedCheck = (id) => heatResults.loved.includes(id) || heatResults.loved.includes(Number(id)) || heatResults.loved.includes(String(id));
   const heatCityRestaurants = heatCity === "All" ? allRestaurants : allRestaurants.filter(r => {
     const group = CITY_GROUPS[heatCity] || [heatCity];
     return group.includes(r.city) || group.includes(r.neighborhood);
@@ -2112,8 +2114,6 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
   }, [tab, city, allRestaurants]);
 
-  const isInWatchlist = (id) => watchlist.includes(id) || watchlist.includes(Number(id)) || watchlist.includes(String(id));
-  const isLovedCheck = (id) => heatResults.loved.includes(id) || heatResults.loved.includes(Number(id)) || heatResults.loved.includes(String(id));
   const findsIds = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_finds") || "[]"); } catch { return []; } })();
   const findsList = findsIds.map((id) => allRestaurants.find((r) => r.id === id || r.id === Number(id))).filter(Boolean);
   const explicitLovedIds = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_loved") || "[]"); } catch { return []; } })();
