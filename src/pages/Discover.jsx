@@ -4870,7 +4870,7 @@ Return a JSON object with exactly these fields:
 
             {/* SECTION 3 — 4 ACTION BUTTONS */}
             <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"12px 14px" }}>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
                 {/* LOVED */}
                 <button type="button" onClick={() => toggleLove(detail.id)} style={{ background: heatResults.loved.includes(detail.id) ? "#1e0f06" : "#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:`1px solid ${heatResults.loved.includes(detail.id) ? "rgba(196,96,58,0.5)" : "rgba(46,31,14,0.9)"}`, cursor:"pointer" }}>
                   <FlameIcon size={28} filled={heatResults.loved.includes(detail.id)} color={heatResults.loved.includes(detail.id) ? "#c4603a" : "#4a2e18"} />
