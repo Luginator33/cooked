@@ -854,8 +854,8 @@ export default function Discover({ tasteProfile, initialTab }) {
   }, [photoResolved]);
 
   // Dynamic city regions — auto-discovers cities from imported restaurants
-  const dynamicCityRegions = useMemo(() => buildCityRegions(allRestaurants), [allRestaurants]);
-  const dynamicAllCities = useMemo(() => [...new Set(dynamicCityRegions.flatMap(r => r.cities))], [dynamicCityRegions]);
+  const dynamicCityRegions = useMemo(() => { try { return buildCityRegions(allRestaurants || []); } catch { return BASE_CITY_REGIONS.filter(r => r.cities.length > 0); } }, [allRestaurants]);
+  const dynamicAllCities = useMemo(() => { try { return [...new Set(dynamicCityRegions.flatMap(r => r.cities))]; } catch { return []; } }, [dynamicCityRegions]);
 
   const getVaultPhotoForId = (id) => {
     if (usingSupabasePhotoCache) {
@@ -1385,6 +1385,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   // DM share picker search
   useEffect(() => {
     if (!dmSharePicker) { setDmShareResults([]); return; }
+    if (!user?.id) return;
     const q = dmShareSearch.trim();
     if (!q) {
       // Show following list by default
