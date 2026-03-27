@@ -3,7 +3,8 @@ export const CITIES = [
   "Dallas",
   "Los Angeles", "New York", "Chicago", "San Francisco",
   "Miami", "London", "Tokyo", "Paris", "Copenhagen", "San Diego",
-  "Austin", "Nashville", "Barcelona", "Mexico City", "Playa del Carmen", "Lisbon", "Seoul", "Portland", "Seattle", "Denver"
+  "Austin", "Nashville", "Barcelona", "Mexico City", "Playa del Carmen", "Lisbon", "Seoul", "Portland", "Seattle", "Denver",
+  "Ventura County", "Vail", "Aspen", "Napa Valley", "Puebla", "Guadalajara"
 ];
 
 export const CITY_GROUPS = {
@@ -27,6 +28,12 @@ export const CITY_GROUPS = {
   "Portland": ["Portland","North Portland","Northeast Portland","Southeast Portland","Pearl District"],
   "Seattle": ["Seattle","Capitol Hill","Fremont","Ballard","Queen Anne","University District","Beacon Hill","Wallingford","Greenwood","Ravenna","Columbia City","Georgetown","SODO","Pioneer Square","Pike Place","South Lake Union","Belltown"],
   "Denver": ["Denver","LoDo","RiNo","Five Points","Highlands","Cap Hill","Cherry Creek","Congress Park","Wash Park","Baker","Uptown","City Park","Tennyson","Sunnyside","Stapleton"],
+  "Ventura County": ["Ventura County","Ventura","Thousand Oaks","Westlake Village","Calabasas","Agoura Hills","Ojai","Camarillo","Oxnard","Oak Park","Moorpark","Simi Valley","Newbury Park"],
+  "Vail": ["Vail","Minturn","Avon","Beaver Creek","Edwards"],
+  "Aspen": ["Aspen","Snowmass","Basalt"],
+  "Napa Valley": ["Napa Valley","Napa","Yountville","St. Helena","Calistoga","Rutherford"],
+  "Puebla": ["Puebla","Heroica Puebla de Zaragoza"],
+  "Guadalajara": ["Guadalajara","Zapopan","Tlaquepaque"],
   "Dallas": "United States",
   "Dubai": "International",
 };
@@ -52,6 +59,12 @@ export const CITY_COORDS = {
   "Portland": { lat: 45.5051, lng: -122.6750 },
   "Seattle": { lat: 47.6062, lng: -122.3321 },
   "Denver": { lat: 39.7392, lng: -104.9903 },
+  "Ventura County": { lat: 34.2746, lng: -119.2290 },
+  "Vail": { lat: 39.6403, lng: -106.3742 },
+  "Aspen": { lat: 39.1911, lng: -106.8175 },
+  "Napa Valley": { lat: 38.5025, lng: -122.2654 },
+  "Puebla": { lat: 19.0414, lng: -98.2063 },
+  "Guadalajara": { lat: 20.6597, lng: -103.3496 },
   "Dallas": { lat: 32.7767, lng: -96.797 },
   "Dubai": { lat: 25.2048, lng: 55.2708 },
 };
@@ -153,6 +166,49 @@ const EXTRA_NEIGHBORHOOD_MAP = {
   // Miami neighborhoods (beyond CITY_GROUPS)
   "edgewater": "Miami", "midtown miami": "Miami",
   "overtown": "Miami", "little haiti": "Miami",
+  // Ventura County → Los Angeles (or Ventura County)
+  "ventura": "Ventura County", "westlake village": "Ventura County",
+  "calabasas": "Ventura County", "thousand oaks": "Ventura County",
+  "ojai": "Ventura County", "agoura hills": "Ventura County",
+  "camarillo": "Ventura County", "oxnard": "Ventura County",
+  "oak park": "Ventura County", "moorpark": "Ventura County",
+  "simi valley": "Ventura County", "newbury park": "Ventura County",
+  // More LA cities/neighborhoods
+  "malibu": "Los Angeles", "beverly hills": "Los Angeles",
+  "santa monica": "Los Angeles", "west hollywood": "Los Angeles",
+  "alhambra": "Los Angeles", "santa clarita": "Los Angeles",
+  "pasadena": "Los Angeles", "glendale": "Los Angeles",
+  "burbank": "Los Angeles", "culver city": "Los Angeles",
+  "inglewood": "Los Angeles", "torrance": "Los Angeles",
+  "long beach": "Los Angeles", "hermosa beach": "Los Angeles",
+  "manhattan beach": "Los Angeles", "redondo beach": "Los Angeles",
+  // More NY suburbs/neighborhoods
+  "tarrytown": "New York", "ridgewood": "New York",
+  // Denver metro
+  "aurora": "Denver", "lakewood": "Denver", "wheat ridge": "Denver",
+  "englewood": "Denver", "westminster": "Denver", "greeley": "Denver",
+  // Boulder → Denver region
+  "boulder": "Denver",
+  // Seattle metro
+  "bellevue": "Seattle", "kirkland": "Seattle", "woodinville": "Seattle",
+  "everett": "Seattle", "monroe": "Seattle",
+  // Vail / Aspen / Colorado mountains
+  "minturn": "Vail", "vail": "Vail",
+  "aspen": "Aspen",
+  // Mexico neighborhoods/cities
+  "ciudad de méxico": "Mexico City", "heroica puebla de zaragoza": "Puebla",
+  "zapopan": "Guadalajara", "roma": "Mexico City", "coatepec": "Mexico City",
+  // Napa Valley
+  "yountville": "Napa Valley", "st. helena": "Napa Valley", "napa": "Napa Valley",
+  "calistoga": "Napa Valley", "rutherford": "Napa Valley",
+  // Portland metro
+  "tigard": "Portland",
+  // Austin area
+  "driftwood": "Austin",
+  // Atlanta metro
+  "norcross": "Atlanta",
+  // Other
+  "meridian": "Boise", "east lansing": "Detroit",
 };
 
 const _allNeighborhoods = { ..._neighborhoodToCity, ...EXTRA_NEIGHBORHOOD_MAP };
