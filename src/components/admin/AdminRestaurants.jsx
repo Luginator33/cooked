@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { C, cardStyle, inputStyle, btnPrimary, btnDanger, btnSmall, btnOutline, sectionHeader, SearchBar, ConfirmDialog, Toast } from "./adminHelpers";
+import { C, cardStyle, inputStyle, btnPrimary, btnSecondary, btnDanger, btnSmall, btnOutline, sectionHeader, SearchBar, ConfirmDialog, Toast } from "./adminHelpers";
 import { upsertAdminOverride, deleteAdminOverride, addCommunityRestaurant, deleteCommunityRestaurant, updateCommunityRestaurant, saveSharedPhoto, logAdminAction } from "../../lib/supabase";
 import { transferLoves, syncRestaurant } from "../../lib/neo4j";
 
@@ -513,6 +513,9 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
               <button type="button" onClick={confirmImport} style={{ ...btnPrimary, width: "100%", padding: "14px", fontSize: 15 }}>
                 Import {importPreview.name}
               </button>
+              <button type="button" onClick={() => { setImportPreview(null); setImportPhotos([]); }} style={{ ...btnSecondary, width: "100%", padding: "12px", fontSize: 14, marginTop: 8, color: "#999" }}>
+                Don't Import
+              </button>
             </div>
           )}
         </>
@@ -692,6 +695,20 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                       }} style={{ ...btnPrimary, width: "100%", fontSize: 12 }}>
                         Import {item.data?.name}
                       </button>
+                      <button type="button" onClick={() => {
+                        const q = [...bulkQueue]; q[idx].status = "skipped"; setBulkQueue(q);
+                      }} style={{ ...btnSecondary, width: "100%", fontSize: 12, marginTop: 6, color: "#999" }}>
+                        Don't Import
+                      </button>
+                    </div>
+                  )}
+
+                  {item.status === "skipped" && (
+                    <div style={{ marginTop: 8, textAlign: "center" }}>
+                      <span style={{ fontSize: 12, color: "#999", fontFamily: "-apple-system,sans-serif" }}>Skipped</span>
+                      <button type="button" onClick={() => {
+                        const q = [...bulkQueue]; q[idx].status = "ready"; setBulkQueue(q);
+                      }} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 11, cursor: "pointer", marginLeft: 8, fontFamily: "-apple-system,sans-serif" }}>Undo</button>
                     </div>
                   )}
 

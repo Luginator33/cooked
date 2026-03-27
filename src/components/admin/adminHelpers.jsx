@@ -54,6 +54,18 @@ export const btnPrimary = {
   fontWeight: 500,
 };
 
+export const btnSecondary = {
+  background: "transparent",
+  color: "#999",
+  border: `1px solid #555`,
+  borderRadius: 10,
+  padding: "10px 18px",
+  fontSize: 13,
+  fontFamily: "'DM Sans', sans-serif",
+  cursor: "pointer",
+  fontWeight: 500,
+};
+
 export const btnOutline = {
   background: "transparent",
   color: C.terracotta,
