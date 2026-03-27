@@ -2196,8 +2196,14 @@ export default function Discover({ tasteProfile, initialTab }) {
     });
   };
   const toggleWatch = (id) => {
+    console.log('[Watch] toggleWatch called with id:', id, 'type:', typeof id);
     const normalizedId = isNaN(id) ? id : Number(id);
-    setWatchlist(s => s.includes(normalizedId) ? s.filter(x=>x!==normalizedId) : [...s,normalizedId]);
+    console.log('[Watch] normalizedId:', normalizedId, 'type:', typeof normalizedId, 'currently in watchlist:', watchlist.includes(normalizedId));
+    setWatchlist(s => {
+      const newList = s.includes(normalizedId) ? s.filter(x=>x!==normalizedId) : [...s,normalizedId];
+      console.log('[Watch] watchlist updated, new length:', newList.length);
+      return newList;
+    });
   };
   const share = async (name) => {
     const text = `Check out ${name} on Cooked — the restaurant app for people who care.`;
