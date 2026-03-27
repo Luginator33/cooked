@@ -6,18 +6,73 @@ import { SignInButton, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
 import { RESTAURANTS, ALL_TAGS } from "../data/restaurants";
 
 /** All cities present in the restaurant database — single source for filters across tabs */
-const CITY_REGIONS = [
+const BASE_CITY_REGIONS = [
   { region: "United States", cities: ["Los Angeles","New York","Ventura County","Malibu","Chicago","Miami","Las Vegas","San Francisco","San Diego","Austin","Nashville","Maui","Napa","Ojai","Portland","Dallas","Savannah","Scottsdale"] },
   { region: "Mexico & Caribbean", cities: ["Mexico City","Playa del Carmen","Canouan Island","Liberia"] },
   { region: "Europe", cities: ["London","UK","Paris","Barcelona","Amsterdam","Copenhagen","Lisbon","Rome","Berlin","Istanbul","Munich","Prague","Stockholm","Vienna","Ibiza","Mykonos","Malta","Cannes"] },
   { region: "Middle East", cities: ["Dubai","Tel Aviv"] },
   { region: "Asia", cities: ["Tokyo","Seoul","Hong Kong","Bangkok","Bali","Singapore","Mumbai"] },
   { region: "Canada", cities: ["Toronto"] },
+  { region: "Africa", cities: [] },
+  { region: "South America", cities: [] },
+  { region: "Oceania", cities: [] },
 ];
 
-const ALL_CITIES = [...new Set(CITY_REGIONS.flatMap(r => r.cities))];
+// Auto-classify a city into a region based on keywords/known patterns
+const REGION_HINTS = {
+  "United States": ["California","Florida","Texas","Hawaii","Oregon","Arizona","Georgia","Tennessee","Nevada","Colorado","New York","Illinois","Massachusetts","Washington","Virginia","Pennsylvania","New Jersey","Connecticut","Maryland","North Carolina","South Carolina","Louisiana","Montana","Idaho","Wyoming","Utah","New Mexico","Minnesota","Wisconsin","Michigan","Ohio","Indiana","Missouri","Kansas","Nebraska","Iowa","Oklahoma","Arkansas","Alabama","Mississippi","Kentucky","West Virginia","Delaware","Rhode Island","New Hampshire","Vermont","Maine","Alaska","DC"],
+  "Mexico & Caribbean": ["Mexico","Cancún","Tulum","Oaxaca","Guadalajara","Monterrey","Puerto Vallarta","San Miguel","Cabo","Caribbean","Jamaica","Bahamas","Barbados","Trinidad","Puerto Rico","Cuba","Dominican Republic","Aruba","St. Barts","Turks"],
+  "Europe": ["France","Italy","Spain","Germany","Netherlands","Denmark","Portugal","Sweden","Norway","Finland","Greece","Croatia","Switzerland","Austria","Belgium","Ireland","Scotland","Wales","England","Poland","Czech","Hungary","Romania","Bulgaria","Serbia","Montenegro","Albania","Slovenia","Slovakia","Estonia","Latvia","Lithuania","Turkey","Cyprus","Sardinia","Sicily","Corsica","Mallorca","Santorini","Crete","Amalfi","Provence","Tuscany","Riviera","Monaco","Luxembourg"],
+  "Middle East": ["UAE","Saudi","Qatar","Bahrain","Oman","Kuwait","Jordan","Lebanon","Israel","Egypt","Morocco","Tunisia"],
+  "Asia": ["Japan","Korea","China","Taiwan","Thailand","Vietnam","Indonesia","Philippines","Malaysia","India","Sri Lanka","Nepal","Cambodia","Laos","Myanmar"],
+  "Canada": ["Canada","Vancouver","Montreal","Calgary","Ottawa","Quebec","Winnipeg","Edmonton","Halifax"],
+  "Africa": ["South Africa","Kenya","Nigeria","Ghana","Tanzania","Ethiopia","Cape Town","Johannesburg","Nairobi","Lagos","Accra","Marrakech"],
+  "South America": ["Brazil","Argentina","Colombia","Peru","Chile","Ecuador","Uruguay","Bolivia","São Paulo","Rio","Buenos Aires","Bogotá","Lima","Santiago","Medellín","Cartagena"],
+  "Oceania": ["Australia","New Zealand","Sydney","Melbourne","Auckland","Brisbane","Perth","Fiji"],
+};
 
-function getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults) {
+function classifyCity(cityName) {
+  const lower = cityName.toLowerCase();
+  for (const [region, hints] of Object.entries(REGION_HINTS)) {
+    if (hints.some(h => lower.includes(h.toLowerCase()) || h.toLowerCase().includes(lower))) return region;
+  }
+  return null; // couldn't classify
+}
+
+// Build dynamic city regions from all restaurants
+function buildCityRegions(allRestaurants) {
+  const knownCities = new Set(BASE_CITY_REGIONS.flatMap(r => r.cities));
+  const newCities = {};
+  for (const r of allRestaurants) {
+    if (r.city && !knownCities.has(r.city)) {
+      const region = classifyCity(r.city);
+      if (region) {
+        if (!newCities[region]) newCities[region] = new Set();
+        newCities[region].add(r.city);
+      } else {
+        // Default to "Other" or try by lat/lng
+        if (!newCities["Other"]) newCities["Other"] = new Set();
+        newCities["Other"].add(r.city);
+      }
+    }
+  }
+  const regions = BASE_CITY_REGIONS.map(r => ({
+    ...r,
+    cities: [...r.cities, ...(newCities[r.region] ? [...newCities[r.region]] : [])],
+  }));
+  // Add "Other" region if there are unclassified cities
+  if (newCities["Other"]?.size) {
+    regions.push({ region: "Other", cities: [...newCities["Other"]] });
+  }
+  // Remove empty regions
+  return regions.filter(r => r.cities.length > 0);
+}
+
+// These will be overwritten once allRestaurants loads, but need defaults for initial render
+let CITY_REGIONS = BASE_CITY_REGIONS.filter(r => r.cities.length > 0);
+let ALL_CITIES = [...new Set(CITY_REGIONS.flatMap(r => r.cities))];
+
+function getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults, cityRegions) {
   const cityScores = {};
   // Score from loved restaurants
   (lovedRestaurants || []).forEach(r => {
@@ -33,7 +88,7 @@ function getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResult
     const r = RESTAURANTS.find(x => x.id === id || x.id === Number(id));
     if (r?.city) cityScores[r.city] = (cityScores[r.city] || 0) + 1;
   });
-  return CITY_REGIONS.map(region => ({
+  return (cityRegions || CITY_REGIONS).map(region => ({
     ...region,
     cities: [...region.cities].sort((a, b) => (cityScores[b] || 0) - (cityScores[a] || 0)),
   }));
@@ -797,6 +852,10 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
     return s;
   }, [photoResolved]);
+
+  // Dynamic city regions — auto-discovers cities from imported restaurants
+  const dynamicCityRegions = useMemo(() => buildCityRegions(allRestaurants), [allRestaurants]);
+  const dynamicAllCities = useMemo(() => [...new Set(dynamicCityRegions.flatMap(r => r.cities))], [dynamicCityRegions]);
 
   const getVaultPhotoForId = (id) => {
     if (usingSupabasePhotoCache) {
@@ -3219,7 +3278,7 @@ Return a JSON object with exactly these fields:
                       <div style={{ display: "flex", alignItems: "stretch", width: "100%" }}>
                         <button type="button" onClick={() => { setCity("All"); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }} style={{ flex:1, padding:"8px 8px 8px 14px", textAlign:"left", background: city==="All" ? `${C.terracotta}18` : "transparent", border:"none", color: city==="All" ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", fontWeight: city==="All" ? 600 : 400, cursor:"pointer" }}>All Cities</button>
                       </div>
-                      {getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults).map(({ region, cities }) => (
+                      {getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults, dynamicCityRegions).map(({ region, cities }) => (
                         <div key={region}>
                           <div style={{ padding:"10px 14px 4px", fontFamily:"'DM Mono',monospace", fontSize:8, color:C.terracotta, letterSpacing:"1.8px", textTransform:"uppercase", borderTop:`1px solid ${C.border}` }}>{region}</div>
                           {cities.map((c) => (
@@ -4134,7 +4193,7 @@ Return a JSON object with exactly these fields:
                     style={{ display:"block", width:"100%", padding:"10px 16px", textAlign:"left", background: heatCity==="All" ? `${C.terracotta}18` : "transparent", border:"none", borderBottom:`1px solid ${C.border}`, color: heatCity==="All" ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
                     All Cities
                   </button>
-                  {getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults).map(({ region, cities }) => (
+                  {getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults, dynamicCityRegions).map(({ region, cities }) => (
                     <div key={region}>
                       <div style={{ padding:"8px 16px 4px", fontSize:8, fontFamily:"'DM Mono',monospace", color:C.terracotta, letterSpacing:"1.8px", textTransform:"uppercase", borderTop:`1px solid ${C.border}` }}>{region}</div>
                       {cities.map(c => (
@@ -4313,7 +4372,7 @@ Return a JSON object with exactly these fields:
             clerkName={user?.fullName}
             clerkImageUrl={user?.imageUrl}
             onViewUser={setViewingUserId}
-            allCitiesFromDb={ALL_CITIES}
+            allCitiesFromDb={dynamicAllCities}
             onOpenIgImport={() => { setIgError(null); setIgAddedRestaurants([]); setIgDone(false); setIgImporting(false); setPickerMode("ig-import"); setIgModal(true); }}
             onSharedPhotoSaved={(restaurantId, photoUrl) => {
               setPhotoResolved((prev) => [...new Set([...prev, restaurantId])]);
