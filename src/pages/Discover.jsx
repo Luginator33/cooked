@@ -2112,12 +2112,14 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
   }, [tab, city, allRestaurants]);
 
+  const isInWatchlistEarly = (id) => watchlist.includes(id) || watchlist.includes(Number(id)) || watchlist.includes(String(id));
+  const isLovedEarly = (id) => heatResults.loved.includes(id) || heatResults.loved.includes(Number(id)) || heatResults.loved.includes(String(id));
   const findsIds = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_finds") || "[]"); } catch { return []; } })();
   const findsList = findsIds.map((id) => allRestaurants.find((r) => r.id === id || r.id === Number(id))).filter(Boolean);
   const explicitLovedIds = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_loved") || "[]"); } catch { return []; } })();
   const lovedList = allRestaurants.filter(r => explicitLovedIds.includes(r.id) || explicitLovedIds.includes(Number(r.id)));
   const lovedRestaurants = lovedList;
-  const watchList = allRestaurants.filter(r => isInWatchlist(r.id));
+  const watchList = allRestaurants.filter(r => isInWatchlistEarly(r.id));
   const lovedFromSwipe = lovedList;
 
   const toggleLove = (id) => {
@@ -2195,8 +2197,8 @@ export default function Discover({ tasteProfile, initialTab }) {
       };
     });
   };
-  const isInWatchlist = (id) => watchlist.includes(id) || watchlist.includes(Number(id)) || watchlist.includes(String(id));
-  const isLoved = (id) => heatResults.loved.includes(id) || heatResults.loved.includes(Number(id)) || heatResults.loved.includes(String(id));
+  const isInWatchlist = isInWatchlistEarly;
+  const isLoved = isLovedEarly;
   const toggleWatch = (id) => {
     const normalizedId = isNaN(id) ? id : Number(id);
     setWatchlist(s => {
