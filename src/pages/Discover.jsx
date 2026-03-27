@@ -2037,7 +2037,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     const group = CITY_GROUPS[heatCity] || [heatCity];
     return group.includes(r.city) || group.includes(r.neighborhood);
   });
-  const heatActive = heatCityRestaurants.filter(r => !heatResults.loved.includes(r.id) && !heatResults.noped.includes(r.id) && !heatResults.skipped.includes(r.id));
+  const heatActive = heatCityRestaurants.filter(r => !isLoved(r.id) && !heatResults.noped.includes(r.id) && !heatResults.skipped.includes(r.id));
   const heatSkippedRecycled = heatCityRestaurants.filter(r => heatResults.skipped.includes(r.id));
   const heatDeck = [...heatActive, ...heatSkippedRecycled];
   const filtered = filteredByCity;
@@ -2117,7 +2117,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const explicitLovedIds = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_loved") || "[]"); } catch { return []; } })();
   const lovedList = allRestaurants.filter(r => explicitLovedIds.includes(r.id) || explicitLovedIds.includes(Number(r.id)));
   const lovedRestaurants = lovedList;
-  const watchList = allRestaurants.filter(r => watchlist.includes(r.id));
+  const watchList = allRestaurants.filter(r => isInWatchlist(r.id));
   const lovedFromSwipe = lovedList;
 
   const toggleLove = (id) => {
@@ -2195,14 +2195,14 @@ export default function Discover({ tasteProfile, initialTab }) {
       };
     });
   };
+  const isInWatchlist = (id) => watchlist.includes(id) || watchlist.includes(Number(id)) || watchlist.includes(String(id));
+  const isLoved = (id) => heatResults.loved.includes(id) || heatResults.loved.includes(Number(id)) || heatResults.loved.includes(String(id));
   const toggleWatch = (id) => {
-    console.log('[Watch] toggleWatch called with id:', id, 'type:', typeof id);
     const normalizedId = isNaN(id) ? id : Number(id);
-    console.log('[Watch] normalizedId:', normalizedId, 'type:', typeof normalizedId, 'currently in watchlist:', watchlist.includes(normalizedId));
     setWatchlist(s => {
-      const newList = s.includes(normalizedId) ? s.filter(x=>x!==normalizedId) : [...s,normalizedId];
-      console.log('[Watch] watchlist updated, new length:', newList.length);
-      return newList;
+      const inList = s.includes(normalizedId) || s.includes(Number(id)) || s.includes(String(id));
+      if (inList) return s.filter(x => x !== normalizedId && x !== Number(id) && x !== String(id));
+      return [...s, normalizedId];
     });
   };
   const share = async (name) => {
@@ -3726,8 +3726,8 @@ Return a JSON object with exactly these fields:
             <RestCard
               key={`rest-${r.id}-${photoCacheVersion}-${index}`}
               r={r}
-              loved={heatResults.loved.includes(r.id)}
-              watched={watchlist.includes(r.id)}
+              loved={isLoved(r.id)}
+              watched={isInWatchlist(r.id)}
               onLove={() => toggleLove(r.id)}
               onWatch={()=>toggleWatch(r.id)}
               onShare={share}
@@ -3866,8 +3866,8 @@ Return a JSON object with exactly these fields:
                         <RestCard
                           key={`follow-pick-${r.id}-${photoCacheVersion}-${index}`}
                           r={r}
-                          loved={heatResults.loved.includes(r.id)}
-                          watched={watchlist.includes(r.id)}
+                          loved={isLoved(r.id)}
+                          watched={isInWatchlist(r.id)}
                           onLove={() => toggleLove(r.id)}
                           onWatch={() => toggleWatch(r.id)}
                           onShare={share}
@@ -4294,18 +4294,18 @@ Return a JSON object with exactly these fields:
                     <button
                       type="button"
                       onPointerDown={e => { e.stopPropagation(); e.preventDefault(); }}
-                      onPointerUp={e => { e.stopPropagation(); if (!watchlist.includes(card.id)) toggleWatch(card.id); doSwipe('up'); }}
-                      style={{ width:42, height:42, borderRadius:"50%", border:`1px solid ${watchlist.includes(card.id) ? "#4a90d9" : "#1a2a3d"}`, background: watchlist.includes(card.id) ? "#0a1a2e" : "#080f16", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
+                      onPointerUp={e => { e.stopPropagation(); if (!isInWatchlist(card.id)) toggleWatch(card.id); doSwipe('up'); }}
+                      style={{ width:42, height:42, borderRadius:"50%", border:`1px solid ${isInWatchlist(card.id) ? "#4a90d9" : "#1a2a3d"}`, background: isInWatchlist(card.id) ? "#0a1a2e" : "#080f16", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
                       <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                        <circle cx="9" cy="9" r="7" stroke={watchlist.includes(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5"/>
-                        <circle cx="9" cy="9" r="3" stroke={watchlist.includes(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5"/>
-                        <line x1="9" y1="2" x2="9" y2="0" stroke={watchlist.includes(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5" strokeLinecap="round"/>
-                        <line x1="9" y1="18" x2="9" y2="16" stroke={watchlist.includes(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5" strokeLinecap="round"/>
-                        <line x1="2" y1="9" x2="0" y2="9" stroke={watchlist.includes(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5" strokeLinecap="round"/>
-                        <line x1="18" y1="9" x2="16" y2="9" stroke={watchlist.includes(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5" strokeLinecap="round"/>
+                        <circle cx="9" cy="9" r="7" stroke={isInWatchlist(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5"/>
+                        <circle cx="9" cy="9" r="3" stroke={isInWatchlist(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5"/>
+                        <line x1="9" y1="2" x2="9" y2="0" stroke={isInWatchlist(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5" strokeLinecap="round"/>
+                        <line x1="9" y1="18" x2="9" y2="16" stroke={isInWatchlist(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5" strokeLinecap="round"/>
+                        <line x1="2" y1="9" x2="0" y2="9" stroke={isInWatchlist(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5" strokeLinecap="round"/>
+                        <line x1="18" y1="9" x2="16" y2="9" stroke={isInWatchlist(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5" strokeLinecap="round"/>
                       </svg>
                     </button>
-                    <span style={{ fontSize:9, letterSpacing:"0.12em", color: watchlist.includes(card.id) ? "#4a90d9" : "#3d2a18", fontFamily:"-apple-system,sans-serif", textTransform:"uppercase" }}>WATCH</span>
+                    <span style={{ fontSize:9, letterSpacing:"0.12em", color: isInWatchlist(card.id) ? "#4a90d9" : "#3d2a18", fontFamily:"-apple-system,sans-serif", textTransform:"uppercase" }}>WATCH</span>
                   </div>
                   <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
                     <button onClick={() => doSwipe('right')} style={{ width:54, height:54, borderRadius:"50%", border:"1px solid #2e1f0e", background:"#1a1208", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
@@ -4346,8 +4346,8 @@ Return a JSON object with exactly these fields:
                 <div style={{ fontSize:11, color:"#8a7060", fontFamily:"'DM Mono',monospace", marginBottom:10 }}>{selectedRest.cuisine} · {selectedRest.neighborhood} · {selectedRest.price}</div>
                 <p style={{ fontSize:12, color:"#4a3320", lineHeight:1.5, marginBottom:12 }}>{selectedRest.desc}</p>
                 <div style={{ display:"flex", gap:8 }} onClick={e => e.stopPropagation()}>
-                  <button type="button" onClick={() => toggleLove(selectedRest.id)} style={{ flex:1, padding:"9px 4px", borderRadius:10, border:`1.5px solid ${heatResults.loved.includes(selectedRest.id) ? "#c4603a" : "#ddd0bc"}`, background: heatResults.loved.includes(selectedRest.id) ? "#c4603a18" : "transparent", color: heatResults.loved.includes(selectedRest.id) ? "#c4603a" : "#8a7060", cursor:"pointer", fontSize:12, fontFamily:"'DM Sans',sans-serif" }}>{heatResults.loved.includes(selectedRest.id) ? "Loved It ♥" : "Love It ♡"}</button>
-                  <button type="button" onClick={() => toggleWatch(selectedRest.id)} style={{ flex:1, padding:"9px 4px", borderRadius:10, border:`1.5px solid ${watchlist.includes(selectedRest.id) ? "#6b9fff" : "#ddd0bc"}`, background: watchlist.includes(selectedRest.id) ? "#6b9fff18" : "transparent", color: watchlist.includes(selectedRest.id) ? "#6b9fff" : "#8a7060", cursor:"pointer", fontSize:12, fontFamily:"'DM Sans',sans-serif" }}>{watchlist.includes(selectedRest.id) ? "On Watchlist" : "Watchlist"}</button>
+                  <button type="button" onClick={() => toggleLove(selectedRest.id)} style={{ flex:1, padding:"9px 4px", borderRadius:10, border:`1.5px solid ${isLoved(selectedRest.id) ? "#c4603a" : "#ddd0bc"}`, background: isLoved(selectedRest.id) ? "#c4603a18" : "transparent", color: isLoved(selectedRest.id) ? "#c4603a" : "#8a7060", cursor:"pointer", fontSize:12, fontFamily:"'DM Sans',sans-serif" }}>{isLoved(selectedRest.id) ? "Loved It ♥" : "Love It ♡"}</button>
+                  <button type="button" onClick={() => toggleWatch(selectedRest.id)} style={{ flex:1, padding:"9px 4px", borderRadius:10, border:`1.5px solid ${isInWatchlist(selectedRest.id) ? "#6b9fff" : "#ddd0bc"}`, background: isInWatchlist(selectedRest.id) ? "#6b9fff18" : "transparent", color: isInWatchlist(selectedRest.id) ? "#6b9fff" : "#8a7060", cursor:"pointer", fontSize:12, fontFamily:"'DM Sans',sans-serif" }}>{isInWatchlist(selectedRest.id) ? "On Watchlist" : "Watchlist"}</button>
                 </div>
               </div>
             </div>
@@ -4868,17 +4868,17 @@ Return a JSON object with exactly these fields:
             <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"12px 14px" }}>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
                 {/* LOVED */}
-                <button type="button" onClick={() => toggleLove(detail.id)} style={{ background: heatResults.loved.includes(detail.id) ? "#1e0f06" : "#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:`1px solid ${heatResults.loved.includes(detail.id) ? "rgba(196,96,58,0.5)" : "rgba(46,31,14,0.9)"}`, cursor:"pointer" }}>
-                  <FlameIcon size={28} filled={heatResults.loved.includes(detail.id)} color={heatResults.loved.includes(detail.id) ? "#c4603a" : "#4a2e18"} />
-                  <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:heatResults.loved.includes(detail.id) ? "#c4603a" : "#4a2e18", fontFamily:"-apple-system,sans-serif" }}>LOVED</span>
+                <button type="button" onClick={() => toggleLove(detail.id)} style={{ background: isLoved(detail.id) ? "#1e0f06" : "#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:`1px solid ${isLoved(detail.id) ? "rgba(196,96,58,0.5)" : "rgba(46,31,14,0.9)"}`, cursor:"pointer" }}>
+                  <FlameIcon size={28} filled={isLoved(detail.id)} color={isLoved(detail.id) ? "#c4603a" : "#4a2e18"} />
+                  <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:isLoved(detail.id) ? "#c4603a" : "#4a2e18", fontFamily:"-apple-system,sans-serif" }}>LOVED</span>
                 </button>
                 {/* WATCH */}
-                <button type="button" onClick={() => toggleWatch(detail.id)} style={{ background: watchlist.includes(detail.id) ? "#060f1a" : "#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:`1px solid ${watchlist.includes(detail.id) ? "rgba(74,144,217,0.5)" : "rgba(46,31,14,0.9)"}`, cursor:"pointer" }}>
+                <button type="button" onClick={() => toggleWatch(detail.id)} style={{ background: isInWatchlist(detail.id) ? "#060f1a" : "#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:`1px solid ${isInWatchlist(detail.id) ? "rgba(74,144,217,0.5)" : "rgba(46,31,14,0.9)"}`, cursor:"pointer" }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke={watchlist.includes(detail.id) ? "#4a90d9" : "#4a2e18"} strokeWidth="1.5"/>
-                    <circle cx="12" cy="12" r="3" stroke={watchlist.includes(detail.id) ? "#4a90d9" : "#4a2e18"} strokeWidth="1.5"/>
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke={isInWatchlist(detail.id) ? "#4a90d9" : "#4a2e18"} strokeWidth="1.5"/>
+                    <circle cx="12" cy="12" r="3" stroke={isInWatchlist(detail.id) ? "#4a90d9" : "#4a2e18"} strokeWidth="1.5"/>
                   </svg>
-                  <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:watchlist.includes(detail.id) ? "#4a90d9" : "#4a2e18", fontFamily:"-apple-system,sans-serif" }}>WATCH</span>
+                  <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:isInWatchlist(detail.id) ? "#4a90d9" : "#4a2e18", fontFamily:"-apple-system,sans-serif" }}>WATCH</span>
                 </button>
                 {/* MAPS */}
                 <button type="button" onClick={() => window.open(detail.googleMapsUrl || `https://maps.google.com/?q=${encodeURIComponent(detail.address||detail.name)}`, "_blank")} style={{ background:"#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:"1px solid rgba(46,31,14,0.9)", cursor:"pointer" }}>
