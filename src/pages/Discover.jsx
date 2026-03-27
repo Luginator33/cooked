@@ -5470,7 +5470,7 @@ Return a JSON object with exactly these fields:
                               const r = allRestaurants.find(r => r.id === rid);
                               if (r) { setDetailId(rid); setDmOpen(false); setDmConvo(null); }
                             }} style={{ background: `${C.bg}40`, border:`1px solid ${C.border}`, borderRadius:12, padding:"8px 10px", cursor:"pointer", display:"flex", alignItems:"center", gap:10, textAlign:"left", width:"100%" }}>
-                              {(() => { const photo = getPhoto(parseInt(msg.restaurant_id)); return photo ? <img src={photo} alt="" style={{ width:44, height:44, borderRadius:8, objectFit:"cover", flexShrink:0 }} /> : null; })()}
+                              {(() => { const rid = parseInt(msg.restaurant_id); const photo = photoCacheRef.current?.[rid] || photoCacheRef.current?.[String(rid)] || allRestaurants.find(r => r.id === rid)?.img; return photo ? <img src={photo} alt="" style={{ width:44, height:44, borderRadius:8, objectFit:"cover", flexShrink:0 }} /> : null; })()}
                               <div>
                                 <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:14, color: isMine ? "#fff" : C.text }}>{msg.restaurant_name}</div>
                                 <div style={{ fontSize:11, color: isMine ? "rgba(255,255,255,0.7)" : C.muted, marginTop:2 }}>Tap to view</div>
