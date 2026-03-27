@@ -5528,7 +5528,7 @@ Return a JSON object with exactly these fields:
                             <button type="button" onClick={() => {
                               const rid = parseInt(msg.restaurant_id);
                               const r = allRestaurants.find(r => r.id === rid);
-                              if (r) { setDetailId(rid); setDmOpen(false); setDmConvo(null); }
+                              if (r) { setDmOpen(false); setDmConvo(null); setDetailRestaurant(r); }
                             }} style={{ background: `${C.bg}40`, border:`1px solid ${C.border}`, borderRadius:12, padding:"8px 10px", cursor:"pointer", display:"flex", alignItems:"center", gap:10, textAlign:"left", width:"100%" }}>
                               {(() => { const rid = parseInt(msg.restaurant_id); const photo = photoCacheRef.current?.[rid] || photoCacheRef.current?.[String(rid)] || allRestaurants.find(r => r.id === rid)?.img; return photo ? <img src={photo} alt="" style={{ width:44, height:44, borderRadius:8, objectFit:"cover", flexShrink:0 }} /> : null; })()}
                               <div>
