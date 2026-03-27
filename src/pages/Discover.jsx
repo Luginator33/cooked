@@ -2037,7 +2037,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     const group = CITY_GROUPS[heatCity] || [heatCity];
     return group.includes(r.city) || group.includes(r.neighborhood);
   });
-  const heatActive = heatCityRestaurants.filter(r => !isLoved(r.id) && !heatResults.noped.includes(r.id) && !heatResults.skipped.includes(r.id));
+  const heatActive = heatCityRestaurants.filter(r => !isLovedCheck(r.id) && !heatResults.noped.includes(r.id) && !heatResults.skipped.includes(r.id));
   const heatSkippedRecycled = heatCityRestaurants.filter(r => heatResults.skipped.includes(r.id));
   const heatDeck = [...heatActive, ...heatSkippedRecycled];
   const filtered = filteredByCity;
@@ -2112,14 +2112,14 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
   }, [tab, city, allRestaurants]);
 
-  const isInWatchlistEarly = (id) => watchlist.includes(id) || watchlist.includes(Number(id)) || watchlist.includes(String(id));
-  const isLovedEarly = (id) => heatResults.loved.includes(id) || heatResults.loved.includes(Number(id)) || heatResults.loved.includes(String(id));
+  const isInWatchlist = (id) => watchlist.includes(id) || watchlist.includes(Number(id)) || watchlist.includes(String(id));
+  const isLovedCheck = (id) => heatResults.loved.includes(id) || heatResults.loved.includes(Number(id)) || heatResults.loved.includes(String(id));
   const findsIds = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_finds") || "[]"); } catch { return []; } })();
   const findsList = findsIds.map((id) => allRestaurants.find((r) => r.id === id || r.id === Number(id))).filter(Boolean);
   const explicitLovedIds = (() => { try { return JSON.parse(safeLocalStorageGetItem("cooked_loved") || "[]"); } catch { return []; } })();
   const lovedList = allRestaurants.filter(r => explicitLovedIds.includes(r.id) || explicitLovedIds.includes(Number(r.id)));
   const lovedRestaurants = lovedList;
-  const watchList = allRestaurants.filter(r => isInWatchlistEarly(r.id));
+  const watchList = allRestaurants.filter(r => isInWatchlist(r.id));
   const lovedFromSwipe = lovedList;
 
   const toggleLove = (id) => {
@@ -2197,8 +2197,6 @@ export default function Discover({ tasteProfile, initialTab }) {
       };
     });
   };
-  const isInWatchlist = isInWatchlistEarly;
-  const isLoved = isLovedEarly;
   const toggleWatch = (id) => {
     const normalizedId = isNaN(id) ? id : Number(id);
     setWatchlist(s => {
@@ -3728,7 +3726,7 @@ Return a JSON object with exactly these fields:
             <RestCard
               key={`rest-${r.id}-${photoCacheVersion}-${index}`}
               r={r}
-              loved={isLoved(r.id)}
+              loved={isLovedCheck(r.id)}
               watched={isInWatchlist(r.id)}
               onLove={() => toggleLove(r.id)}
               onWatch={()=>toggleWatch(r.id)}
@@ -3868,7 +3866,7 @@ Return a JSON object with exactly these fields:
                         <RestCard
                           key={`follow-pick-${r.id}-${photoCacheVersion}-${index}`}
                           r={r}
-                          loved={isLoved(r.id)}
+                          loved={isLovedCheck(r.id)}
                           watched={isInWatchlist(r.id)}
                           onLove={() => toggleLove(r.id)}
                           onWatch={() => toggleWatch(r.id)}
@@ -4348,7 +4346,7 @@ Return a JSON object with exactly these fields:
                 <div style={{ fontSize:11, color:"#8a7060", fontFamily:"'DM Mono',monospace", marginBottom:10 }}>{selectedRest.cuisine} · {selectedRest.neighborhood} · {selectedRest.price}</div>
                 <p style={{ fontSize:12, color:"#4a3320", lineHeight:1.5, marginBottom:12 }}>{selectedRest.desc}</p>
                 <div style={{ display:"flex", gap:8 }} onClick={e => e.stopPropagation()}>
-                  <button type="button" onClick={() => toggleLove(selectedRest.id)} style={{ flex:1, padding:"9px 4px", borderRadius:10, border:`1.5px solid ${isLoved(selectedRest.id) ? "#c4603a" : "#ddd0bc"}`, background: isLoved(selectedRest.id) ? "#c4603a18" : "transparent", color: isLoved(selectedRest.id) ? "#c4603a" : "#8a7060", cursor:"pointer", fontSize:12, fontFamily:"'DM Sans',sans-serif" }}>{isLoved(selectedRest.id) ? "Loved It ♥" : "Love It ♡"}</button>
+                  <button type="button" onClick={() => toggleLove(selectedRest.id)} style={{ flex:1, padding:"9px 4px", borderRadius:10, border:`1.5px solid ${isLovedCheck(selectedRest.id) ? "#c4603a" : "#ddd0bc"}`, background: isLovedCheck(selectedRest.id) ? "#c4603a18" : "transparent", color: isLovedCheck(selectedRest.id) ? "#c4603a" : "#8a7060", cursor:"pointer", fontSize:12, fontFamily:"'DM Sans',sans-serif" }}>{isLovedCheck(selectedRest.id) ? "Loved It ♥" : "Love It ♡"}</button>
                   <button type="button" onClick={() => toggleWatch(selectedRest.id)} style={{ flex:1, padding:"9px 4px", borderRadius:10, border:`1.5px solid ${isInWatchlist(selectedRest.id) ? "#6b9fff" : "#ddd0bc"}`, background: isInWatchlist(selectedRest.id) ? "#6b9fff18" : "transparent", color: isInWatchlist(selectedRest.id) ? "#6b9fff" : "#8a7060", cursor:"pointer", fontSize:12, fontFamily:"'DM Sans',sans-serif" }}>{isInWatchlist(selectedRest.id) ? "On Watchlist" : "Watchlist"}</button>
                 </div>
               </div>
@@ -4870,9 +4868,9 @@ Return a JSON object with exactly these fields:
             <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"12px 14px" }}>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
                 {/* LOVED */}
-                <button type="button" onClick={() => toggleLove(detail.id)} style={{ background: isLoved(detail.id) ? "#1e0f06" : "#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:`1px solid ${isLoved(detail.id) ? "rgba(196,96,58,0.5)" : "rgba(46,31,14,0.9)"}`, cursor:"pointer" }}>
-                  <FlameIcon size={28} filled={isLoved(detail.id)} color={isLoved(detail.id) ? "#c4603a" : "#4a2e18"} />
-                  <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:isLoved(detail.id) ? "#c4603a" : "#4a2e18", fontFamily:"-apple-system,sans-serif" }}>LOVED</span>
+                <button type="button" onClick={() => toggleLove(detail.id)} style={{ background: isLovedCheck(detail.id) ? "#1e0f06" : "#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:`1px solid ${isLovedCheck(detail.id) ? "rgba(196,96,58,0.5)" : "rgba(46,31,14,0.9)"}`, cursor:"pointer" }}>
+                  <FlameIcon size={28} filled={isLovedCheck(detail.id)} color={isLovedCheck(detail.id) ? "#c4603a" : "#4a2e18"} />
+                  <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:isLovedCheck(detail.id) ? "#c4603a" : "#4a2e18", fontFamily:"-apple-system,sans-serif" }}>LOVED</span>
                 </button>
                 {/* WATCH */}
                 <button type="button" onClick={() => toggleWatch(detail.id)} style={{ background: isInWatchlist(detail.id) ? "#060f1a" : "#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:`1px solid ${isInWatchlist(detail.id) ? "rgba(74,144,217,0.5)" : "rgba(46,31,14,0.9)"}`, cursor:"pointer" }}>
