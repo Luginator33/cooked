@@ -100,6 +100,15 @@ export default function Profile({
   const [cookedScore, setCookedScore] = useState(0);
   const [cityReadiness, setCityReadiness] = useState([]);
   const [adminOpen, setAdminOpen] = useState(false);
+  // Settings toggles
+  const [privateProfile, setPrivateProfile] = useState(() => localStorage.getItem("cooked_private_profile") === "true");
+  const [defaultCity, setDefaultCity] = useState(() => localStorage.getItem("cooked_default_city") || "");
+  const [dietaryPrefs, setDietaryPrefs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("cooked_dietary_prefs") || "[]"); } catch { return []; }
+  });
+  const [dmPref, setDmPref] = useState(() => localStorage.getItem("cooked_dm_pref") || "followers");
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("cooked_dark_mode") !== "false");
+  const [settingsSection, setSettingsSection] = useState(null); // null=main, 'notifications', 'dietary', 'privacy', 'about', 'defaultCity'
 
   useEffect(() => {
     if (!clerkName) return;
@@ -277,6 +286,7 @@ export default function Profile({
     safeSetItem("cooked_profile_name", editName);
     safeSetItem("cooked_profile_username", editUsername);
     setEditing(false);
+    setSettingsOpen(true);
   };
 
   const syncPhotosToSharedLibrary = async () => {
@@ -787,157 +797,299 @@ export default function Profile({
       )}
 
       {/* Settings modal */}
-      {settingsOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => setSettingsOpen(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px" }}>
-            <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 20, color: C.text, marginBottom: 20 }}>Settings</div>
-
-            {/* Edit profile */}
-            <button type="button" onClick={() => { setSettingsOpen(false); setEditing(true); setEditName(name); setEditUsername(username); }}
-              style={{ width: "100%", padding: "14px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 10 }}>
-              Edit Profile
-            </button>
-
-            <button type="button" onClick={() => { bannerFileRef.current?.click(); }}
-              style={{ width: "100%", padding: "14px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 10 }}>
-              Change banner photo
-            </button>
-            <input ref={bannerFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleBannerUpload} />
-
-            {/* Fix photos */}
-            {onFixPhotos && (
-              <button type="button" onClick={() => { setSettingsOpen(false); onFixPhotos(); }}
-                style={{ width: "100%", padding: "14px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 10 }}>
-                🖼 Fix Photos
-              </button>
-            )}
-
-            {/* Admin: Sync photos to shared library */}
-            {isAdmin && (
-              <>
-                <button
-                  type="button"
-                  onClick={syncPhotosToSharedLibrary}
-                  disabled={photoSyncRunning}
-                  style={{ width: "100%", padding: "14px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14, cursor: photoSyncRunning ? "default" : "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 10, opacity: photoSyncRunning ? 0.8 : 1 }}
-                >
-                  Sync photos to shared library
-                </button>
-                {photoSyncRunning && (
-                  <div style={{ marginTop: -2, marginBottom: 10, color: C.muted, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>
-                    Syncing... {photoSyncCount.toLocaleString()} / {photoSyncTotal.toLocaleString()}
-                  </div>
-                )}
-                {photoSyncMessage && !photoSyncRunning && (
-                  <div style={{ marginTop: -2, marginBottom: 10, color: C.muted, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>
-                    {photoSyncMessage}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => { setSettingsOpen(false); setAdminOpen(true); }}
-                  style={{ width: "100%", padding: "14px 16px", background: C.terracotta, border: "none", borderRadius: 12, color: "#fff", fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 10, fontWeight: 600 }}
-                >
-                  Admin Panel
-                </button>
-              </>
-            )}
-
-            <button
-              type="button"
-              onClick={openNotifications}
-              style={{ width: "100%", padding: "14px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 10 }}
-            >
-              Notification Preferences
-            </button>
-
-            {/* Backup */}
-            <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-              <button type="button" onClick={() => { exportBackup(); setSettingsOpen(false); }}
-                style={{ flex: 1, padding: "12px 8px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.muted, fontSize: 12, cursor: "pointer", fontFamily: "-apple-system,sans-serif", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                ↓ Export Backup
-              </button>
-              <button type="button" onClick={() => { importBackup(); setSettingsOpen(false); }}
-                style={{ flex: 1, padding: "12px 8px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.muted, fontSize: 12, cursor: "pointer", fontFamily: "-apple-system,sans-serif", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                ↑ Import Backup
-              </button>
+      {settingsOpen && (() => {
+        const SectionLabel = ({ children }) => (
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, marginBottom: 6, marginTop: 16, fontFamily: "-apple-system,sans-serif" }}>{children}</div>
+        );
+        const Row = ({ label, sub, onClick, right, danger }) => (
+          <button type="button" onClick={onClick}
+            style={{ width: "100%", padding: "13px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: danger ? "#e74c3c" : C.text, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div>{label}</div>
+              {sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{sub}</div>}
             </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                localStorage.removeItem("cooked_onboarding_done");
-                localStorage.removeItem("cooked_last_tab");
-                window.location.reload();
-              }}
-              style={{ width: "100%", padding: "14px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 10 }}
-            >
-              Watch intro again
-            </button>
-
-            <button type="button" onClick={() => setSettingsOpen(false)}
-              style={{ width: "100%", padding: 14, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 12, color: C.muted, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
-              Cancel
-            </button>
+            {right || <span style={{ color: C.muted, fontSize: 16 }}>›</span>}
+          </button>
+        );
+        const Toggle = ({ label, sub, value, onChange }) => (
+          <div style={{ width: "100%", padding: "13px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ color: C.text, fontSize: 14, fontFamily: "-apple-system,sans-serif" }}>{label}</div>
+              {sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: "-apple-system,sans-serif" }}>{sub}</div>}
+            </div>
+            <div onClick={() => onChange(!value)} style={{ width: 44, height: 24, borderRadius: 12, background: value ? C.terracotta : C.border, cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+              <div style={{ width: 20, height: 20, borderRadius: 10, background: "#fff", position: "absolute", top: 2, left: value ? 22 : 2, transition: "left 0.2s" }} />
+            </div>
           </div>
-        </div>
-      )}
+        );
+        const DIETARY_OPTIONS = ["Vegetarian", "Vegan", "Gluten-Free", "Halal", "Kosher", "Dairy-Free", "Nut-Free", "Pescatarian"];
+        const DM_OPTIONS = [{ value: "everyone", label: "Everyone" }, { value: "followers", label: "Followers only" }, { value: "nobody", label: "Nobody" }];
 
-      {notificationsOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 1000, display: "flex", alignItems: "flex-end" }} onClick={() => setNotificationsOpen(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px", maxHeight: "78vh", overflowY: "auto" }}>
-            <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 20, color: C.text, marginBottom: 14 }}>Notification Preferences</div>
-            {notifLoading ? (
-              <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Loading…</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {NOTIFICATION_TYPES.map((pref) => {
-                  const enabled = notifPrefs[pref.key] !== false;
+        const savePref = (key, val) => { try { localStorage.setItem(key, typeof val === "object" ? JSON.stringify(val) : String(val)); } catch {} };
+
+        // Sub-screens
+        if (settingsSection === "notifications") return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => { setSettingsSection(null); }}>
+            <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px", maxHeight: "80vh", overflowY: "auto" }}>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
+                <button type="button" onClick={() => setSettingsSection(null)} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
+                <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Notifications</div>
+              </div>
+              {NOTIFICATION_TYPES.map(n => (
+                <Toggle key={n.key} label={n.label} sub={n.sublabel} value={notifPrefs[n.key] !== false} onChange={v => {
+                  const updated = { ...notifPrefs, [n.key]: v };
+                  setNotifPrefs(updated);
+                  if (user?.id) supabase.from("notification_prefs").upsert({ clerk_user_id: user.id, ...updated }, { onConflict: "clerk_user_id" });
+                }} />
+              ))}
+            </div>
+          </div>
+        );
+
+        if (settingsSection === "dietary") return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => setSettingsSection(null)}>
+            <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px" }}>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
+                <button type="button" onClick={() => setSettingsSection(null)} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
+                <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Dietary Preferences</div>
+              </div>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontFamily: "-apple-system,sans-serif" }}>These help the chatbot and recommendations filter for you.</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {DIETARY_OPTIONS.map(d => {
+                  const active = dietaryPrefs.includes(d);
                   return (
-                    <div key={pref.key} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ color: C.text, fontSize: 14, fontFamily: "-apple-system,sans-serif", marginBottom: 2 }}>{pref.label}</div>
-                        <div style={{ color: C.muted, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>{pref.sublabel}</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => toggleNotificationPref(pref.key)}
-                        style={{
-                          width: 44,
-                          height: 24,
-                          borderRadius: 999,
-                          border: `1px solid ${enabled ? C.terracotta : C.dim}`,
-                          background: enabled ? C.terracotta : C.dim,
-                          cursor: "pointer",
-                          padding: 2,
-                          display: "flex",
-                          justifyContent: enabled ? "flex-end" : "flex-start",
-                          alignItems: "center",
-                          flexShrink: 0,
-                        }}
-                      >
-                        <span style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", display: "block" }} />
-                      </button>
-                    </div>
+                    <button key={d} type="button" onClick={() => {
+                      const updated = active ? dietaryPrefs.filter(x => x !== d) : [...dietaryPrefs, d];
+                      setDietaryPrefs(updated);
+                      savePref("cooked_dietary_prefs", updated);
+                    }} style={{ padding: "8px 16px", borderRadius: 20, border: `1px solid ${active ? C.terracotta : C.border}`, background: active ? C.terracotta + "22" : C.bg, color: active ? C.terracotta : C.text, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
+                      {d}
+                    </button>
                   );
                 })}
               </div>
-            )}
-            <button type="button" onClick={() => setNotificationsOpen(false)} style={{ width: "100%", padding: 14, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 12, color: C.muted, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif", marginTop: 14 }}>
-              Done
-            </button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+
+        if (settingsSection === "about") return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => setSettingsSection(null)}>
+            <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px" }}>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
+                <button type="button" onClick={() => setSettingsSection(null)} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
+                <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>About</div>
+              </div>
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
+                <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 28, color: C.text }}>cook<span style={{ color: C.terracotta }}>ed</span></div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 4, fontFamily: "-apple-system,sans-serif" }}>Your personal concierge</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 12, fontFamily: "-apple-system,sans-serif" }}>Version 1.0.0</div>
+              </div>
+              <Row label="What's New" sub="See recent updates" onClick={() => { /* TODO: changelog */ }} />
+              <Row label="Help & Feedback" sub="Report a bug or request a feature" onClick={() => window.open("mailto:support@getcooked.app", "_blank")} />
+              <Row label="Privacy Policy" onClick={() => { /* TODO: link */ }} />
+              <Row label="Terms of Service" onClick={() => { /* TODO: link */ }} />
+              <div style={{ textAlign: "center", marginTop: 20, fontSize: 11, color: C.muted, fontFamily: "-apple-system,sans-serif" }}>Made with ♡ in Los Angeles</div>
+            </div>
+          </div>
+        );
+
+        if (settingsSection === "defaultCity") {
+          const allCities = allCitiesFromDb.length ? allCitiesFromDb : [];
+          // Also pull from restaurant data
+          const citiesFromData = [...new Set(allRestaurants.map(r => r.city).filter(Boolean))].sort();
+          const cities = [...new Set([...allCities, ...citiesFromData])].sort();
+          return (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => setSettingsSection(null)}>
+              <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px", maxHeight: "80vh", overflowY: "auto" }}>
+                <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
+                  <button type="button" onClick={() => setSettingsSection(null)} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
+                  <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Default City</div>
+                </div>
+                <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontFamily: "-apple-system,sans-serif" }}>Choose your default city. This is what loads when you open the app.</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {cities.map(city => {
+                    const isDefault = defaultCity === city;
+                    return (
+                      <button key={city} type="button" onClick={() => {
+                        setDefaultCity(city);
+                        savePref("cooked_default_city", city);
+                      }} style={{
+                        padding: "10px 18px", borderRadius: 24,
+                        border: `1.5px solid ${isDefault ? C.terracotta : C.border}`,
+                        background: isDefault ? C.terracotta + "22" : C.bg,
+                        color: isDefault ? C.terracotta : C.text,
+                        fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif",
+                        fontWeight: isDefault ? 600 : 400,
+                      }}>
+                        {city} {isDefault && "✓"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // Main settings screen
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => { setSettingsOpen(false); setSettingsSection(null); }}>
+            <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px", maxHeight: "85vh", overflowY: "auto" }}>
+              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 20, color: C.text, marginBottom: 4 }}>Settings</div>
+
+              {/* ACCOUNT */}
+              <SectionLabel>Account</SectionLabel>
+              <Row label="Edit Profile" sub="Name, username, photo" onClick={() => { setSettingsOpen(false); setSettingsSection(null); setEditing(true); setEditName(name); setEditUsername(username); }} />
+              <Row label="Change Banner Photo" onClick={() => { bannerFileRef.current?.click(); }} />
+              <input ref={bannerFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleBannerUpload} />
+              <Row label="Share Profile Link" sub="Copy link to your profile" onClick={() => {
+                const link = `${window.location.origin}?user=${user?.id || ""}`;
+                navigator.clipboard?.writeText(link);
+                alert("Profile link copied!");
+              }} right={<span style={{ fontSize: 12, color: C.muted }}>Copy</span>} />
+
+              {/* PREFERENCES */}
+              <SectionLabel>Preferences</SectionLabel>
+              <Row label="Default City" sub={defaultCity || "Not set"} onClick={() => setSettingsSection("defaultCity")} right={<span style={{ fontSize: 12, color: C.muted }}>{defaultCity || "Set"}</span>} />
+              <Row label="Dietary Preferences" sub={dietaryPrefs.length ? dietaryPrefs.join(", ") : "None set"} onClick={(e) => { e.stopPropagation(); setSettingsSection("dietary"); }} />
+              <Row label="Notification Preferences" onClick={(e) => { e.stopPropagation(); setSettingsSection("notifications"); }} />
+              <Toggle label="Private Profile" sub="Only followers can see your loved & watchlist" value={privateProfile} onChange={v => { setPrivateProfile(v); savePref("cooked_private_profile", v); }} />
+
+              {/* SOCIAL */}
+              <SectionLabel>Social</SectionLabel>
+              <div style={{ width: "100%", padding: "13px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 6 }}>
+                <div style={{ color: C.text, fontSize: 14, fontFamily: "-apple-system,sans-serif", marginBottom: 8 }}>Who can DM me</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[{ value: "everyone", label: "Everyone" }, { value: "followers", label: "Followers" }, { value: "nobody", label: "Nobody" }].map(o => (
+                    <button key={o.value} type="button" onClick={() => { setDmPref(o.value); savePref("cooked_dm_pref", o.value); }}
+                      style={{ flex: 1, padding: "6px 0", borderRadius: 8, border: `1px solid ${dmPref === o.value ? C.terracotta : C.border}`, background: dmPref === o.value ? C.terracotta + "22" : "transparent", color: dmPref === o.value ? C.terracotta : C.muted, fontSize: 12, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Row label="Blocked Users" sub="Manage blocked accounts" onClick={() => { /* TODO: blocked list */ }} />
+
+              {/* DISCOVERY */}
+              <SectionLabel>Discovery</SectionLabel>
+              <Row label="Hidden Restaurants" sub="Restaurants you've permanently passed" onClick={() => { /* TODO */ }} />
+              <Row label="Reset Heat Deck" sub="Start swiping fresh for a city" onClick={() => {
+                if (confirm("Reset your Heat deck? You'll see all restaurants again.")) {
+                  localStorage.removeItem("cooked_heat_results");
+                  alert("Heat deck reset! Reload to see changes.");
+                }
+              }} />
+
+              {/* DATA */}
+              <SectionLabel>Data</SectionLabel>
+              <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                <button type="button" onClick={() => { exportBackup(); }}
+                  style={{ flex: 1, padding: "12px 8px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
+                  Export Backup
+                </button>
+                <button type="button" onClick={() => { importBackup(); }}
+                  style={{ flex: 1, padding: "12px 8px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
+                  Import Backup
+                </button>
+              </div>
+              <Row label="Download My Data" sub="Export all your activity as JSON" onClick={() => {
+                const data = {
+                  profile: { name, username, photo },
+                  heatResults,
+                  watchlist,
+                  lovedRestaurants: Object.entries(heatResults).filter(([,v]) => v === "loved").map(([id]) => id),
+                  finds: JSON.parse(localStorage.getItem("cooked_finds") || "[]"),
+                  exportedAt: new Date().toISOString(),
+                };
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `cooked_my_data_${new Date().toISOString().slice(0,10)}.json`; a.click();
+              }} />
+              <Row label="Clear Cache" sub="Wipe local data without losing your account" onClick={() => {
+                if (confirm("Clear all cached data? Your account and cloud data are safe.")) {
+                  const keysToKeep = ["cooked_onboarding_done", "cooked_profile_setup_done"];
+                  const saved = {};
+                  keysToKeep.forEach(k => { saved[k] = localStorage.getItem(k); });
+                  localStorage.clear();
+                  Object.entries(saved).forEach(([k, v]) => { if (v) localStorage.setItem(k, v); });
+                  alert("Cache cleared. Reloading...");
+                  window.location.reload();
+                }
+              }} />
+
+              {/* ABOUT */}
+              <SectionLabel>About</SectionLabel>
+              <Row label="About Cooked" sub="Version, help, legal" onClick={() => setSettingsSection("about")} />
+              <Row label="Replay Onboarding" sub="See the intro walkthrough again" onClick={() => {
+                localStorage.removeItem("cooked_onboarding_done");
+                localStorage.removeItem("cooked_last_tab");
+                window.location.reload();
+              }} />
+
+              {/* ADMIN */}
+              {isAdmin && (
+                <>
+                  <SectionLabel>Admin</SectionLabel>
+                  {onFixPhotos && (
+                    <Row label="Fix Restaurant Photos" sub="Re-pick photos from Google Places" onClick={() => { setSettingsOpen(false); setSettingsSection(null); onFixPhotos(); }} />
+                  )}
+                  <Row label="Sync Photos to Library" sub={photoSyncRunning ? `Syncing... ${photoSyncCount}/${photoSyncTotal}` : (photoSyncMessage || "Push local photos to shared library")} onClick={syncPhotosToSharedLibrary} />
+                  <button type="button" onClick={() => { setSettingsOpen(false); setSettingsSection(null); setAdminOpen(true); }}
+                    style={{ width: "100%", padding: "14px 16px", background: C.terracotta, border: "none", borderRadius: 12, color: "#fff", fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "center", marginBottom: 6, fontWeight: 600 }}>
+                    Open Admin Panel
+                  </button>
+                </>
+              )}
+
+              {/* SIGN OUT */}
+              <div style={{ marginTop: 16 }} />
+              <Row label="Sign Out" danger onClick={() => {
+                if (confirm("Sign out of Cooked?")) {
+                  window.Clerk?.signOut?.();
+                  localStorage.removeItem("cooked_profile_setup_done");
+                  window.location.reload();
+                }
+              }} right={<span style={{ color: "#e74c3c", fontSize: 16 }}>›</span>} />
+
+              <button type="button" onClick={() => { setSettingsOpen(false); setSettingsSection(null); }}
+                style={{ width: "100%", padding: 14, background: "transparent", border: "none", borderRadius: 12, color: C.muted, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif", marginTop: 8 }}>
+                Close
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Admin Panel */}
       {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} allRestaurants={allRestaurants} userId={user?.id} />}
 
       {/* Edit profile modal */}
       {editing && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => setEditing(false)}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => { setEditing(false); setSettingsOpen(true); }}>
           <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px" }}>
-            <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 20, color: C.text, marginBottom: 20 }}>Edit Profile</div>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
+              <button type="button" onClick={() => { setEditing(false); setSettingsOpen(true); }} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
+              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 20, color: C.text }}>Edit Profile</div>
+            </div>
+            {/* Profile photo */}
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+              <div onClick={() => fileRef.current?.click()} style={{ position: "relative", cursor: "pointer" }}>
+                <div style={{ width: 80, height: 80, borderRadius: "50%", overflow: "hidden", border: `2px solid ${C.border}`, background: C.bg }}>
+                  {photo ? <img src={photo} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: 28 }}>👤</div>}
+                </div>
+                <div style={{ position: "absolute", bottom: -2, right: -2, width: 26, height: 26, borderRadius: "50%", background: C.terracotta, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#fff" }}>✎</div>
+              </div>
+              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
+                const file = e.target.files?.[0]; if (!file) return;
+                const reader = new FileReader();
+                reader.onload = ev => {
+                  const url = ev.target.result;
+                  setPhoto(url);
+                  safeSetItem("cooked_profile_photo", url);
+                  if (user?.id) supabase.from("user_data").upsert({ clerk_user_id: user.id, profile_photo: url }, { onConflict: "clerk_user_id" });
+                };
+                reader.readAsDataURL(file);
+              }} />
+            </div>
             {[{ label: "Name", val: editName, set: setEditName }, { label: "Username", val: editUsername, set: setEditUsername }].map(f => (
               <div key={f.label} style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 9, letterSpacing: "0.14em", color: C.muted, marginBottom: 6, textTransform: "uppercase", fontFamily: "-apple-system,sans-serif" }}>{f.label}</div>
