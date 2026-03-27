@@ -3,7 +3,7 @@ export const CITIES = [
   "Dallas",
   "Los Angeles", "New York", "Chicago", "San Francisco",
   "Miami", "London", "Tokyo", "Paris", "Copenhagen", "San Diego",
-  "Austin", "Nashville", "Barcelona", "Mexico City", "Playa del Carmen", "Lisbon", "Seoul", "Portland"
+  "Austin", "Nashville", "Barcelona", "Mexico City", "Playa del Carmen", "Lisbon", "Seoul", "Portland", "Seattle", "Denver"
 ];
 
 export const CITY_GROUPS = {
@@ -25,6 +25,8 @@ export const CITY_GROUPS = {
   "Lisbon": ["Lisbon","Chiado","Príncipe Real","Madragoa","Cais do Sodré","Intendente","Avenida da Liberdade","Mouraria","Bairro Alto"],
   "Seoul": ["Seoul","Gangnam","Jongno","Itaewon","Mapo","Apgujeong"],
   "Portland": ["Portland","North Portland","Northeast Portland","Southeast Portland","Pearl District"],
+  "Seattle": ["Seattle","Capitol Hill","Fremont","Ballard","Queen Anne","University District","Beacon Hill","Wallingford","Greenwood","Ravenna","Columbia City","Georgetown","SODO","Pioneer Square","Pike Place","South Lake Union","Belltown"],
+  "Denver": ["Denver","LoDo","RiNo","Five Points","Highlands","Cap Hill","Cherry Creek","Congress Park","Wash Park","Baker","Uptown","City Park","Tennyson","Sunnyside","Stapleton"],
   "Dallas": "United States",
   "Dubai": "International",
 };
@@ -48,11 +50,144 @@ export const CITY_COORDS = {
   "Lisbon": { lat: 38.7223, lng: -9.1393 },
   "Seoul": { lat: 37.5665, lng: 126.9780 },
   "Portland": { lat: 45.5051, lng: -122.6750 },
+  "Seattle": { lat: 47.6062, lng: -122.3321 },
+  "Denver": { lat: 39.7392, lng: -104.9903 },
   "Dallas": { lat: 32.7767, lng: -96.797 },
   "Dubai": { lat: 25.2048, lng: 55.2708 },
 };
 
+// ---------------------------------------------------------------------------
+// City normalization — maps Google Places variants & neighborhoods to
+// canonical city names so community restaurants don't end up in "Other".
+// ---------------------------------------------------------------------------
+const CITY_ALIAS_MAP = {
+  // Mexico City variants
+  "ciudad de mexico": "Mexico City",
+  "ciudad de méxico": "Mexico City",
+  "cdmx": "Mexico City",
+  "mexico city": "Mexico City",
+  "mexico, d.f.": "Mexico City",
+  "méxico d.f.": "Mexico City",
+  "ciudad de méx.": "Mexico City",
+  // US city shortcuts & variants
+  "city of los angeles": "Los Angeles",
+  "la": "Los Angeles",
+  "los ángeles": "Los Angeles",
+  "nyc": "New York",
+  "new york city": "New York",
+  "sf": "San Francisco",
+  "san fran": "San Francisco",
+  "chi-town": "Chicago",
+  "pdx": "Portland",
+  "atx": "Austin",
+  "nashvegas": "Nashville",
+  "sd": "San Diego",
+  "playa": "Playa del Carmen",
+  "cdp": "Playa del Carmen",
+  "sea": "Seattle",
+  "den": "Denver",
+  // International city name variants (Google Places localized names)
+  "londres": "London",
+  "parís": "Paris",
+  "tokio": "Tokyo",
+  "seúl": "Seoul",
+  "dubái": "Dubai",
+  "roma": "Rome",
+  "barcelone": "Barcelona",
+  "copenhague": "Copenhagen",
+  "lisbonne": "Lisbon",
+  "estambul": "Istanbul",
+  "múnich": "Munich",
+  "praga": "Prague",
+  "estocolmo": "Stockholm",
+  "viena": "Vienna",
+};
 
+// Build a reverse lookup from CITY_GROUPS: neighborhood -> canonical city
+const _neighborhoodToCity = {};
+Object.entries(CITY_GROUPS).forEach(([canonical, neighborhoods]) => {
+  if (Array.isArray(neighborhoods)) {
+    neighborhoods.forEach((n) => {
+      const key = n.toLowerCase().trim();
+      if (key !== canonical.toLowerCase().trim()) {
+        _neighborhoodToCity[key] = canonical;
+      }
+    });
+  }
+});
+
+// Additional neighborhood -> city mappings not already in CITY_GROUPS
+const EXTRA_NEIGHBORHOOD_MAP = {
+  // More LA neighborhoods Google might return
+  "eagle rock": "Los Angeles", "el sereno": "Los Angeles", "boyle heights": "Los Angeles",
+  "sawtelle": "Los Angeles", "westwood": "Los Angeles", "playa vista": "Los Angeles",
+  "playa del rey": "Los Angeles", "mar vista": "Los Angeles", "west adams": "Los Angeles",
+  "leimert park": "Los Angeles", "south la": "Los Angeles", "hancock park": "Los Angeles",
+  "larchmont": "Los Angeles", "fairfax": "Los Angeles", "melrose": "Los Angeles",
+  // More NY neighborhoods
+  "dumbo": "New York", "cobble hill": "New York", "park slope": "New York",
+  "prospect heights": "New York", "bed-stuy": "New York", "bed stuy": "New York",
+  "bedford-stuyvesant": "New York", "crown heights": "New York", "astoria": "New York",
+  "long island city": "New York", "jackson heights": "New York", "flushing": "New York",
+  "flatiron": "New York", "gramercy": "New York", "murray hill": "New York",
+  "kips bay": "New York", "nolita": "New York", "lower manhattan": "New York",
+  "financial district": "New York", "battery park": "New York",
+  "hell's kitchen": "New York", "hells kitchen": "New York",
+  "washington heights": "New York", "fort greene": "New York",
+  "clinton hill": "New York", "red hook": "New York",
+  "carroll gardens": "New York", "boerum hill": "New York",
+  // SF neighborhoods
+  "noe valley": "San Francisco", "potrero hill": "San Francisco",
+  "dogpatch": "San Francisco", "inner sunset": "San Francisco",
+  "outer sunset": "San Francisco", "inner richmond": "San Francisco",
+  "outer richmond": "San Francisco", "nob hill": "San Francisco",
+  "russian hill": "San Francisco", "the castro": "San Francisco",
+  "haight-ashbury": "San Francisco", "haight ashbury": "San Francisco",
+  "cole valley": "San Francisco", "bernal heights": "San Francisco",
+  "glen park": "San Francisco", "excelsior": "San Francisco",
+  "fillmore": "San Francisco", "japantown": "San Francisco",
+  // Chicago neighborhoods (beyond CITY_GROUPS)
+  "old town": "Chicago", "lakeview": "Chicago", "uptown chicago": "Chicago",
+  "andersonville": "Chicago", "ravenswood": "Chicago",
+  "humboldt park": "Chicago", "avondale": "Chicago",
+  // Miami neighborhoods (beyond CITY_GROUPS)
+  "edgewater": "Miami", "midtown miami": "Miami",
+  "overtown": "Miami", "little haiti": "Miami",
+};
+
+const _allNeighborhoods = { ..._neighborhoodToCity, ...EXTRA_NEIGHBORHOOD_MAP };
+
+// Canonical city names from CITIES + CITY_GROUPS keys
+const _canonicalCities = new Set([
+  ...CITIES,
+  ...Object.keys(CITY_GROUPS),
+  ...Object.keys(CITY_COORDS),
+]);
+
+/**
+ * Normalize a city name returned by Google Places (or user input) to match
+ * one of our canonical city names. Falls through gracefully — returns the
+ * original name if no mapping is found.
+ */
+export function normalizeCity(rawCity) {
+  if (!rawCity || typeof rawCity !== "string") return rawCity;
+  const trimmed = rawCity.trim();
+  const lower = trimmed.toLowerCase();
+
+  // 1. Exact alias match (handles "CDMX", "Ciudad de Mexico", etc.)
+  if (CITY_ALIAS_MAP[lower]) return CITY_ALIAS_MAP[lower];
+
+  // 2. Neighborhood -> city (from CITY_GROUPS + extras)
+  if (_allNeighborhoods[lower]) return _allNeighborhoods[lower];
+
+  // 3. Already a canonical city name — return properly-cased version
+  for (const c of _canonicalCities) {
+    if (c.toLowerCase() === lower) return c;
+  }
+
+  // 4. No match — return original (trimmed)
+  return trimmed;
+}
 
 export const ARCHETYPES = [
   { id: "adventurer", label: "The Adventurer", emoji: "🌶️", desc: "You chase heat, novelty, and the unknown." },

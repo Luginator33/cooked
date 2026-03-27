@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { C, cardStyle, inputStyle, btnPrimary, btnSecondary, btnDanger, btnSmall, btnOutline, sectionHeader, SearchBar, ConfirmDialog, Toast } from "./adminHelpers";
 import { upsertAdminOverride, deleteAdminOverride, addCommunityRestaurant, deleteCommunityRestaurant, updateCommunityRestaurant, saveSharedPhoto, logAdminAction } from "../../lib/supabase";
 import { transferLoves, syncRestaurant } from "../../lib/neo4j";
+import { normalizeCity } from "../../data/restaurants";
 
 const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_PLACES_KEY;
 const ANTHROPIC_PROXY = "https://cooked-proxy.luga-podesta.workers.dev/";
@@ -185,7 +186,7 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
 
       const preview = {
         name: baseName,
-        city: city || importCity || "",
+        city: normalizeCity(city || importCity || "") || city || importCity || "",
         neighborhood: neighborhood || "",
         address: d.formattedAddress || "",
         phone: d.nationalPhoneNumber || d.internationalPhoneNumber || "",
@@ -608,6 +609,7 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                       aiData = JSON.parse(text);
                     } catch {}
 
+                    city = normalizeCity(city) || city;
                     queue[i].data = {
                       name: d.displayName?.text || searchQuery, city, neighborhood,
                       address: d.formattedAddress || "", phone: d.nationalPhoneNumber || "",

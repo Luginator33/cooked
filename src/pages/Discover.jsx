@@ -3,11 +3,11 @@ import { createPortal } from "react-dom";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { SignInButton, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
-import { RESTAURANTS, ALL_TAGS } from "../data/restaurants";
+import { RESTAURANTS, ALL_TAGS, normalizeCity } from "../data/restaurants";
 
 /** All cities present in the restaurant database — single source for filters across tabs */
 const BASE_CITY_REGIONS = [
-  { region: "United States", cities: ["Los Angeles","New York","Ventura County","Malibu","Chicago","Miami","Las Vegas","San Francisco","San Diego","Austin","Nashville","Maui","Napa","Ojai","Portland","Dallas","Savannah","Scottsdale"] },
+  { region: "United States", cities: ["Los Angeles","New York","Ventura County","Malibu","Chicago","Miami","Las Vegas","San Francisco","San Diego","Austin","Nashville","Maui","Napa","Ojai","Portland","Seattle","Denver","Dallas","Savannah","Scottsdale"] },
   { region: "Mexico & Caribbean", cities: ["Mexico City","Playa del Carmen","Canouan Island","Liberia"] },
   { region: "Europe", cities: ["London","UK","Paris","Barcelona","Amsterdam","Copenhagen","Lisbon","Rome","Berlin","Istanbul","Munich","Prague","Stockholm","Vienna","Ibiza","Mykonos","Malta","Cannes"] },
   { region: "Middle East", cities: ["Dubai","Tel Aviv"] },
@@ -20,7 +20,7 @@ const BASE_CITY_REGIONS = [
 
 // Auto-classify a city into a region based on keywords/known patterns
 const REGION_HINTS = {
-  "United States": ["California","Florida","Texas","Hawaii","Oregon","Arizona","Georgia","Tennessee","Nevada","Colorado","New York","Illinois","Massachusetts","Washington","Virginia","Pennsylvania","New Jersey","Connecticut","Maryland","North Carolina","South Carolina","Louisiana","Montana","Idaho","Wyoming","Utah","New Mexico","Minnesota","Wisconsin","Michigan","Ohio","Indiana","Missouri","Kansas","Nebraska","Iowa","Oklahoma","Arkansas","Alabama","Mississippi","Kentucky","West Virginia","Delaware","Rhode Island","New Hampshire","Vermont","Maine","Alaska","DC"],
+  "United States": ["California","Florida","Texas","Hawaii","Oregon","Arizona","Georgia","Tennessee","Nevada","Colorado","New York","Illinois","Massachusetts","Washington","Virginia","Pennsylvania","New Jersey","Connecticut","Maryland","North Carolina","South Carolina","Louisiana","Montana","Idaho","Wyoming","Utah","New Mexico","Minnesota","Wisconsin","Michigan","Ohio","Indiana","Missouri","Kansas","Nebraska","Iowa","Oklahoma","Arkansas","Alabama","Mississippi","Kentucky","West Virginia","Delaware","Rhode Island","New Hampshire","Vermont","Maine","Alaska","DC","Seattle","Denver","Pacific Northwest","Mountain West"],
   "Mexico & Caribbean": ["Mexico","Cancún","Tulum","Oaxaca","Guadalajara","Monterrey","Puerto Vallarta","San Miguel","Cabo","Caribbean","Jamaica","Bahamas","Barbados","Trinidad","Puerto Rico","San Juan","Cuba","Dominican Republic","Aruba","St. Barts","Turks","Punta Cana","Havana","Nassau","Montego Bay"],
   "Europe": ["France","Italy","Spain","Germany","Netherlands","Denmark","Portugal","Sweden","Norway","Finland","Greece","Croatia","Switzerland","Austria","Belgium","Ireland","Scotland","Wales","England","Poland","Czech","Hungary","Romania","Bulgaria","Serbia","Montenegro","Albania","Slovenia","Slovakia","Estonia","Latvia","Lithuania","Turkey","Cyprus","Sardinia","Sicily","Corsica","Mallorca","Santorini","Crete","Amalfi","Provence","Tuscany","Riviera","Monaco","Luxembourg"],
   "Middle East": ["UAE","Saudi","Qatar","Bahrain","Oman","Kuwait","Jordan","Lebanon","Israel","Egypt","Morocco","Tunisia"],
@@ -1460,6 +1460,8 @@ export default function Discover({ tasteProfile, initialTab }) {
   const supabaseLoadedRef = useRef(false);
 
   // Merge in community restaurants from Supabase so all users can see them.
+  // City names are normalized so Google Places variants (e.g. "Ciudad de Mexico")
+  // and neighborhood names (e.g. "Silver Lake") map to canonical cities.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -1470,6 +1472,8 @@ export default function Discover({ tasteProfile, initialTab }) {
         const byName = new Map(prev.map((r) => [r.name?.toLowerCase().trim(), r]));
         community.forEach((r) => {
           if (!r || r.id == null) return;
+          // Normalize city before merging
+          if (r.city) r.city = normalizeCity(r.city);
           const key = String(r.id);
           const nameKey = r.name?.toLowerCase().trim();
           if (nameKey) {
@@ -2420,22 +2424,8 @@ If unsure about a field, use "Unknown" for strings or "$" for price.`;
               c?.types?.includes("administrative_area_level_2")
             );
             const municipalityFromAddress = municipalityComponent?.longText || "";
-            const cityNormalizations = {
-              "ciudad de méxico": "Mexico City",
-              "ciudad de mexico": "Mexico City",
-              "cdmx": "Mexico City",
-              "new york city": "New York",
-              "nyc": "New York",
-              "los ángeles": "Los Angeles",
-              "los angeles": "Los Angeles",
-              "londres": "London",
-              "parís": "Paris",
-              "tokio": "Tokyo",
-              "seúl": "Seoul",
-              "dubái": "Dubai",
-            };
             const rawCity = municipalityFromAddress || cityFromAddress || stateFromAddress;
-            const normalizedCity = cityNormalizations[rawCity.toLowerCase()] || rawCity;
+            const normalizedCity = normalizeCity(rawCity) || rawCity;
             const neighborhoodFromAddress = neighborhoodComponent?.longText || neighborhoodComponent?.shortText || "";
             const neighborhoodFallback =
               addressComponents.find((c) => c?.types?.includes("sublocality"))?.longText ||
