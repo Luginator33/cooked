@@ -6,6 +6,20 @@ import { transferLoves, syncRestaurant } from "../../lib/neo4j";
 const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_PLACES_KEY;
 const ANTHROPIC_PROXY = "https://cooked-proxy.luga-podesta.workers.dev/";
 
+// Check if a restaurant already exists by lat/lng proximity (~50m) or exact name match
+function findDuplicate(allRestaurants, name, lat, lng) {
+  const threshold = 0.0005; // ~50 meters
+  for (const r of allRestaurants) {
+    // Exact name match (case-insensitive)
+    if (r.name && name && r.name.toLowerCase().trim() === name.toLowerCase().trim()) return r;
+    // Lat/lng proximity check
+    if (lat && lng && r.lat && r.lng) {
+      if (Math.abs(r.lat - lat) < threshold && Math.abs(r.lng - lng) < threshold) return r;
+    }
+  }
+  return null;
+}
+
 export default function AdminRestaurants({ allRestaurants, userId, onRestaurantsChanged }) {
   const [section, setSection] = useState("search");
   const [search, setSearch] = useState("");
@@ -207,7 +221,14 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
     }
   };
 
-  const confirmImport = async () => {
+  const confirmImport = async (skipDupCheck) => {
+    if (!skipDupCheck) {
+      const dup = findDuplicate(allRestaurants, importPreview?.name, importPreview?.lat, importPreview?.lng);
+      if (dup) {
+        const ok = window.confirm(`"${dup.name}" (ID ${dup.id}) already exists at this location. Import anyway?`);
+        if (!ok) return;
+      }
+    }
     const photoUrl = importPhotos[selectedPhotoIdx] || importPreview.img;
     // Build restaurant object with only the fields the community_restaurants table accepts
     const r = {
@@ -594,7 +615,14 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                       source: "Admin Import", heat: "🔥🔥",
                     };
                     queue[i].photos = photos;
-                    queue[i].status = "ready";
+                    // Check for duplicates
+                    const dup = findDuplicate(allRestaurants, queue[i].data.name, queue[i].data.lat, queue[i].data.lng);
+                    if (dup) {
+                      queue[i].status = "duplicate";
+                      queue[i].error = `Already exists: "${dup.name}" (ID ${dup.id})`;
+                    } else {
+                      queue[i].status = "ready";
+                    }
                   } catch (e) {
                     queue[i].status = "error";
                     queue[i].error = e.message;
@@ -667,6 +695,14 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                     </div>
                   )}
 
+                  {item.status === "duplicate" && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 11, color: "#e6a832", marginBottom: 6, fontFamily: "-apple-system,sans-serif" }}>⚠ {item.error}</div>
+                      <button type="button" onClick={() => {
+                        const q = [...bulkQueue]; q[idx].status = "ready"; setBulkQueue(q);
+                      }} style={{ ...btnSmall, border: `1px solid #e6a832`, color: "#e6a832", fontSize: 11 }}>Import Anyway</button>
+                    </div>
+                  )}
                   {item.status === "error" && <div style={{ fontSize: 10, color: C.red, marginTop: 4 }}>{item.error}</div>}
                 </div>
               ))}
