@@ -4,7 +4,8 @@ export const CITIES = [
   "Los Angeles", "New York", "Chicago", "San Francisco",
   "Miami", "London", "Tokyo", "Paris", "Copenhagen", "San Diego",
   "Austin", "Nashville", "Barcelona", "Mexico City", "Playa del Carmen", "Lisbon", "Seoul", "Portland", "Seattle", "Denver",
-  "Ventura County", "Vail", "Aspen", "Napa Valley", "Guadalajara"
+  "Ventura County", "Vail", "Aspen", "Napa Valley", "Guadalajara",
+  "Malibu", "Ojai", "Boise", "Santa Barbara", "Sacramento", "Atlanta", "St. Louis", "Detroit", "Maui"
 ];
 
 export const CITY_GROUPS = {
@@ -33,6 +34,15 @@ export const CITY_GROUPS = {
   "Aspen": ["Aspen","Snowmass","Basalt"],
   "Napa Valley": ["Napa Valley","Napa","Yountville","St. Helena","Calistoga","Rutherford"],
   "Guadalajara": ["Guadalajara","Zapopan","Tlaquepaque"],
+  "Malibu": ["Malibu"],
+  "Ojai": ["Ojai"],
+  "Boise": ["Boise","Meridian"],
+  "Santa Barbara": ["Santa Barbara","Montecito","Goleta","Carpinteria"],
+  "Sacramento": ["Sacramento","Midtown Sacramento","East Sacramento"],
+  "Atlanta": ["Atlanta","Norcross","Buckhead","Midtown Atlanta","Decatur","East Atlanta"],
+  "St. Louis": ["St. Louis","Clayton","Central West End","The Hill","Soulard"],
+  "Detroit": ["Detroit","East Lansing","Royal Oak","Ferndale","Ann Arbor","Dearborn"],
+  "Maui": ["Maui","Wailea-Makena","Wailea","Makena","Lahaina","Kahului","Kihei","Wailuku","Paia","Makawao"],
   "Dallas": "United States",
   "Dubai": "International",
 };
@@ -63,6 +73,15 @@ export const CITY_COORDS = {
   "Aspen": { lat: 39.1911, lng: -106.8175 },
   "Napa Valley": { lat: 38.5025, lng: -122.2654 },
   "Guadalajara": { lat: 20.6597, lng: -103.3496 },
+  "Malibu": { lat: 34.0259, lng: -118.7798 },
+  "Ojai": { lat: 34.4480, lng: -119.2429 },
+  "Boise": { lat: 43.6150, lng: -116.2023 },
+  "Santa Barbara": { lat: 34.4208, lng: -119.6982 },
+  "Sacramento": { lat: 38.5816, lng: -121.4944 },
+  "Atlanta": { lat: 33.7490, lng: -84.3880 },
+  "St. Louis": { lat: 38.6270, lng: -90.1994 },
+  "Detroit": { lat: 42.3314, lng: -83.0458 },
+  "Maui": { lat: 20.7984, lng: -156.3319 },
   "Dallas": { lat: 32.7767, lng: -96.797 },
   "Dubai": { lat: 25.2048, lng: 55.2708 },
 };
@@ -172,7 +191,7 @@ const EXTRA_NEIGHBORHOOD_MAP = {
   "oak park": "Ventura County", "moorpark": "Ventura County",
   "simi valley": "Ventura County", "newbury park": "Ventura County",
   // More LA cities/neighborhoods
-  "malibu": "Los Angeles", "beverly hills": "Los Angeles",
+  "beverly hills": "Los Angeles",
   "santa monica": "Los Angeles", "west hollywood": "Los Angeles",
   "alhambra": "Los Angeles", "santa clarita": "Los Angeles",
   "pasadena": "Los Angeles", "glendale": "Los Angeles",
@@ -205,8 +224,46 @@ const EXTRA_NEIGHBORHOOD_MAP = {
   "driftwood": "Austin",
   // Atlanta metro
   "norcross": "Atlanta",
-  // Other
+  // Ibiza neighborhoods
+  "sant josep de sa talaia": "Ibiza", "sant llorenç de balàfia": "Ibiza",
+  "platja den bossa": "Ibiza", "cala tarida": "Ibiza", "eivissa": "Ibiza",
+  "sant jordi de ses salines": "Ibiza", "santa eulalia": "Ibiza",
+  "san antonio": "Ibiza", "es canar": "Ibiza", "san rafael": "Ibiza",
+  // Mykonos neighborhoods & variants
+  "mikonos": "Mykonos", "kalafati": "Mykonos", "elia": "Mykonos",
+  "άγιος σώστης": "Mykonos", "agios sostis": "Mykonos",
+  "ornos": "Mykonos", "platis gialos": "Mykonos", "psarou": "Mykonos",
+  // Malta neighborhoods
+  "gżira": "Malta", "gzira": "Malta", "ir-rabat": "Malta", "rabat": "Malta",
+  "il-belt valletta": "Malta", "valletta": "Malta", "birgu": "Malta",
+  "sliema": "Malta", "st. julians": "Malta", "mdina": "Malta",
+  // More LA neighborhoods
+  "el segundo": "Los Angeles", "east los angeles": "Los Angeles",
+  "monterey park": "Los Angeles", "montebello": "Los Angeles",
+  "san gabriel": "Los Angeles", "arcadia": "Los Angeles",
+  "downey": "Los Angeles", "whittier": "Los Angeles",
+  "la cañada": "Los Angeles", "la canada": "Los Angeles",
+  // Tokyo neighborhoods
+  "minato city": "Tokyo", "minato": "Tokyo", "chiyoda": "Tokyo",
+  "meguro": "Tokyo", "setagaya": "Tokyo", "taito": "Tokyo",
+  "sumida": "Tokyo", "koto": "Tokyo", "nerima": "Tokyo",
+  // Maui neighborhoods
+  "wailea-makena": "Maui", "wailea": "Maui", "makena": "Maui",
+  "lahaina": "Maui", "kahului": "Maui", "kihei": "Maui",
+  "wailuku": "Maui", "paia": "Maui", "makawao": "Maui",
+  "haiku": "Maui", "napili": "Maui", "kapalua": "Maui",
+  // Frisco → Dallas
+  "frisco": "Dallas", "plano": "Dallas", "mckinney": "Dallas",
+  "richardson": "Dallas", "irving": "Dallas", "arlington": "Dallas",
+  "fort worth": "Dallas", "addison": "Dallas",
+  // Other mappings
   "meridian": "Boise", "east lansing": "Detroit",
+  "norcross": "Atlanta",
+  "driftwood": "Austin",
+  "tigard": "Portland",
+  "st louis": "St. Louis", "saint louis": "St. Louis",
+  "ann arbor": "Detroit", "royal oak": "Detroit", "ferndale": "Detroit", "dearborn": "Detroit",
+  "montecito": "Santa Barbara", "goleta": "Santa Barbara",
 };
 
 const _allNeighborhoods = { ..._neighborhoodToCity, ...EXTRA_NEIGHBORHOOD_MAP };
