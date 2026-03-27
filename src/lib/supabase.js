@@ -367,3 +367,69 @@ export async function deleteCommunityRestaurant(id) {
   const { error } = await supabase.from('community_restaurants').delete().eq('id', id);
   return { error };
 }
+
+// ── MESSAGING / DM FUNCTIONS ──────────────────────────────────
+
+// Send a DM (text or restaurant share)
+export async function sendMessage(senderId, recipientId, content, restaurantId, restaurantName) {
+  const { data, error } = await supabase.from('messages').insert({
+    sender_id: senderId, recipient_id: recipientId,
+    content: content || null, restaurant_id: restaurantId || null,
+    restaurant_name: restaurantName || null,
+  }).select().single();
+  if (error) console.error('sendMessage:', error);
+  return { data, error };
+}
+
+// Get inbox — latest message per conversation partner
+export async function getInbox(userId) {
+  // Get all messages involving this user
+  const { data, error } = await supabase.from('messages')
+    .select('*')
+    .or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error || !data) return [];
+  // Group by conversation partner, keep latest
+  const convos = {};
+  data.forEach(msg => {
+    const partnerId = msg.sender_id === userId ? msg.recipient_id : msg.sender_id;
+    if (!convos[partnerId]) {
+      convos[partnerId] = { ...msg, partnerId, unread: 0 };
+    }
+    if (msg.recipient_id === userId && !msg.read) {
+      convos[partnerId].unread = (convos[partnerId].unread || 0) + 1;
+    }
+  });
+  return Object.values(convos).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+
+// Get conversation between two users
+export async function getConversation(userId1, userId2, limit = 50) {
+  const { data, error } = await supabase.from('messages')
+    .select('*')
+    .or(`and(sender_id.eq.${userId1},recipient_id.eq.${userId2}),and(sender_id.eq.${userId2},recipient_id.eq.${userId1})`)
+    .order('created_at', { ascending: true })
+    .limit(limit);
+  if (error) console.error('getConversation:', error);
+  return data || [];
+}
+
+// Mark messages as read
+export async function markMessagesRead(userId, fromUserId) {
+  const { error } = await supabase.from('messages')
+    .update({ read: true })
+    .eq('recipient_id', userId)
+    .eq('sender_id', fromUserId)
+    .eq('read', false);
+  return { error };
+}
+
+// Get total unread message count
+export async function getUnreadMessageCount(userId) {
+  const { count, error } = await supabase.from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('recipient_id', userId)
+    .eq('read', false);
+  return count || 0;
+}

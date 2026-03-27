@@ -63,6 +63,7 @@ export default function Profile({
   allCitiesFromDb = [],
   /** Called after a photo is saved to `restaurant_photos` (e.g. admin sync) so Discover can update queue state. */
   onSharedPhotoSaved,
+  onOpenIgImport,
 }) {
   const { user } = useUser();
   const NOTIFICATION_TYPES = [
@@ -979,6 +980,10 @@ export default function Profile({
                   alert("Heat deck reset! Reload to see changes.");
                 }
               }} />
+
+              {/* IMPORT */}
+              <SectionLabel>Import</SectionLabel>
+              {onOpenIgImport && <Row label="Import from Instagram" sub="Add restaurants from IG screenshots" onClick={() => { setSettingsOpen(false); setSettingsSection(null); onOpenIgImport(); }} />}
 
               {/* DATA */}
               <SectionLabel>Data</SectionLabel>

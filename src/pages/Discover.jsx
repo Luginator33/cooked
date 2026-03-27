@@ -39,12 +39,11 @@ function getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResult
   }));
 }
 import ChatBot from "../components/ChatBot";
-import NotificationSheet from "../components/NotificationSheet";
 import Profile from "./Profile";
 import TasteProfile from "./TasteProfile";
 import UserProfile from "./UserProfile";
 import Onboarding from "./Onboarding";
-import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser, getAdminOverrides } from "../lib/supabase";
+import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser, getAdminOverrides, sendMessage, getInbox, getConversation, markMessagesRead, getUnreadMessageCount } from "../lib/supabase";
 import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities, syncRestaurant, seedAllRestaurants, getYoudLoveThis, getRisingRestaurants, getHiddenGems, getSixDegrees, getTasteFingerprint, getPeopleLikeYou, getWhoToFollow } from "../lib/neo4j";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -712,6 +711,18 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [igPhotoPicker, setIgPhotoPicker] = useState([]);
   const [pickerMode, setPickerMode] = useState("ig-import");
   const [pickerTab, setPickerTab] = useState("unresolved");
+  // DM state
+  const [dmOpen, setDmOpen] = useState(false);
+  const [dmInbox, setDmInbox] = useState([]);
+  const [dmConvo, setDmConvo] = useState(null); // { partnerId, partnerName, partnerPhoto }
+  const [dmMessages, setDmMessages] = useState([]);
+  const [dmInput, setDmInput] = useState("");
+  const [dmSending, setDmSending] = useState(false);
+  const [dmUnread, setDmUnread] = useState(0);
+  const [dmSharePicker, setDmSharePicker] = useState(null); // restaurant to share via DM
+  const [dmShareSearch, setDmShareSearch] = useState("");
+  const [dmShareResults, setDmShareResults] = useState([]);
+  const dmMessagesEndRef = useRef(null);
   const photoQueue = useRef([]);
   const photoQueueRunning = useRef(false);
   const mapRef = useRef(null);
@@ -1247,78 +1258,95 @@ export default function Discover({ tasteProfile, initialTab }) {
     return () => clearInterval(intervalId);
   }, [user?.id]);
 
-  // Poll for new followers and create "followed_you" notifications for any missing ones.
-  // Compares current follower set against a cached set so it works even if follows table
-  // has no created_at column. Catches follows where the inline insert failed.
-  const knownFollowersRef = useRef(null);
+  // ── DM FUNCTIONS ────────────────────────────────
+  const loadDmInbox = async () => {
+    if (!user?.id) return;
+    const inbox = await getInbox(user.id);
+    // Enrich with user profile data
+    const partnerIds = inbox.map(c => c.partnerId);
+    if (partnerIds.length) {
+      const { data: profiles } = await supabase.from('user_data').select('clerk_user_id, profile_name, profile_username, profile_photo').in('clerk_user_id', partnerIds);
+      const profileMap = {};
+      (profiles || []).forEach(p => { profileMap[p.clerk_user_id] = p; });
+      inbox.forEach(c => {
+        const p = profileMap[c.partnerId];
+        if (p) { c.partnerName = p.profile_name || p.profile_username || "User"; c.partnerPhoto = p.profile_photo; c.partnerUsername = p.profile_username; }
+        else { c.partnerName = "User"; c.partnerPhoto = null; }
+      });
+    }
+    setDmInbox(inbox);
+  };
+
+  const openDmInbox = async () => {
+    setDmOpen(true);
+    setDmConvo(null);
+    await loadDmInbox();
+  };
+
+  const openDmConvo = async (partnerId, partnerName, partnerPhoto) => {
+    setDmConvo({ partnerId, partnerName, partnerPhoto });
+    const msgs = await getConversation(user.id, partnerId);
+    setDmMessages(msgs);
+    await markMessagesRead(user.id, partnerId);
+    setDmUnread(prev => Math.max(0, prev - (dmInbox.find(c => c.partnerId === partnerId)?.unread || 0)));
+    setTimeout(() => dmMessagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+  };
+
+  const handleSendDm = async () => {
+    if (!dmInput.trim() || !dmConvo || dmSending) return;
+    setDmSending(true);
+    const text = dmInput.trim();
+    setDmInput("");
+    // Optimistic add
+    const tempMsg = { id: Date.now(), sender_id: user.id, recipient_id: dmConvo.partnerId, content: text, created_at: new Date().toISOString() };
+    setDmMessages(prev => [...prev, tempMsg]);
+    setTimeout(() => dmMessagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    await sendMessage(user.id, dmConvo.partnerId, text);
+    setDmSending(false);
+  };
+
+  const handleShareViaDm = async (recipientId, recipientName) => {
+    if (!dmSharePicker) return;
+    const r = dmSharePicker;
+    await sendMessage(user.id, recipientId, null, String(r.id), r.name);
+    setDmSharePicker(null);
+    setToast(`Sent ${r.name} to ${recipientName}`);
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  // Poll DM unread count
   useEffect(() => {
     if (!user?.id) return;
-    const checkNewFollowers = async () => {
-      try {
-        // Get all current followers
-        const { data: allFollows, error: fErr } = await supabase
-          .from("follows")
-          .select("follower_id")
-          .eq("following_id", user.id);
-        if (fErr || !allFollows) return;
-        const currentFollowerIds = allFollows.map(f => f.follower_id);
-        // First run: seed the known set and check for any followers without notifications
-        if (knownFollowersRef.current === null) {
-          knownFollowersRef.current = new Set(currentFollowerIds);
-          // On first load, check for followers that have no "followed_you" notification at all
-          if (currentFollowerIds.length > 0) {
-            const { data: existingNotifs } = await supabase
-              .from("notifications")
-              .select("from_user_id")
-              .eq("user_id", user.id)
-              .eq("type", "followed_you")
-              .in("from_user_id", currentFollowerIds);
-            const alreadyNotified = new Set((existingNotifs || []).map(n => n.from_user_id));
-            const missing = currentFollowerIds.filter(fid => !alreadyNotified.has(fid));
-            if (missing.length > 0) {
-              const rows = missing.map(fid => ({
-                user_id: user.id,
-                type: "followed_you",
-                from_user_id: fid,
-                read: false,
-              }));
-              await supabase.from("notifications").insert(rows);
-            }
-          }
-          return;
-        }
-        // Subsequent runs: detect new followers since last check
-        const newFollowers = currentFollowerIds.filter(fid => !knownFollowersRef.current.has(fid));
-        if (newFollowers.length > 0) {
-          // Double-check no notification already exists for these
-          const { data: existingNotifs } = await supabase
-            .from("notifications")
-            .select("from_user_id")
-            .eq("user_id", user.id)
-            .eq("type", "followed_you")
-            .in("from_user_id", newFollowers);
-          const alreadyNotified = new Set((existingNotifs || []).map(n => n.from_user_id));
-          const missing = newFollowers.filter(fid => !alreadyNotified.has(fid));
-          if (missing.length > 0) {
-            const rows = missing.map(fid => ({
-              user_id: user.id,
-              type: "followed_you",
-              from_user_id: fid,
-              read: false,
-            }));
-            await supabase.from("notifications").insert(rows);
-          }
-        }
-        knownFollowersRef.current = new Set(currentFollowerIds);
-      } catch (e) {
-        console.error("[Notif] follow poll error:", e);
-      }
-    };
-    // Run once on mount, then every 30 seconds
-    checkNewFollowers();
-    const pollId = setInterval(checkNewFollowers, 30000);
-    return () => clearInterval(pollId);
+    const fetchDmUnread = async () => { const count = await getUnreadMessageCount(user.id); setDmUnread(count); };
+    fetchDmUnread();
+    const iv = setInterval(fetchDmUnread, 30000);
+    return () => clearInterval(iv);
   }, [user?.id]);
+
+  // DM share picker search
+  useEffect(() => {
+    if (!dmSharePicker) { setDmShareResults([]); return; }
+    const q = dmShareSearch.trim();
+    if (!q) {
+      // Show following list by default
+      (async () => {
+        const { data } = await getFollowing(user?.id);
+        if (!data?.length) return setDmShareResults([]);
+        const ids = data.map(f => f.following_id);
+        const { data: profiles } = await supabase.from('user_data').select('clerk_user_id, profile_name, profile_username, profile_photo').in('clerk_user_id', ids);
+        setDmShareResults(profiles || []);
+      })();
+      return;
+    }
+    const timer = setTimeout(async () => {
+      const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      const pattern = `%${esc}%`;
+      const { data } = await supabase.from('user_data').select('clerk_user_id, profile_name, profile_username, profile_photo')
+        .or(`profile_username.ilike."${pattern}",profile_name.ilike."${pattern}"`).neq('clerk_user_id', user?.id).limit(10);
+      setDmShareResults(data || []);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [dmShareSearch, dmSharePicker, user?.id]);
 
   const openNotificationsSheet = async () => {
     setNotifSheetOpen(true);
@@ -1333,7 +1361,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(20);
     const rows = data || [];
     // Enrich notifications with user profile data
     const userIds = [...new Set(rows.map(r => r.from_user_id).filter(Boolean))];
@@ -3219,10 +3247,11 @@ Return a JSON object with exactly these fields:
                   )}
                 </div>
               )}
-              <button onClick={()=>{ setIgError(null); setIgAddedRestaurants([]); setIgDone(false); setIgImporting(false); setPickerMode("ig-import"); setIgModal(true); }}
-                title="Add from Instagram"
-                style={{ width:32, height:32, borderRadius:"50%", background:"linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)", border:"none", fontSize:15, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                📸
+              <button onClick={openDmInbox}
+                title="Messages"
+                style={{ position:"relative", width:40, height:40, borderRadius:"50%", border:"none", background:"transparent", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", padding:0, flexShrink:0 }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                {dmUnread > 0 && <span style={{ position:"absolute", top:6, right:6, width:8, height:8, borderRadius:"50%", background:C.terracotta, pointerEvents:"none" }} />}
               </button>
               <button
                 type="button"
@@ -3232,9 +3261,7 @@ Return a JSON object with exactly these fields:
               >
                 <NotificationBellIcon color={C.text} />
                 {notifUnreadCount > 0 ? (
-                  <span style={{ position:"absolute", top:0, right:0, minWidth:18, height:18, borderRadius:9, background:"#FF3B30", pointerEvents:"none", display:"flex", alignItems:"center", justifyContent:"center", padding:"0 5px", boxSizing:"border-box", border:`2px solid ${C.bg}` }}>
-                    <span style={{ fontSize:10, fontWeight:700, color:"#fff", fontFamily:"-apple-system,sans-serif", lineHeight:1 }}>{notifUnreadCount > 99 ? "99+" : notifUnreadCount}</span>
-                  </span>
+                  <span style={{ position:"absolute", top:6, right:6, width:8, height:8, borderRadius:"50%", background:C.terracotta, pointerEvents:"none" }} />
                 ) : null}
               </button>
               <button
@@ -4287,6 +4314,7 @@ Return a JSON object with exactly these fields:
             clerkImageUrl={user?.imageUrl}
             onViewUser={setViewingUserId}
             allCitiesFromDb={ALL_CITIES}
+            onOpenIgImport={() => { setIgError(null); setIgAddedRestaurants([]); setIgDone(false); setIgImporting(false); setPickerMode("ig-import"); setIgModal(true); }}
             onSharedPhotoSaved={(restaurantId, photoUrl) => {
               setPhotoResolved((prev) => [...new Set([...prev, restaurantId])]);
               if (photoUrl) {
@@ -4804,7 +4832,14 @@ Return a JSON object with exactly these fields:
                   </svg>
                   <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:"#4a2e18", fontFamily:"-apple-system,sans-serif" }}>MAPS</span>
                 </button>
-                {/* SHARE */}
+                {/* SEND (DM) */}
+                <button type="button" onClick={() => { setDmSharePicker(detail); setDmShareSearch(""); }} style={{ background:"#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:"1px solid rgba(46,31,14,0.9)", cursor:"pointer" }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4a2e18" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+                  </svg>
+                  <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:"#4a2e18", fontFamily:"-apple-system,sans-serif" }}>SEND</span>
+                </button>
+                {/* SHARE (external) */}
                 <button type="button" onClick={async () => { const shareText = `Check out ${detail.name} — ${detail.cuisine} in ${detail.city}. Found on Cooked.`; try { if (navigator.share) { await navigator.share({ title: detail.name, text: shareText, url: window.location.href }); } else { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } } catch { try { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } catch {} } }} style={{ background:"#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:"1px solid rgba(46,31,14,0.9)", cursor:"pointer" }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4a2e18" strokeWidth="1.5" strokeLinecap="round">
                     <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
@@ -5359,19 +5394,224 @@ Return a JSON object with exactly these fields:
           onClose={() => setViewingUserId(null)}
           onOpenDetail={setDetailRestaurant}
           onViewUser={(id) => setViewingUserId(id)}
+          onMessage={(partnerId, partnerName, partnerPhoto) => {
+            setViewingUserId(null);
+            setDmConvo({ partnerId, partnerName, partnerPhoto });
+            setDmOpen(true);
+            getConversation(user?.id, partnerId).then(msgs => { setDmMessages(msgs); markMessagesRead(user?.id, partnerId); });
+            setTimeout(() => dmMessagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 200);
+          }}
         />
       )}
 
-      <NotificationSheet
-        open={notifSheetOpen}
-        onClose={() => setNotifSheetOpen(false)}
-        notifications={notifList}
-        loading={notifLoading}
-        onViewUser={(id) => { setNotifSheetOpen(false); setViewingUserId(id); }}
-        onViewRestaurant={(r) => { setNotifSheetOpen(false); setDetailRestaurant(r); }}
-        allRestaurants={allRestaurants}
-        getPhotoForId={getAnyCachedPhotoForId}
-      />
+      {/* ── DM INBOX MODAL ── */}
+      {dmOpen && createPortal(
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:9999, display:"flex", flexDirection:"column" }} onClick={() => { if (!dmConvo) { setDmOpen(false); } }}>
+          <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:480, margin:"0 auto", background:C.bg, display:"flex", flexDirection:"column", height:"100%", maxHeight:"100dvh" }}>
+            {/* Header */}
+            <div style={{ padding:"16px 18px 12px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
+              {dmConvo ? (
+                <>
+                  <button type="button" onClick={() => { setDmConvo(null); loadDmInbox(); }} style={{ background:"none", border:"none", color:C.terracotta, fontSize:18, cursor:"pointer", padding:0 }}>‹</button>
+                  {dmConvo.partnerPhoto ? <img src={dmConvo.partnerPhoto} alt="" style={{ width:32, height:32, borderRadius:"50%", objectFit:"cover" }} /> : <div style={{ width:32, height:32, borderRadius:"50%", background:C.bg3 }} />}
+                  <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:18, color:C.text, flex:1 }}>{dmConvo.partnerName}</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:20, color:C.text, flex:1 }}>Messages</div>
+                </>
+              )}
+              <button type="button" onClick={() => { setDmOpen(false); setDmConvo(null); }} style={{ background:"none", border:"none", color:C.muted, fontSize:20, cursor:"pointer" }}>✕</button>
+            </div>
+            {/* Content */}
+            {!dmConvo ? (
+              /* INBOX */
+              <div style={{ flex:1, overflowY:"auto", padding:"8px 0" }}>
+                {dmInbox.length === 0 ? (
+                  <div style={{ textAlign:"center", padding:"60px 20px", color:C.muted, fontFamily:"-apple-system,sans-serif", fontSize:14 }}>
+                    <div style={{ fontSize:36, marginBottom:12 }}>💬</div>
+                    <div>No messages yet</div>
+                    <div style={{ fontSize:12, marginTop:6 }}>Share a restaurant or message a friend to start a conversation.</div>
+                  </div>
+                ) : dmInbox.map(convo => (
+                  <button key={convo.partnerId} type="button" onClick={() => openDmConvo(convo.partnerId, convo.partnerName, convo.partnerPhoto)}
+                    style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:"12px 18px", border:"none", background: convo.unread > 0 ? `${C.terracotta}0a` : "transparent", cursor:"pointer", textAlign:"left", borderBottom:`1px solid ${C.border}08` }}>
+                    {convo.partnerPhoto ? <img src={convo.partnerPhoto} alt="" style={{ width:44, height:44, borderRadius:"50%", objectFit:"cover", flexShrink:0 }} /> : <div style={{ width:44, height:44, borderRadius:"50%", background:C.bg3, flexShrink:0 }} />}
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                        <span style={{ fontFamily:"-apple-system,sans-serif", fontSize:14, fontWeight: convo.unread > 0 ? 700 : 400, color:C.text }}>{convo.partnerName}</span>
+                        <span style={{ fontSize:11, color:C.muted, fontFamily:"-apple-system,sans-serif", flexShrink:0 }}>{(() => { const d = Math.floor((Date.now()-new Date(convo.created_at))/60000); return d < 1 ? "now" : d < 60 ? `${d}m` : d < 1440 ? `${Math.floor(d/60)}h` : `${Math.floor(d/1440)}d`; })()}</span>
+                      </div>
+                      <div style={{ fontSize:12, color: convo.unread > 0 ? C.text : C.muted, fontFamily:"-apple-system,sans-serif", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", marginTop:2 }}>
+                        {convo.restaurant_name ? `🍽 ${convo.restaurant_name}` : (convo.content || "...")}
+                      </div>
+                    </div>
+                    {convo.unread > 0 && <span style={{ width:8, height:8, borderRadius:"50%", background:C.terracotta, flexShrink:0 }} />}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              /* CONVERSATION */
+              <>
+                <div style={{ flex:1, overflowY:"auto", padding:"12px 18px", display:"flex", flexDirection:"column", gap:6 }}>
+                  {dmMessages.map((msg, i) => {
+                    const isMine = msg.sender_id === user?.id;
+                    return (
+                      <div key={msg.id || i} style={{ display:"flex", justifyContent: isMine ? "flex-end" : "flex-start" }}>
+                        <div style={{
+                          maxWidth:"75%", padding: msg.restaurant_name ? "8px 10px" : "8px 14px",
+                          borderRadius: isMine ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                          background: isMine ? C.terracotta : C.bg2, color: isMine ? "#fff" : C.text,
+                          fontFamily:"-apple-system,sans-serif", fontSize:14, lineHeight:"1.4",
+                        }}>
+                          {msg.restaurant_name ? (
+                            <button type="button" onClick={() => {
+                              const rid = parseInt(msg.restaurant_id);
+                              const r = allRestaurants.find(r => r.id === rid);
+                              if (r) { setDetailId(rid); setDmOpen(false); setDmConvo(null); }
+                            }} style={{ background: `${C.bg}40`, border:`1px solid ${C.border}`, borderRadius:12, padding:"8px 10px", cursor:"pointer", display:"flex", alignItems:"center", gap:10, textAlign:"left", width:"100%" }}>
+                              {(() => { const photo = getPhoto(parseInt(msg.restaurant_id)); return photo ? <img src={photo} alt="" style={{ width:44, height:44, borderRadius:8, objectFit:"cover", flexShrink:0 }} /> : null; })()}
+                              <div>
+                                <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:14, color: isMine ? "#fff" : C.text }}>{msg.restaurant_name}</div>
+                                <div style={{ fontSize:11, color: isMine ? "rgba(255,255,255,0.7)" : C.muted, marginTop:2 }}>Tap to view</div>
+                              </div>
+                            </button>
+                          ) : msg.content}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={dmMessagesEndRef} />
+                </div>
+                {/* Input */}
+                <div style={{ padding:"10px 18px 24px", borderTop:`1px solid ${C.border}`, display:"flex", gap:8, flexShrink:0 }}>
+                  <input value={dmInput} onChange={e => setDmInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendDm(); } }}
+                    placeholder="Message..." style={{ flex:1, background:C.bg2, border:`1px solid ${C.border}`, borderRadius:20, padding:"10px 16px", color:C.text, fontSize:14, fontFamily:"-apple-system,sans-serif", outline:"none" }} />
+                  <button type="button" onClick={handleSendDm} disabled={!dmInput.trim() || dmSending}
+                    style={{ width:38, height:38, borderRadius:"50%", border:"none", background: dmInput.trim() ? C.terracotta : C.bg3, color:"#fff", fontSize:16, cursor: dmInput.trim() ? "pointer" : "default", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    →
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── SHARE VIA DM PICKER ── */}
+      {dmSharePicker && createPortal(
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:10000, display:"flex", alignItems:"flex-end" }} onClick={() => setDmSharePicker(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:480, margin:"0 auto", background:C.bg, borderRadius:"20px 20px 0 0", padding:"20px 18px 36px", maxHeight:"60vh", overflowY:"auto" }}>
+            <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:18, color:C.text, marginBottom:4 }}>Send {dmSharePicker.name} to...</div>
+            <input value={dmShareSearch} onChange={e => setDmShareSearch(e.target.value)} placeholder="Search people..." style={{ width:"100%", padding:"10px 14px", background:C.bg2, border:`1px solid ${C.border}`, borderRadius:12, color:C.text, fontSize:14, fontFamily:"-apple-system,sans-serif", outline:"none", marginBottom:12, boxSizing:"border-box" }} />
+            {dmShareResults.length === 0 ? <div style={{ color:C.muted, fontSize:13, textAlign:"center", padding:20 }}>No people found</div> : dmShareResults.map(u => (
+              <button key={u.clerk_user_id} type="button" onClick={() => handleShareViaDm(u.clerk_user_id, u.profile_name || u.profile_username || "User")}
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:"10px 4px", border:"none", background:"transparent", cursor:"pointer", textAlign:"left", borderBottom:`1px solid ${C.border}08` }}>
+                {u.profile_photo ? <img src={u.profile_photo} alt="" style={{ width:36, height:36, borderRadius:"50%", objectFit:"cover" }} /> : <div style={{ width:36, height:36, borderRadius:"50%", background:C.bg3 }} />}
+                <div>
+                  <div style={{ fontSize:14, color:C.text, fontFamily:"-apple-system,sans-serif" }}>{u.profile_name || "User"}</div>
+                  {u.profile_username && <div style={{ fontSize:11, color:C.muted }}>@{u.profile_username}</div>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {notifSheetOpen && createPortal(
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1001, display: "flex", alignItems: "flex-end" }}
+          onClick={() => setNotifSheetOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 480,
+              margin: "0 auto",
+              background: C.bg2,
+              borderRadius: "20px 20px 0 0",
+              maxHeight: "75vh",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Notifications</div>
+              <button
+                type="button"
+                onClick={() => setNotifSheetOpen(false)}
+                style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ overflowY: "auto", flex: 1, padding: "8px 18px 24px", WebkitOverflowScrolling: "touch" }}>
+              {notifLoading ? (
+                <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Loading…</div>
+              ) : notifList.length === 0 ? (
+                <div style={{ padding: "24px 0", textAlign: "center", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>No notifications yet</div>
+              ) : (
+                notifList.map((n) => {
+                  const unread = n.read === false;
+                  const fromUser = n._fromUser;
+                  const restaurant = n.restaurant_id ? allRestaurants.find(r => String(r.id) === String(n.restaurant_id)) : null;
+                  // Pick photo: user photo for follow, restaurant photo for restaurant events
+                  const photo = n.type === "followed_you" ? fromUser?.profile_photo : (restaurant ? getAnyCachedPhotoForId(restaurant.id) || restaurant.img : fromUser?.profile_photo);
+                  return (
+                    <div
+                      key={n.id ?? `${n.created_at}-${n.type}`}
+                      onClick={() => {
+                        if (n.type === "followed_you" && n.from_user_id) {
+                          setNotifSheetOpen(false); setViewingUserId(n.from_user_id);
+                        } else if (n.restaurant_id) {
+                          if (restaurant) { setNotifSheetOpen(false); setDetailRestaurant(restaurant); }
+                        } else if (n.from_user_id) {
+                          setNotifSheetOpen(false); setViewingUserId(n.from_user_id);
+                        }
+                      }}
+                      style={{
+                        display: "flex",
+                        gap: 12,
+                        alignItems: "center",
+                        padding: "12px 0",
+                        borderBottom: `1px solid ${C.border}`,
+                        cursor: "pointer",
+                        opacity: unread ? 1 : 0.7,
+                      }}
+                    >
+                      {/* Photo + icon badge */}
+                      <div style={{ position: "relative", flexShrink: 0 }}>
+                        <div style={{ width: 46, height: 46, borderRadius: n.type === "followed_you" ? "50%" : 10, overflow: "hidden", background: C.bg3, border: unread ? `2px solid ${C.terracotta}` : `1px solid ${C.border}` }}>
+                          {photo ? <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (
+                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <NotificationTypeIcon type={n.type} size={20} />
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ position: "absolute", bottom: -2, right: -2, width: 20, height: 20, borderRadius: "50%", background: C.bg2, border: `1.5px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <NotificationTypeIcon type={n.type} size={11} />
+                        </div>
+                      </div>
+                      {/* Text */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, color: C.text, fontFamily: "-apple-system,sans-serif", lineHeight: 1.4 }}>{notificationMessage(n)}</div>
+                        <div style={{ fontSize: 11, color: C.muted, fontFamily: "'DM Mono',monospace", marginTop: 3 }}>{formatNotificationTime(n.created_at)}</div>
+                      </div>
+                      {/* Arrow */}
+                      <div style={{ color: C.dim, fontSize: 14, flexShrink: 0 }}>›</div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
     </div>
     </SignedIn>

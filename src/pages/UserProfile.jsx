@@ -88,7 +88,7 @@ function RestCard({ r, onOpen }) {
   );
 }
 
-export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onViewUser }) {
+export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onViewUser, onMessage }) {
   const { user } = useUser();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
@@ -413,6 +413,24 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
             >
               {isFollowingUser ? "Unfollow" : "Follow"}
             </button>
+            {onMessage && (
+              <button
+                type="button"
+                onClick={() => onMessage(clerkUserId, profile?.profile_name || profile?.profile_username || "User", profile?.profile_photo)}
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: 20,
+                  border: `1px solid ${C.border}`,
+                  background: "transparent",
+                  color: C.text,
+                  fontFamily: "-apple-system,sans-serif",
+                  fontSize: 14,
+                  cursor: "pointer",
+                }}
+              >
+                Message
+              </button>
+            )}
           </div>
         ) : null}
 
