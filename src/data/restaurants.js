@@ -4,7 +4,7 @@ export const CITIES = [
   "Los Angeles", "New York", "Chicago", "San Francisco",
   "Miami", "London", "Tokyo", "Paris", "Copenhagen", "San Diego",
   "Austin", "Nashville", "Barcelona", "Mexico City", "Playa del Carmen", "Lisbon", "Seoul", "Portland", "Seattle", "Denver",
-  "Ventura County", "Vail", "Aspen", "Napa Valley", "Puebla", "Guadalajara"
+  "Ventura County", "Vail", "Aspen", "Napa Valley", "Guadalajara"
 ];
 
 export const CITY_GROUPS = {
@@ -32,7 +32,6 @@ export const CITY_GROUPS = {
   "Vail": ["Vail","Minturn","Avon","Beaver Creek","Edwards"],
   "Aspen": ["Aspen","Snowmass","Basalt"],
   "Napa Valley": ["Napa Valley","Napa","Yountville","St. Helena","Calistoga","Rutherford"],
-  "Puebla": ["Puebla","Heroica Puebla de Zaragoza"],
   "Guadalajara": ["Guadalajara","Zapopan","Tlaquepaque"],
   "Dallas": "United States",
   "Dubai": "International",
@@ -63,7 +62,6 @@ export const CITY_COORDS = {
   "Vail": { lat: 39.6403, lng: -106.3742 },
   "Aspen": { lat: 39.1911, lng: -106.8175 },
   "Napa Valley": { lat: 38.5025, lng: -122.2654 },
-  "Puebla": { lat: 19.0414, lng: -98.2063 },
   "Guadalajara": { lat: 20.6597, lng: -103.3496 },
   "Dallas": { lat: 32.7767, lng: -96.797 },
   "Dubai": { lat: 25.2048, lng: 55.2708 },
@@ -196,7 +194,7 @@ const EXTRA_NEIGHBORHOOD_MAP = {
   "minturn": "Vail", "vail": "Vail",
   "aspen": "Aspen",
   // Mexico neighborhoods/cities
-  "ciudad de méxico": "Mexico City", "heroica puebla de zaragoza": "Puebla",
+  "ciudad de méxico": "Mexico City", "heroica puebla de zaragoza": "Mexico City", "puebla": "Mexico City",
   "zapopan": "Guadalajara", "roma": "Mexico City", "coatepec": "Mexico City",
   // Napa Valley
   "yountville": "Napa Valley", "st. helena": "Napa Valley", "napa": "Napa Valley",
