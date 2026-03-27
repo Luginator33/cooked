@@ -505,17 +505,23 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
 
           {bulkQueue.length === 0 && (
             <>
-              <textarea value={bulkLinks} onChange={e => setBulkLinks(e.target.value)} placeholder={"https://maps.google.com/?cid=...\nhttps://www.google.com/maps/place/...\nhttps://maps.app.goo.gl/..."} style={{ ...inputStyle, minHeight: 150, fontFamily: "'DM Mono', monospace", fontSize: 11, resize: "vertical" }} />
+              <div style={{ fontSize: 11, color: C.muted, marginBottom: 6, fontFamily: "-apple-system,sans-serif" }}>
+                Tip: For best results, open each Google Maps link in your browser first, then copy the full URL from the address bar (it should contain "/place/Restaurant+Name/").
+                Short links (goo.gl) may not resolve correctly.
+              </div>
+              <textarea value={bulkLinks} onChange={e => setBulkLinks(e.target.value)} placeholder={"https://www.google.com/maps/place/Restaurant+Name/...\nhttps://maps.google.com/?cid=...\n\nOr just paste restaurant names:\nBestia Los Angeles\nCarbone New York"} style={{ ...inputStyle, minHeight: 150, fontFamily: "'DM Mono', monospace", fontSize: 11, resize: "vertical" }} />
               <button type="button" onClick={async () => {
                 const lines = bulkLinks.split("\n").map(l => l.trim()).filter(Boolean);
                 if (lines.length === 0) return;
                 setBulkProcessing(true);
                 const queue = [];
                 for (const link of lines) {
-                  // Extract place name from link for display
+                  const isUrl = link.startsWith("http");
                   const nameMatch = link.match(/place\/([^/]+)/);
-                  const displayName = nameMatch ? decodeURIComponent(nameMatch[1]).replace(/\+/g, " ") : link.slice(0, 40);
-                  queue.push({ link, displayName, status: "pending", data: null, photos: [], selectedPhoto: 0 });
+                  const cidMatch = link.match(/[?&]cid=(\d+)/);
+                  let displayName = !isUrl ? link : (nameMatch ? decodeURIComponent(nameMatch[1]).replace(/\+/g, " ") : link.slice(0, 50));
+                  const isShortUrl = isUrl && !nameMatch && !cidMatch;
+                  queue.push({ link, displayName, status: "pending", data: null, photos: [], selectedPhoto: 0, isShortUrl, isPlainText: !isUrl });
                 }
                 setBulkQueue(queue);
                 // Process each one
@@ -524,8 +530,9 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                   queue[i].status = "processing";
                   setBulkQueue([...queue]);
                   try {
-                    // Search Google Places using the link text as query
-                    const searchQuery = queue[i].displayName;
+                    // For plain text entries or short URLs, use the text directly as search query
+                    // For full Google Maps URLs, extract place name from URL path
+                    let searchQuery = queue[i].displayName;
                     const searchRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
                       method: "POST",
                       headers: { "Content-Type": "application/json", "X-Goog-Api-Key": GOOGLE_KEY, "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.rating,places.photos" },
