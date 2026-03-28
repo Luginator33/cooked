@@ -2052,10 +2052,6 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
     return true;
   }).filter(r => !filterMood || (r.tags && r.tags.some(t => t.toLowerCase().includes(filterMood.toLowerCase()))) || (r.vibe && r.vibe.toLowerCase().includes(filterMood.toLowerCase())) || (r.best_for && (typeof r.best_for === 'string' ? r.best_for : Array.isArray(r.best_for) ? r.best_for.join(' ') : '').toLowerCase().includes(filterMood.toLowerCase())));
-  const filteredSorted = [...filteredForDiscover].sort((a, b) => {
-    const score = (r) => (userRatings[r.id] || 0) * 0.3 + getFlameScore(r) * 0.7;
-    return score(b) - score(a);
-  });
   const isInWatchlist = (id) => watchlist.includes(id) || watchlist.includes(Number(id)) || watchlist.includes(String(id));
   const isLovedCheck = (id) => heatResults.loved.includes(id) || heatResults.loved.includes(Number(id)) || heatResults.loved.includes(String(id));
   // Get the flame score for a restaurant — cached from Supabase, fallback to external rating
@@ -2066,6 +2062,10 @@ export default function Discover({ tasteProfile, initialTab }) {
     const ext = r.googleRating || (r.rating ? r.rating / 2 : 3);
     return Math.min(5, Math.max(1, Math.round(ext * 2) / 2));
   };
+  const filteredSorted = [...filteredForDiscover].sort((a, b) => {
+    const score = (r) => (userRatings[r.id] || 0) * 0.3 + getFlameScore(r) * 0.7;
+    return score(b) - score(a);
+  });
   const heatCityRestaurants = heatCity === "All" ? allRestaurants : allRestaurants.filter(r => {
     const group = CITY_GROUPS[heatCity] || [heatCity];
     return group.includes(r.city) || group.includes(r.neighborhood);
