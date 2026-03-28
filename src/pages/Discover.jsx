@@ -5187,7 +5187,7 @@ Return a JSON object with exactly these fields:
                 badge = <span style={{ background:"#c9a227", color:"#111", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:11, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>7R</span>;
                 label = "Reserve on SevenRooms";
               } else {
-                const otSearchUrl = `https://www.opentable.com/s/?term=${encodeURIComponent(detail.name)}&metroName=${encodeURIComponent(detail.city || '')}&covers=2`;
+                const otSearchUrl = `https://www.opentable.com/s/?term=${encodeURIComponent((detail.name || '') + ' ' + (detail.neighborhood || detail.city || ''))}&covers=2`;
                 badge = <span style={{ background:"#e8333c", color:"#fff", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:12, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>OT</span>;
                 label = "Find on OpenTable";
                 btnBg = "#1a0f07";

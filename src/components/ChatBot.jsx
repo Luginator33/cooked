@@ -286,13 +286,13 @@ function renderText(text) {
   return text.replace(/\*\*(.*?)\*\*/g, "$1").replace(/\*(.*?)\*/g, "$1").replace(/#{1,6}\s/g, "").replace(/`(.*?)`/g, "$1");
 }
 
-function normalizeOpenTableUrl(urlOrSlug, restaurantName) {
+function normalizeOpenTableUrl(urlOrSlug, restaurantName, city) {
   const raw = (urlOrSlug || "").trim();
   if (raw.startsWith("https://")) return raw;
   if (raw.startsWith("http://")) return "https://" + raw.slice(7);
   if (raw.startsWith("opentable.com") || raw.startsWith("www.opentable.com")) return "https://" + raw;
   if (raw.startsWith("/")) return "https://www.opentable.com" + raw;
-  if (!raw) return "https://www.opentable.com/s/?term=" + encodeURIComponent(restaurantName || "");
+  if (!raw) return "https://www.opentable.com/s/?term=" + encodeURIComponent((restaurantName || "") + (city ? " " + city : "")) + "&covers=2";
   return "https://www.opentable.com/" + raw.replace(/^\/+/, "");
 }
 
@@ -418,7 +418,20 @@ export default function ChatBot({
 
   const handleRestaurantClick = (name) => {
     const normalized = name.toLowerCase().trim();
-    const match = allRestaurants.find(r => r.name?.toLowerCase().trim() === normalized);
+    // Try exact match first
+    let match = allRestaurants.find(r => r.name?.toLowerCase().trim() === normalized);
+    // Try removing common suffixes/prefixes the chatbot might add
+    if (!match) {
+      const cleaned = normalized.replace(/^the\s+/i, '').replace(/\s+restaurant$/i, '').replace(/\s+bar$/i, '');
+      match = allRestaurants.find(r => {
+        const rName = r.name?.toLowerCase().trim();
+        return rName === cleaned || rName?.replace(/^the\s+/i, '') === cleaned || rName?.replace(/^the\s+/i, '') === normalized;
+      });
+    }
+    // Try contains match as last resort (for partial names)
+    if (!match) {
+      match = allRestaurants.find(r => r.name?.toLowerCase().trim().includes(normalized) || normalized.includes(r.name?.toLowerCase().trim()));
+    }
     if (match && onOpenDetail) onOpenDetail(match);
   };
 
