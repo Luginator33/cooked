@@ -1042,7 +1042,19 @@ export default function Discover({ tasteProfile, initialTab }) {
     const timer = setTimeout(() => {
       if (seedTriggeredRef.current) return;
       seedTriggeredRef.current = true;
-      seedAllRestaurants(allRestaurants).then(() => {
+      seedAllRestaurants(allRestaurants).then(async () => {
+        // Re-sync all loved restaurants so LOVED relationships point to correct city nodes
+        const loved = heatResults?.loved || [];
+        if (loved.length > 0 && user?.id) {
+          for (const id of loved) {
+            const r = allRestaurants.find(ar => ar.id === id || ar.id === Number(id) || String(ar.id) === String(id));
+            if (r) {
+              await syncRestaurant(r);
+              await syncLove(user.id, id);
+            }
+          }
+          console.log("[Neo4j] Re-synced", loved.length, "loved restaurants");
+        }
         try { window.localStorage.setItem("cooked_graph_seeded_v3", "1"); } catch {}
         console.log("[Neo4j] Graph seeded with", allRestaurants.length, "restaurants (v3 — city fix)");
       }).catch(e => console.error("[Neo4j] Seed error:", e));
