@@ -615,7 +615,7 @@ function RestCard({ r, loved, watched, onLove, onWatch, onShare, onOpenDetail, o
           </div>
         )}
         <div style={{ position:"absolute", top:10, right:10 }}>
-          <FlameRating score={flameScore != null ? flameScore : (r.googleRating || (r.rating ? r.rating / 2 : 3))} />
+          <FlameRating score={flameScore != null ? flameScore : Math.min(3, r.googleRating || (r.rating ? r.rating / 2 : 3))} />
         </div>
       </div>
       <div style={{ padding:"14px 16px", background:C.bg2 }}>
@@ -1031,11 +1031,11 @@ export default function Discover({ tasteProfile, initialTab }) {
 
   // One-time seed: enrich all restaurants in Neo4j graph
   useEffect(() => {
-    if (safeLocalStorageGetItem("cooked_graph_seeded_v2")) return;
+    if (safeLocalStorageGetItem("cooked_graph_seeded_v3")) return;
     if (!import.meta.env.VITE_NEO4J_URI) return;
     seedAllRestaurants(allRestaurants).then(() => {
-      try { window.localStorage.setItem("cooked_graph_seeded_v2", "1"); } catch {}
-      console.log("[Neo4j] Graph seeded with", allRestaurants.length, "restaurants");
+      try { window.localStorage.setItem("cooked_graph_seeded_v3", "1"); } catch {}
+      console.log("[Neo4j] Graph seeded with", allRestaurants.length, "restaurants (v3 — city fix)");
     }).catch(e => console.error("[Neo4j] Seed error:", e));
   }, []);
 
@@ -2081,9 +2081,9 @@ export default function Discover({ tasteProfile, initialTab }) {
   const getFlameScore = (r) => {
     const cached = flameScores[String(r.id)];
     if (cached && cached.interactions >= 3) return cached.flameScore;
-    // Cold start fallback: convert external rating to 1-5 scale
+    // Cold start fallback: convert external rating to 1-5 scale, max 3 flames without community data
     const ext = r.googleRating || (r.rating ? r.rating / 2 : 3);
-    return Math.min(5, Math.max(1, Math.round(ext * 2) / 2));
+    return Math.min(3, Math.max(1, Math.round(ext * 2) / 2));
   };
   const filteredSorted = [...filteredForDiscover].sort((a, b) => {
     const score = (r) => (userRatings[r.id] || 0) * 0.3 + getFlameScore(r) * 0.7;
