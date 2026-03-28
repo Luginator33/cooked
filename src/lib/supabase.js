@@ -5,6 +5,51 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// ── FLAME SCORE / INTERACTION TRACKING ──────────────────────
+// Log a user interaction with a restaurant (fire-and-forget)
+export function logInteraction(clerkUserId, restaurantId, action, value = null) {
+  if (!clerkUserId || !restaurantId) return;
+  supabase.from('restaurant_interactions').insert({
+    clerk_user_id: clerkUserId,
+    restaurant_id: String(restaurantId),
+    action,
+    value,
+  }).then(({ error }) => {
+    if (error) console.error('logInteraction error:', error);
+  });
+}
+
+// Fetch cached flame scores for a list of restaurant IDs
+export async function fetchFlameScores(restaurantIds) {
+  if (!restaurantIds?.length) return {};
+  const ids = restaurantIds.map(String);
+  const allRows = [];
+  // Batch in chunks of 500 (Supabase filter limit)
+  for (let i = 0; i < ids.length; i += 500) {
+    const batch = ids.slice(i, i + 500);
+    const { data, error } = await supabase
+      .from('restaurant_flame_scores')
+      .select('restaurant_id, flame_score, interaction_count')
+      .in('restaurant_id', batch);
+    if (!error && data) allRows.push(...data);
+  }
+  const map = {};
+  allRows.forEach(row => {
+    map[row.restaurant_id] = { flameScore: row.flame_score, interactions: row.interaction_count };
+  });
+  return map;
+}
+
+// Compute flame score for a single restaurant via RPC
+export async function computeFlameScore(restaurantId, externalRating) {
+  const { data, error } = await supabase.rpc('compute_flame_score', {
+    p_restaurant_id: String(restaurantId),
+    p_external_rating: externalRating || 3,
+  });
+  if (error) console.error('computeFlameScore error:', error);
+  return data;
+}
+
 // Load user data from Supabase
 export async function loadUserData(clerkUserId) {
   const { data, error } = await supabase

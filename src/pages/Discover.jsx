@@ -98,7 +98,7 @@ import Profile from "./Profile";
 import TasteProfile from "./TasteProfile";
 import UserProfile from "./UserProfile";
 import Onboarding from "./Onboarding";
-import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser, getAdminOverrides, sendMessage, getInbox, getConversation, markMessagesRead, getUnreadMessageCount } from "../lib/supabase";
+import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser, getAdminOverrides, sendMessage, getInbox, getConversation, markMessagesRead, getUnreadMessageCount, logInteraction, fetchFlameScores, computeFlameScore } from "../lib/supabase";
 import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities, syncRestaurant, seedAllRestaurants, getYoudLoveThis, getRisingRestaurants, getHiddenGems, getSixDegrees, getTasteFingerprint, getPeopleLikeYou, getWhoToFollow } from "../lib/neo4j";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -341,18 +341,29 @@ const FlameIcon = ({ size = 18, color = C.terracotta, filled = true }) => (
   </svg>
 );
 
+const HalfFlameIcon = ({ size = 18, color = C.terracotta }) => (
+  <svg width={size} height={size * 1.2} viewBox="0 0 167 200">
+    <defs>
+      <clipPath id="halfFlame">
+        <rect x="0" y="0" width="84" height="200" />
+      </clipPath>
+    </defs>
+    <path d={FLAME_PATH} fill="none" stroke={C.bg3} strokeWidth={8} />
+    <path d={FLAME_PATH} fill={color} clipPath="url(#halfFlame)" />
+  </svg>
+);
+
 const FlameRating = ({ count, score, total = 5, size = 11 }) => {
   const value = typeof count === "number" ? count : (score || 0);
+  const fullFlames = Math.floor(value);
+  const hasHalf = value - fullFlames >= 0.5;
   return (
     <div style={{ display: "flex", gap: 2 }}>
-      {Array.from({ length: total }, (_, i) => (
-        <FlameIcon
-          key={i}
-          size={size}
-          color={i < value ? C.terracotta : C.bg3}
-          filled
-        />
-      ))}
+      {Array.from({ length: total }, (_, i) => {
+        if (i < fullFlames) return <FlameIcon key={i} size={size} color={C.terracotta} filled />;
+        if (i === fullFlames && hasHalf) return <HalfFlameIcon key={i} size={size} color={C.terracotta} />;
+        return <FlameIcon key={i} size={size} color={C.bg3} filled />;
+      })}
     </div>
   );
 };
@@ -604,7 +615,7 @@ function RestCard({ r, loved, watched, onLove, onWatch, onShare, onOpenDetail, o
           </div>
         )}
         <div style={{ position:"absolute", top:10, right:10 }}>
-          <FlameRating score={r.cooked_score || Math.round(r.rating || 0)} />
+          <FlameRating score={getFlameScore(r)} />
         </div>
         <div style={{ position:"absolute", bottom:10, right:12, fontFamily:"Cormorant Garamond,Georgia,serif", fontSize:24, fontWeight:700, fontStyle:"italic", color:C.terracotta, lineHeight:1 }}>
           {r.rating}
@@ -931,6 +942,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [userRatings, setUserRatings] = useState(() => {
     try { return JSON.parse(safeLocalStorageGetItem("cooked_ratings") || "{}"); } catch { return {}; }
   });
+  const [flameScores, setFlameScores] = useState({}); // { restaurantId: { flameScore, interactions } }
   const [userNotes, setUserNotes] = useState(() => {
     try { return JSON.parse(safeLocalStorageGetItem("cooked_notes") || "{}"); } catch { return {}; }
   });
@@ -1263,6 +1275,15 @@ export default function Discover({ tasteProfile, initialTab }) {
     };
   }, []);
 
+  // Load cached flame scores for all restaurants
+  useEffect(() => {
+    if (!allRestaurants.length) return;
+    const ids = allRestaurants.map(r => String(r.id));
+    fetchFlameScores(ids).then(scores => {
+      if (scores && Object.keys(scores).length > 0) setFlameScores(scores);
+    }).catch(() => {});
+  }, [allRestaurants.length]);
+
   useEffect(() => {
     if (!showHeatTip) {
       setHeatTipFading(false);
@@ -1368,6 +1389,8 @@ export default function Discover({ tasteProfile, initialTab }) {
     if (!dmSharePicker) return;
     const r = dmSharePicker;
     await sendMessage(user.id, recipientId, null, String(r.id), r.name);
+    // Log DM share for flame score (+3.5 points)
+    if (user?.id) logInteraction(user.id, r.id, 'dm');
     setDmSharePicker(null);
     setToast(`Sent ${r.name} to ${recipientName}`);
     setTimeout(() => setToast(null), 2500);
@@ -2030,11 +2053,19 @@ export default function Discover({ tasteProfile, initialTab }) {
     return true;
   }).filter(r => !filterMood || (r.tags && r.tags.some(t => t.toLowerCase().includes(filterMood.toLowerCase()))) || (r.vibe && r.vibe.toLowerCase().includes(filterMood.toLowerCase())) || (r.best_for && (typeof r.best_for === 'string' ? r.best_for : Array.isArray(r.best_for) ? r.best_for.join(' ') : '').toLowerCase().includes(filterMood.toLowerCase())));
   const filteredSorted = [...filteredForDiscover].sort((a, b) => {
-    const score = (r) => (userRatings[r.id] || 0) * 0.3 + r.rating * 0.7;
+    const score = (r) => (userRatings[r.id] || 0) * 0.3 + getFlameScore(r) * 0.7;
     return score(b) - score(a);
   });
   const isInWatchlist = (id) => watchlist.includes(id) || watchlist.includes(Number(id)) || watchlist.includes(String(id));
   const isLovedCheck = (id) => heatResults.loved.includes(id) || heatResults.loved.includes(Number(id)) || heatResults.loved.includes(String(id));
+  // Get the flame score for a restaurant — cached from Supabase, fallback to external rating
+  const getFlameScore = (r) => {
+    const cached = flameScores[String(r.id)];
+    if (cached && cached.interactions >= 3) return cached.flameScore;
+    // Cold start fallback: convert external rating to 1-5 scale
+    const ext = r.googleRating || (r.rating ? r.rating / 2 : 3);
+    return Math.min(5, Math.max(1, Math.round(ext * 2) / 2));
+  };
   const heatCityRestaurants = heatCity === "All" ? allRestaurants : allRestaurants.filter(r => {
     const group = CITY_GROUPS[heatCity] || [heatCity];
     return group.includes(r.city) || group.includes(r.neighborhood);
@@ -2141,6 +2172,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       const nowLoved = !isLoved;
       if (user?.id) {
         if (nowLoved) {
+          logInteraction(user.id, id, 'heat');
           const fullRest = allRestaurants.find(r => r.id === id || r.id === Number(id));
           if (fullRest) syncRestaurant(fullRest);
           syncLove(user.id, id);
@@ -2201,12 +2233,15 @@ export default function Discover({ tasteProfile, initialTab }) {
     const normalizedId = isNaN(id) ? id : Number(id);
     setWatchlist(s => {
       const inList = s.includes(normalizedId) || s.includes(Number(id)) || s.includes(String(id));
+      if (!inList && user?.id) logInteraction(user.id, id, 'watchlist');
       if (inList) return s.filter(x => x !== normalizedId && x !== Number(id) && x !== String(id));
       return [...s, normalizedId];
     });
   };
-  const share = async (name) => {
+  const share = async (name, restaurantId) => {
     const text = `Check out ${name} on Cooked — the restaurant app for people who care.`;
+    // Log external share for flame score (+5 points)
+    if (user?.id && restaurantId) logInteraction(user.id, restaurantId, 'share');
     try {
       if (navigator.share) {
         await navigator.share({ title: name, text, url: window.location.href });
@@ -4075,6 +4110,11 @@ Return a JSON object with exactly these fields:
                   skipped: [...prev.skipped.filter(id => id !== r.id), r.id],
                 }));
               } else {
+                // Log swipe interaction for flame score
+                if (user?.id) {
+                  if (dir === 'right') logInteraction(user.id, r.id, 'heat');
+                  else if (dir === 'left') logInteraction(user.id, r.id, 'pass');
+                }
                 setHeatResults(prev => {
                   const next = {
                     ...prev,
@@ -4861,7 +4901,7 @@ Return a JSON object with exactly these fields:
                   <span key={tag} style={{ background:"#c4603a", color:"#fff", borderRadius:20, padding:"5px 13px", fontSize:12, fontFamily:"-apple-system,sans-serif", border:"1px solid rgba(255,255,255,0.12)" }}>{tag}</span>
                 ))}
               </div>
-              <div style={{ flexShrink:0 }}><FlameRating score={detail.rating || 0} size={16} /></div>
+              <div style={{ flexShrink:0 }}><FlameRating score={getFlameScore(detail)} size={16} /></div>
             </div>
 
             {/* SECTION 3 — 4 ACTION BUTTONS */}
@@ -4896,7 +4936,7 @@ Return a JSON object with exactly these fields:
                   <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:"#4a2e18", fontFamily:"-apple-system,sans-serif" }}>SEND</span>
                 </button>
                 {/* SHARE (external) */}
-                <button type="button" onClick={async () => { const shareText = `Check out ${detail.name} — ${detail.cuisine} in ${detail.city}. Found on Cooked.`; try { if (navigator.share) { await navigator.share({ title: detail.name, text: shareText, url: window.location.href }); } else { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } } catch { try { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } catch {} } }} style={{ background:"#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:"1px solid rgba(46,31,14,0.9)", cursor:"pointer" }}>
+                <button type="button" onClick={async () => { if (user?.id) logInteraction(user.id, detail.id, 'share'); const shareText = `Check out ${detail.name} — ${detail.cuisine} in ${detail.city}. Found on Cooked.`; try { if (navigator.share) { await navigator.share({ title: detail.name, text: shareText, url: window.location.href }); } else { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } } catch { try { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } catch {} } }} style={{ background:"#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:"1px solid rgba(46,31,14,0.9)", cursor:"pointer" }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4a2e18" strokeWidth="1.5" strokeLinecap="round">
                     <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
                     <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
@@ -5196,7 +5236,7 @@ Return a JSON object with exactly these fields:
                 return (
                   <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"14px 18px" }}>
                     <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:10, fontFamily:"-apple-system,sans-serif" }}>RESERVATIONS</div>
-                    <button type="button" onClick={() => window.open(otSearchUrl, "_blank", "noopener,noreferrer")} style={{ width:"100%", background:btnBg, border:`1px solid ${btnBorder}`, borderRadius:14, padding:"16px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}>
+                    <button type="button" onClick={() => { if (user?.id) logInteraction(user.id, detail.id, 'reservation'); window.open(otSearchUrl, "_blank", "noopener,noreferrer"); }} style={{ width:"100%", background:btnBg, border:`1px solid ${btnBorder}`, borderRadius:14, padding:"16px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}>
                       <div style={{ display:"flex", alignItems:"center", gap:12 }}>
                         {badge}
                         <span style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:15, color:labelColor }}>{label}</span>
@@ -5210,7 +5250,7 @@ Return a JSON object with exactly these fields:
               return (
                 <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"14px 18px" }}>
                   <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:10, fontFamily:"-apple-system,sans-serif" }}>RESERVATIONS</div>
-                  <button type="button" onClick={() => window.open(href, "_blank", "noopener,noreferrer")} style={{ width:"100%", background:btnBg, border:`1px solid ${btnBorder}`, borderRadius:14, padding:"16px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}>
+                  <button type="button" onClick={() => { if (user?.id) logInteraction(user.id, detail.id, 'reservation'); window.open(href, "_blank", "noopener,noreferrer"); }} style={{ width:"100%", background:btnBg, border:`1px solid ${btnBorder}`, borderRadius:14, padding:"16px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}>
                     <div style={{ display:"flex", alignItems:"center", gap:12 }}>
                       {badge}
                       <span style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:15, color:labelColor }}>{label}</span>
@@ -5226,12 +5266,12 @@ Return a JSON object with exactly these fields:
               <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:12, fontFamily:"-apple-system,sans-serif" }}>YOUR RATING</div>
               <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                 {[1,2,3,4,5].map(n => (
-                  <button key={n} type="button" onClick={() => { const next = {...(userRatings||{})}; next[detail.id] = n; setUserRatings(next); }} style={{ background:"none", border:"none", cursor:"pointer", padding:0 }}>
+                  <button key={n} type="button" onClick={() => { const next = {...(userRatings||{})}; next[detail.id] = n; setUserRatings(next); if (user?.id) logInteraction(user.id, detail.id, 'rating', n); }} style={{ background:"none", border:"none", cursor:"pointer", padding:0 }}>
                     <FlameIcon size={34} filled={(userRatings[detail.id]||0) >= n} color={(userRatings[detail.id]||0) >= n ? "#c4603a" : "#2a1a0a"} />
                   </button>
                 ))}
               </div>
-              {userRatings[detail.id] && <div style={{ marginTop:8, fontSize:12, color:"#5a3a20", fontFamily:"-apple-system,sans-serif" }}>{userRatings[detail.id]} / 5 · Cooked score {detail.rating}</div>}
+              {userRatings[detail.id] && <div style={{ marginTop:8, fontSize:12, color:"#5a3a20", fontFamily:"-apple-system,sans-serif" }}>Your rating: {userRatings[detail.id]} / 5</div>}
             </div>
 
             {/* SECTION 9 — CUISINE / MEAL TYPE */}
