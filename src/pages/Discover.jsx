@@ -3406,13 +3406,15 @@ Return a JSON object with exactly these fields:
       {/* Home Tab */}
       {tab === "home" && (() => {
         const getCity = (r) => r.city || r.location || r.region || "";
-        const cityName = (city || "Los Angeles").toLowerCase();
-        const allSorted = [...RESTAURANTS].sort((a, b) => (b.rating || 0) - (a.rating || 0));
-        const cityFiltered = allSorted.filter(r =>
-          (r.city || "").toLowerCase().includes(cityName.split(" ")[0].toLowerCase())
-        ).slice(0, 8);
-        const hotNow = cityFiltered.length >= 3 ? cityFiltered : allSorted.slice(0, 8);
-        const featuredRestaurant = cityFiltered[0] || allSorted[0];
+        const allSorted = [...allRestaurants].sort((a, b) => getFlameScore(b) - getFlameScore(a));
+        const cityFiltered = city === "All" ? allSorted : city === "Followed"
+          ? allSorted.filter(r => followedCities.includes(r.city))
+          : allSorted.filter(r => {
+            const group = CITY_GROUPS[city] || [city];
+            return group.includes(r.city) || group.includes(r.neighborhood);
+          });
+        const hotNow = cityFiltered.slice(0, 8).length >= 3 ? cityFiltered.slice(0, 8) : allSorted.slice(0, 8);
+        const featuredRestaurant = youdLoveFiltered[0] || cityFiltered[0] || allSorted[0];
         return (
         <div style={{ paddingTop: headerHeight, paddingLeft: 16, paddingRight: 16, paddingBottom: 90, color: C.text }}>
           {/* Header already rendered above via PageHeader */}
@@ -3503,8 +3505,8 @@ Return a JSON object with exactly these fields:
                     {[featuredRestaurant.cuisine, featuredRestaurant.neighborhood, featuredRestaurant.price].filter(Boolean).join(" · ")}
                   </div>
                 </div>
-                <div style={{ position: "absolute", top: 16, right: 18, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 28, color: "#c4603a" }}>
-                  {featuredRestaurant.rating}
+                <div style={{ position: "absolute", top: 16, right: 18 }}>
+                  <FlameRating score={getFlameScore(featuredRestaurant)} size={14} />
                 </div>
               </HomePhotoCard>
             ) : null}
