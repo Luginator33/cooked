@@ -570,7 +570,7 @@ const BAR_CUISINE_CATEGORIES = [
   { label: "Brewery", values: ["Brewery Bar", "Craft Beer Bar", "Beer Garden", "Beer Hall"] },
 ];
 
-function RestCard({ r, loved, watched, onLove, onWatch, onShare, onOpenDetail, onPhotoFetched, getCachedPhotoForId, photoCacheVersion = 0, usingSupabasePhotoCache }) {
+function RestCard({ r, loved, watched, onLove, onWatch, onShare, onOpenDetail, onPhotoFetched, getCachedPhotoForId, photoCacheVersion = 0, usingSupabasePhotoCache, flameScore }) {
   const cardRef = useRef(null);
   const cachedSrc = getCachedPhotoForId ? getCachedPhotoForId(r.id) || r.img : r.img;
   const [imgSrc, setImgSrc] = useState(cachedSrc);
@@ -615,7 +615,7 @@ function RestCard({ r, loved, watched, onLove, onWatch, onShare, onOpenDetail, o
           </div>
         )}
         <div style={{ position:"absolute", top:10, right:10 }}>
-          <FlameRating score={getFlameScore(r)} />
+          <FlameRating score={flameScore != null ? flameScore : (r.googleRating || (r.rating ? r.rating / 2 : 3))} />
         </div>
         <div style={{ position:"absolute", bottom:10, right:12, fontFamily:"Cormorant Garamond,Georgia,serif", fontSize:24, fontWeight:700, fontStyle:"italic", color:C.terracotta, lineHeight:1 }}>
           {r.rating}
@@ -3771,6 +3771,7 @@ Return a JSON object with exactly these fields:
               getCachedPhotoForId={getAnyCachedPhotoForId}
               photoCacheVersion={photoCacheVersion}
               usingSupabasePhotoCache={usingSupabasePhotoCache}
+              flameScore={getFlameScore(r)}
             />
           ))}
           {filteredSorted.length === 0 && <div style={{ textAlign:"center", padding:"48px 20px", color:C.muted }}><div style={{ fontSize:40, marginBottom:10 }}>🍽️</div><div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:20, fontStyle:"italic" }}>No spots yet for this city.</div></div>}
@@ -3911,6 +3912,7 @@ Return a JSON object with exactly these fields:
                           getCachedPhotoForId={getAnyCachedPhotoForId}
                           photoCacheVersion={photoCacheVersion}
                           usingSupabasePhotoCache={usingSupabasePhotoCache}
+                          flameScore={getFlameScore(r)}
                         />
                       ))}
                     </div>
