@@ -7,7 +7,7 @@ import { RESTAURANTS, ALL_TAGS, normalizeCity } from "../data/restaurants";
 
 /** All cities present in the restaurant database — single source for filters across tabs */
 const BASE_CITY_REGIONS = [
-  { region: "United States", cities: ["Los Angeles","New York","Ventura County","Malibu","Ojai","Santa Barbara","Chicago","Miami","Las Vegas","San Francisco","San Diego","Austin","Nashville","Maui","Napa Valley","Sacramento","Portland","Seattle","Denver","Vail","Aspen","Dallas","Atlanta","St. Louis","Detroit","Boise","Savannah","Scottsdale"] },
+  { region: "United States", cities: ["Los Angeles","New York","Ventura County","Malibu","Ojai","Santa Barbara","Chicago","Miami","Las Vegas","San Francisco","San Diego","Austin","Nashville","New Orleans","Maui","Napa Valley","Sacramento","Portland","Seattle","Denver","Vail","Aspen","Dallas","Atlanta","St. Louis","Detroit","Boise","Savannah","Scottsdale"] },
   { region: "Mexico & Caribbean", cities: ["Mexico City","Playa del Carmen","Guadalajara","Canouan Island","Liberia","San Juan"] },
   { region: "Europe", cities: ["London","UK","Paris","Barcelona","Amsterdam","Copenhagen","Lisbon","Rome","Berlin","Istanbul","Munich","Prague","Stockholm","Vienna","Ibiza","Mykonos","Malta","Cannes"] },
   { region: "Middle East", cities: ["Dubai","Tel Aviv"] },
@@ -1941,7 +1941,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   }, []);
 
   const CITY_GROUPS = {
-    "Los Angeles": ["Los Angeles", "Malibu", "Beverly Hills", "West Hollywood", "Brentwood", "Santa Monica", "Culver City", "Arts District", "Chinatown", "Palms", "Mid-City"],
+    "Los Angeles": ["Los Angeles", "Beverly Hills", "West Hollywood", "Brentwood", "Santa Monica", "Culver City", "Arts District", "Chinatown", "Palms", "Mid-City"],
     "New York": ["New York", "Manhattan", "Brooklyn", "Queens", "Williamsburg", "West Village", "East Village", "Greenwich Village", "Koreatown", "Midtown", "Flatiron", "SoHo"],
     "Chicago": ["Chicago", "West Loop", "Lincoln Park", "Wicker Park", "River North"],
     "San Francisco": ["San Francisco", "Berkeley", "Oakland", "Mission", "Hayes Valley", "SoMa", "Nob Hill"],
