@@ -617,9 +617,6 @@ function RestCard({ r, loved, watched, onLove, onWatch, onShare, onOpenDetail, o
         <div style={{ position:"absolute", top:10, right:10 }}>
           <FlameRating score={flameScore != null ? flameScore : (r.googleRating || (r.rating ? r.rating / 2 : 3))} />
         </div>
-        <div style={{ position:"absolute", bottom:10, right:12, fontFamily:"Cormorant Garamond,Georgia,serif", fontSize:24, fontWeight:700, fontStyle:"italic", color:C.terracotta, lineHeight:1 }}>
-          {r.rating}
-        </div>
       </div>
       <div style={{ padding:"14px 16px", background:C.bg2 }}>
         <div style={{ fontFamily:"Cormorant Garamond,Georgia,serif", fontSize:20, fontWeight:700, lineHeight:1.1, marginBottom:4, color:C.text }}>{r.name}</div>
@@ -4890,7 +4887,7 @@ Return a JSON object with exactly these fields:
                   <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontWeight:"bold", fontSize:34, color:"#ffffff", lineHeight:1.05, marginBottom:5 }}>{detail.name}</div>
                   <div style={{ fontSize:13, color:"rgba(240,235,226,0.7)", letterSpacing:"0.01em" }}>{[detail.cuisine, detail.neighborhood, detail.price].filter(Boolean).join(" · ")}</div>
                 </div>
-                <div style={{ fontFamily:"Georgia,serif", fontWeight:"bold", fontSize:40, color:"#c4603a", lineHeight:1 }}>{detail.rating}</div>
+                <div style={{ flexShrink:0 }}><FlameRating score={getFlameScore(detail)} size={20} /></div>
               </div>
             </div>
             {/* thin divider between hero and tags */}
