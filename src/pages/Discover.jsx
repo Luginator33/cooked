@@ -1030,14 +1030,25 @@ export default function Discover({ tasteProfile, initialTab }) {
   }, [user?.id, followedCities.length]);
 
   // One-time seed: enrich all restaurants in Neo4j graph
+  // Wait until community restaurants have merged (allRestaurants.length > static count)
+  const seedTriggeredRef = useRef(false);
   useEffect(() => {
+    if (seedTriggeredRef.current) return;
     if (safeLocalStorageGetItem("cooked_graph_seeded_v3")) return;
     if (!import.meta.env.VITE_NEO4J_URI) return;
-    seedAllRestaurants(allRestaurants).then(() => {
-      try { window.localStorage.setItem("cooked_graph_seeded_v3", "1"); } catch {}
-      console.log("[Neo4j] Graph seeded with", allRestaurants.length, "restaurants (v3 — city fix)");
-    }).catch(e => console.error("[Neo4j] Seed error:", e));
-  }, []);
+    // Wait for community restaurants to merge (static data is ~2900, with community it's higher)
+    if (allRestaurants.length < 100) return;
+    // Small delay to ensure community merge has happened
+    const timer = setTimeout(() => {
+      if (seedTriggeredRef.current) return;
+      seedTriggeredRef.current = true;
+      seedAllRestaurants(allRestaurants).then(() => {
+        try { window.localStorage.setItem("cooked_graph_seeded_v3", "1"); } catch {}
+        console.log("[Neo4j] Graph seeded with", allRestaurants.length, "restaurants (v3 — city fix)");
+      }).catch(e => console.error("[Neo4j] Seed error:", e));
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [allRestaurants.length]);
 
   // Fetch Neo4j-powered discovery feeds (global, then filter by city client-side)
   useEffect(() => {
