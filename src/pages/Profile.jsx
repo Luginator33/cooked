@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
-import { getFollowers, getFollowing, getUserProfile, saveSharedPhoto, saveUserData, saveUserPhotos, supabase } from "../lib/supabase";
+import { getFollowers, getFollowing, getUserProfile, saveSharedPhoto, saveUserData, saveUserPhotos, supabase, followCity, unfollowCity, getFollowedCities } from "../lib/supabase";
+import { CITIES } from "../data/restaurants";
 import { getCookedScore, getCityReadiness } from "../lib/neo4j";
 import AdminPanel from "../components/admin/AdminPanel";
 
@@ -100,6 +101,8 @@ export default function Profile({
   const [photoSyncMessage, setPhotoSyncMessage] = useState(null);
   const [cookedScore, setCookedScore] = useState(0);
   const [cityReadiness, setCityReadiness] = useState([]);
+  const [followedCitiesList, setFollowedCitiesList] = useState([]);
+  const [showCityFollowPicker, setShowCityFollowPicker] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   // Settings toggles
   const [privateProfile, setPrivateProfile] = useState(() => localStorage.getItem("cooked_private_profile") === "true");
@@ -424,6 +427,9 @@ export default function Profile({
     if (!user?.id) { setCookedScore(0); return; }
     getCookedScore(user.id).then((score) => setCookedScore(score));
     getCityReadiness(user.id).then((data) => setCityReadiness(data || []));
+    getFollowedCities(user.id).then(({ data }) => {
+      setFollowedCitiesList((data || []).map(r => r.city));
+    });
   }, [user?.id]);
 
   const openSocialList = async (kind) => {
@@ -646,11 +652,16 @@ export default function Profile({
       ) : null}
 
       {/* City Readiness */}
-      {cityReadiness.length > 0 && (
-        <div style={{ padding: "12px 18px 0" }}>
-          <div style={{ fontSize: 10, color: C.muted, fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
-            City readiness
+      <div style={{ padding: "12px 18px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ fontSize: 10, color: C.muted, fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            {cityReadiness.length > 0 ? "City readiness" : "Your Cities"}
           </div>
+          <button type="button" onClick={() => setShowCityFollowPicker(true)} style={{ background: "none", border: `1px solid ${C.terracotta}`, borderRadius: 20, padding: "4px 12px", color: C.terracotta, fontSize: 11, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
+            + Follow Cities
+          </button>
+        </div>
+        {cityReadiness.length > 0 && (
           <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
             {cityReadiness.map(c => {
               const pct = Math.round((c.pctExplored || 0) * 100);
@@ -681,6 +692,55 @@ export default function Profile({
                 </div>
               );
             })}
+          </div>
+        )}
+        {followedCitiesList.length > 0 && cityReadiness.length === 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+            {followedCitiesList.map(c => (
+              <span key={c} style={{ padding: "6px 14px", borderRadius: 20, background: `${C.terracotta}18`, border: `1px solid ${C.terracotta}`, color: C.terracotta, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>★ {c}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* City Follow Picker Modal */}
+      {showCityFollowPicker && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => setShowCityFollowPicker(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px", maxHeight: "70vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Follow Cities</div>
+              <button type="button" onClick={() => setShowCityFollowPicker(false)} style={{ background: "none", border: "none", color: C.muted, fontSize: 20, cursor: "pointer" }}>×</button>
+            </div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontFamily: "-apple-system,sans-serif" }}>Tap cities you want to follow. These will show up in your city filter and city readiness.</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {(() => {
+                const allCities = [...new Set([...CITIES, ...allCitiesFromDb, ...(allRestaurants || []).map(r => r.city).filter(Boolean)])].sort();
+                return allCities.map(c => {
+                  const isFollowed = followedCitiesList.includes(c);
+                  return (
+                    <button key={c} type="button" onClick={async () => {
+                      if (!user?.id) return;
+                      if (isFollowed) {
+                        await unfollowCity(user.id, c);
+                        setFollowedCitiesList(prev => prev.filter(x => x !== c));
+                      } else {
+                        await followCity(user.id, c);
+                        setFollowedCitiesList(prev => [...prev, c]);
+                      }
+                    }} style={{
+                      padding: "8px 16px", borderRadius: 24,
+                      border: `1.5px solid ${isFollowed ? C.terracotta : C.border}`,
+                      background: isFollowed ? C.terracotta + "22" : C.bg,
+                      color: isFollowed ? C.terracotta : C.text,
+                      fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif",
+                      fontWeight: isFollowed ? 600 : 400,
+                    }}>
+                      {isFollowed ? `★ ${c}` : c}
+                    </button>
+                  );
+                });
+              })()}
+            </div>
           </div>
         </div>
       )}
