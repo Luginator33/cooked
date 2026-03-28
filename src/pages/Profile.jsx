@@ -556,7 +556,14 @@ export default function Profile({
           <div style={{ flex: 1, paddingBottom: 4 }}>
             <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", fontSize: 26, color: "#fff", lineHeight: 1.05 }}>{name}</div>
             <div style={{ fontSize: 12, color: "rgba(240,235,226,0.65)", marginTop: 4, fontFamily: "-apple-system,sans-serif" }}>
-              {cities.slice(0, 3).join(" · ") || ""}
+              {(() => {
+                const home = defaultCity || cities[0] || "";
+                // Top 2 cities by loved restaurant count (excluding home)
+                const cityCounts = {};
+                lovedRestaurants.forEach(r => { if (r.city && r.city !== home) cityCounts[r.city] = (cityCounts[r.city] || 0) + 1; });
+                const top2 = Object.entries(cityCounts).sort((a, b) => b[1] - a[1]).slice(0, 2).map(e => e[0]);
+                return [home, ...top2].filter(Boolean).join(" · ");
+              })()}
             </div>
           </div>
         </div>
@@ -904,9 +911,9 @@ export default function Profile({
               <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px", maxHeight: "80vh", overflowY: "auto" }}>
                 <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
                   <button type="button" onClick={() => setSettingsSection(null)} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
-                  <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Default City</div>
+                  <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Home City</div>
                 </div>
-                <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontFamily: "-apple-system,sans-serif" }}>Choose your default city. This is what loads when you open the app.</div>
+                <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontFamily: "-apple-system,sans-serif" }}>Your home city. This is what loads when you open the app and shows on your profile.</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {cities.map(city => {
                     const isDefault = defaultCity === city;
@@ -914,6 +921,7 @@ export default function Profile({
                       <button key={city} type="button" onClick={() => {
                         setDefaultCity(city);
                         savePref("cooked_default_city", city);
+                        if (userId) saveUserData(userId, { home_city: city });
                       }} style={{
                         padding: "10px 18px", borderRadius: 24,
                         border: `1.5px solid ${isDefault ? C.terracotta : C.border}`,
@@ -951,7 +959,7 @@ export default function Profile({
 
               {/* PREFERENCES */}
               <SectionLabel>Preferences</SectionLabel>
-              <Row label="Default City" sub={defaultCity || "Not set"} onClick={() => setSettingsSection("defaultCity")} right={<span style={{ fontSize: 12, color: C.muted }}>{defaultCity || "Set"}</span>} />
+              <Row label="Home City" sub={defaultCity || "Not set"} onClick={() => setSettingsSection("defaultCity")} right={<span style={{ fontSize: 12, color: C.muted }}>{defaultCity || "Set"}</span>} />
               <Row label="Dietary Preferences" sub={dietaryPrefs.length ? dietaryPrefs.join(", ") : "None set"} onClick={(e) => { e.stopPropagation(); setSettingsSection("dietary"); }} />
               <Row label="Notification Preferences" onClick={(e) => { e.stopPropagation(); setSettingsSection("notifications"); }} />
               <Toggle label="Private Profile" sub="Only followers can see your loved & watchlist" value={privateProfile} onChange={v => { setPrivateProfile(v); savePref("cooked_private_profile", v); }} />

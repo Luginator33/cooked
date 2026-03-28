@@ -746,7 +746,12 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [setupName, setSetupName] = useState("");
   const [setupUsername, setSetupUsername] = useState("");
   const [setupSaving, setSetupSaving] = useState(false);
-  const [city, setCity] = useState("Los Angeles");
+  const [city, setCity] = useState(() => {
+    try { return localStorage.getItem("cooked_default_city") || "Los Angeles"; } catch { return "Los Angeles"; }
+  });
+  const [homeCity, setHomeCity] = useState(() => {
+    try { return localStorage.getItem("cooked_default_city") || "Los Angeles"; } catch { return "Los Angeles"; }
+  });
   const [followedCities, setFollowedCities] = useState([]);
   const [trendingInCities, setTrendingInCities] = useState([]);
   const [youdLoveThis, setYoudLoveThis] = useState([]);
@@ -1070,25 +1075,35 @@ export default function Discover({ tasteProfile, initialTab }) {
   }, [user?.id]);
 
   // Filter Neo4j sections by selected city — show nothing if no city matches (don't fall back to global)
+  const cityMatchesFilter = (rCity) => {
+    if (!city || city === "All") return true;
+    if (city === "Followed") return followedCities.includes(rCity);
+    return rCity === city;
+  };
+
   const youdLoveFiltered = useMemo(() => {
     if (!city || city === "All") return youdLoveThis.slice(0, 8);
+    if (city === "Followed") return youdLoveThis.filter(r => followedCities.includes(r.city)).slice(0, 8);
     return youdLoveThis.filter(r => r.city === city).slice(0, 8);
-  }, [youdLoveThis, city]);
+  }, [youdLoveThis, city, followedCities]);
 
   const risingFiltered = useMemo(() => {
     if (!city || city === "All") return risingRestaurants.slice(0, 8);
+    if (city === "Followed") return risingRestaurants.filter(r => followedCities.includes(r.city)).slice(0, 8);
     return risingRestaurants.filter(r => r.city === city).slice(0, 8);
-  }, [risingRestaurants, city]);
+  }, [risingRestaurants, city, followedCities]);
 
   const hiddenGemsFiltered = useMemo(() => {
     if (!city || city === "All") return hiddenGems.slice(0, 8);
+    if (city === "Followed") return hiddenGems.filter(r => followedCities.includes(r.city)).slice(0, 8);
     return hiddenGems.filter(r => r.city === city).slice(0, 8);
-  }, [hiddenGems, city]);
+  }, [hiddenGems, city, followedCities]);
 
   const trendingFiltered = useMemo(() => {
     if (!city || city === "All") return trendingInCities;
+    if (city === "Followed") return trendingInCities.filter(r => followedCities.includes(r.city));
     return trendingInCities.filter(r => r.city === city);
-  }, [trendingInCities, city]);
+  }, [trendingInCities, city, followedCities]);
 
   const toggleCityFollow = async (cityName, e) => {
     e.preventDefault();
@@ -1616,6 +1631,12 @@ export default function Discover({ tasteProfile, initialTab }) {
         setWatchlist(remoteWatchlist);
         setUserRatings(remoteRatings);
         setPhotoResolved(remotePhotoResolved);
+        // Load home city from Supabase
+        if (remote.home_city) {
+          setHomeCity(remote.home_city);
+          setCity(remote.home_city);
+          try { localStorage.setItem("cooked_default_city", remote.home_city); } catch {}
+        }
 
         safeSetItem("cooked_heat", JSON.stringify(remoteHeat));
         safeSetItem("cooked_watchlist", JSON.stringify(remoteWatchlist));
@@ -1978,7 +1999,12 @@ export default function Discover({ tasteProfile, initialTab }) {
     "Lisbon": ["Lisbon", "Chiado", "Príncipe Real", "Madragoa", "Cais do Sodré", "Intendente", "Avenida da Liberdade"],
     "Seoul": ["Seoul", "Gangnam", "Jongno", "Itaewon", "Mapo"],
   };
-  const filteredByCity = city === "All" ? allRestaurants : allRestaurants.filter(r => {
+  const filteredByCity = city === "All" ? allRestaurants : city === "Followed" ? allRestaurants.filter(r => {
+    return followedCities.some(fc => {
+      const group = CITY_GROUPS[fc] || [fc];
+      return group.includes(r.city) || group.includes(r.neighborhood);
+    });
+  }) : allRestaurants.filter(r => {
     const group = CITY_GROUPS[city] || [city];
     return group.includes(r.city) || group.includes(r.neighborhood);
   });
@@ -2113,7 +2139,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   useEffect(() => {
     if (tab !== "map" || !mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
-    const byCity = city === "All" ? allRestaurants : allRestaurants.filter(r => r.city === city);
+    const byCity = city === "All" ? allRestaurants : city === "Followed" ? allRestaurants.filter(r => followedCities.includes(r.city)) : allRestaurants.filter(r => r.city === city);
     const mapRestaurants = byCity.filter(r => r.lat != null && r.lng != null && r.lat !== 0);
 
     const updateMarkers = () => {
@@ -3265,57 +3291,57 @@ Return a JSON object with exactly these fields:
               {(tab === "home" || tab === "discover" || tab === "map") && (
                 <div style={{ position:"relative" }}>
                   <button onClick={() => setCityPickerOpen(v => !v)} style={{ display:"flex", alignItems:"center", gap:5, background:"none", border:"none", cursor:"pointer", padding:0, outline:"none" }}>
-                    <span style={{ fontFamily:"Cormorant Garamond,Georgia,serif", fontSize:15, fontWeight:700, color:C.terracotta, fontStyle:"italic" }}>{city === "All" ? "All Cities" : city}</span>
+                    <span style={{ fontFamily:"Cormorant Garamond,Georgia,serif", fontSize:15, fontWeight:700, color:C.terracotta, fontStyle:"italic" }}>{city === "All" ? "All Cities" : city === "Followed" ? "Followed Cities" : city}</span>
                     <span style={{ fontSize:11, color:C.muted, marginTop:1 }}>{cityPickerOpen ? "▴" : "▾"}</span>
                   </button>
                   {cityPickerOpen && (
-                    <div style={{ position:"absolute", top:"calc(100% + 8px)", left:-12, zIndex:600, background:C.bg2, borderRadius:14, boxShadow:"0 12px 40px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.25)", border:`1px solid ${C.border}`, width:220, maxHeight:340, overflowY:"auto", scrollbarWidth:"none", padding:"6px 0 8px" }} onClick={e => e.stopPropagation()}>
-                      {user?.id && followedCities.length > 0 ? (
-                        <div style={{ padding:"0 0 8px", borderBottom:`1px solid ${C.border2}` }}>
-                          <div style={{ padding:"6px 14px 6px", fontFamily:"'DM Mono',monospace", fontSize:8, color:C.dim, letterSpacing:"1.8px", textTransform:"uppercase" }}>Cities You Follow</div>
-                          <div style={{ display:"flex", flexWrap:"wrap", gap:6, padding:"0 10px 4px" }}>
-                            {followedCities.map((fc) => (
-                              <button
-                                key={fc}
-                                type="button"
-                                onClick={() => { setCity(fc); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
-                                style={{
-                                  padding:"5px 10px",
-                                  borderRadius:14,
-                                  border:`1px solid ${city === fc ? C.terracotta : C.border}`,
-                                  background: city === fc ? `${C.terracotta}22` : C.bg3,
-                                  color: city === fc ? C.terracotta : C.text,
-                                  fontSize:11,
-                                  fontFamily:"'DM Sans',sans-serif",
-                                  fontWeight: city === fc ? 600 : 400,
-                                  cursor:"pointer",
-                                  maxWidth:"100%",
-                                  whiteSpace:"nowrap",
-                                  overflow:"hidden",
-                                  textOverflow:"ellipsis",
-                                }}
-                              >
-                                {fc}
-                              </button>
-                            ))}
-                          </div>
+                    <div style={{ position:"absolute", top:"calc(100% + 8px)", left:-12, zIndex:600, background:C.bg2, borderRadius:14, boxShadow:"0 12px 40px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.25)", border:`1px solid ${C.border}`, width:220, maxHeight:380, overflowY:"auto", scrollbarWidth:"none", padding:"6px 0 8px" }} onClick={e => e.stopPropagation()}>
+                      {/* Home City */}
+                      {homeCity && (
+                        <div style={{ padding:"0 0 4px" }}>
+                          <div style={{ padding:"6px 14px 4px", fontFamily:"'DM Mono',monospace", fontSize:8, color:C.dim, letterSpacing:"1.8px", textTransform:"uppercase" }}>🏠 Home</div>
+                          <button type="button" onClick={() => { setCity(homeCity); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
+                            style={{ width:"100%", padding:"8px 14px", textAlign:"left", background: city === homeCity ? `${C.terracotta}18` : "transparent", border:"none", color: city === homeCity ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", fontWeight: city === homeCity ? 600 : 400, cursor:"pointer" }}>
+                            {homeCity}
+                          </button>
                         </div>
-                      ) : null}
-                      <div style={{ padding: "8px 16px 4px", fontFamily: "'DM Mono', monospace", fontSize: 8, color: C.dim, letterSpacing: "1.8px", textTransform: "uppercase", borderTop: user?.id && followedCities.length > 0 ? `1px solid ${C.border2}` : "none" }}>
-                        All cities
+                      )}
+                      {/* Followed Cities filter */}
+                      {user?.id && followedCities.length > 0 && (
+                        <div style={{ borderTop:`1px solid ${C.border2}`, padding:"0 0 4px" }}>
+                          <div style={{ padding:"8px 14px 4px", fontFamily:"'DM Mono',monospace", fontSize:8, color:C.dim, letterSpacing:"1.8px", textTransform:"uppercase" }}>Followed Cities</div>
+                          <button type="button" onClick={() => { setCity("Followed"); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
+                            style={{ width:"100%", padding:"8px 14px", textAlign:"left", background: city === "Followed" ? `${C.terracotta}18` : "transparent", border:"none", color: city === "Followed" ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", fontWeight: city === "Followed" ? 600 : 400, cursor:"pointer" }}>
+                            All Followed ({followedCities.length})
+                          </button>
+                          {followedCities.filter(fc => fc !== homeCity).map((fc) => (
+                            <button key={fc} type="button" onClick={() => { setCity(fc); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
+                              style={{ width:"100%", padding:"6px 14px 6px 24px", textAlign:"left", background: city === fc ? `${C.terracotta}18` : "transparent", border:"none", color: city === fc ? C.terracotta : C.text, fontSize:13, fontFamily:"'DM Sans',sans-serif", fontWeight: city === fc ? 600 : 400, cursor:"pointer" }}>
+                              {fc}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* All Cities */}
+                      <div style={{ borderTop:`1px solid ${C.border2}`, padding:"8px 0 0" }}>
+                        <div style={{ padding:"0 14px 4px", fontFamily:"'DM Mono',monospace", fontSize:8, color:C.dim, letterSpacing:"1.8px", textTransform:"uppercase" }}>All Cities</div>
+                        <button type="button" onClick={() => { setCity("All"); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }} style={{ width:"100%", padding:"8px 14px", textAlign:"left", background: city==="All" ? `${C.terracotta}18` : "transparent", border:"none", color: city==="All" ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", fontWeight: city==="All" ? 600 : 400, cursor:"pointer" }}>All Cities</button>
                       </div>
-                      <div style={{ display: "flex", alignItems: "stretch", width: "100%" }}>
-                        <button type="button" onClick={() => { setCity("All"); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }} style={{ flex:1, padding:"8px 8px 8px 14px", textAlign:"left", background: city==="All" ? `${C.terracotta}18` : "transparent", border:"none", color: city==="All" ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", fontWeight: city==="All" ? 600 : 400, cursor:"pointer" }}>All Cities</button>
-                      </div>
-                      {getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults, dynamicCityRegions).map(({ region, cities }) => (
+                      {getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults, dynamicCityRegions).map(({ region, cities: regionCities }) => (
                         <div key={region}>
                           <div style={{ padding:"10px 14px 4px", fontFamily:"'DM Mono',monospace", fontSize:8, color:C.terracotta, letterSpacing:"1.8px", textTransform:"uppercase", borderTop:`1px solid ${C.border}` }}>{region}</div>
-                          {cities.map((c) => (
+                          {/* Followed cities first, then alphabetical */}
+                          {[...regionCities].sort((a, b) => {
+                            const aFollowed = followedCities.includes(a) ? 0 : 1;
+                            const bFollowed = followedCities.includes(b) ? 0 : 1;
+                            if (aFollowed !== bFollowed) return aFollowed - bFollowed;
+                            return a.localeCompare(b);
+                          }).map((c) => (
                             <div key={c} style={{ display: "flex", alignItems: "stretch", width: "100%" }}>
                               <button type="button" onClick={() => { setCity(c); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
-                                style={{ flex: 1, minWidth: 0, padding: "8px 8px 8px 14px", textAlign: "left", background: city === c ? `${C.terracotta}18` : "transparent", border: "none", color: city === c ? C.terracotta : C.text, fontSize: 14, fontFamily: "'DM Sans', sans-serif", fontWeight: city === c ? 600 : 400, cursor: "pointer", letterSpacing: "-0.1px", lineHeight: 1.3 }}
+                                style={{ flex: 1, minWidth: 0, padding: "8px 8px 8px 14px", textAlign: "left", background: city === c ? `${C.terracotta}18` : "transparent", border: "none", color: city === c ? C.terracotta : C.text, fontSize: 14, fontFamily: "'DM Sans', sans-serif", fontWeight: city === c || followedCities.includes(c) ? 600 : 400, cursor: "pointer", letterSpacing: "-0.1px", lineHeight: 1.3 }}
                               >
-                                {c}
+                                {followedCities.includes(c) ? `★ ${c}` : c}
                               </button>
                               {user?.id ? (
                                 <button
@@ -3691,7 +3717,7 @@ Return a JSON object with exactly these fields:
             const lovedIds = heatResults.loved || [];
             const nopedIds = heatResults.noped || [];
             const findsSet = new Set([...findsIds.map((id) => Number(id)), ...findsIds]);
-            const inCity = (r) => city === "All" || r.city === city;
+            const inCity = (r) => city === "All" || (city === "Followed" ? followedCities.includes(r.city) : r.city === city);
             const heatScore = (r) => (r.heat || "").match(/🔥/g)?.length ?? 0;
             const ratingNum = (r) => parseFloat(r.rating) || 0;
             const sortByHeatThenRating = (a, b) => {
