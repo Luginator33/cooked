@@ -1129,7 +1129,7 @@ function RestCard({ r, compact, onOpen, photoCache }) {
     try { const cached = JSON.parse(localStorage.getItem("cooked_photos") || "{}"); if (cached[r.id]) setImgSrc(cached[r.id]); } catch {}
   }, [r.id, photoCache]);
 
-  const flameCount = Math.round((r.rating || 0) / 2);
+  const flameCount = Math.min(5, Math.max(1, Math.round((r.googleRating || (r.rating ? r.rating / 2 : 3)) * 2) / 2));
 
   return (
     <div

@@ -3529,8 +3529,8 @@ Return a JSON object with exactly these fields:
                     marginBottom: i < trendingFiltered.length - 1 ? 12 : 0,
                   }}
                 >
-                  <div style={{ position: "absolute", top: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 15, color: "#c4603a" }}>
-                    {r.rating}
+                  <div style={{ position: "absolute", top: 10, right: 10 }}>
+                    <FlameRating score={getFlameScore(r)} size={10} />
                   </div>
                   <div style={{ position: "absolute", bottom: 28, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
                     {r.name}
@@ -3557,8 +3557,8 @@ Return a JSON object with exactly these fields:
                     onClick={() => setDetailRestaurant(r)}
                     style={{ minWidth: 170, maxWidth: 170, height: 220, borderRadius: 14, flexShrink: 0 }}
                   >
-                    <div style={{ position: "absolute", top: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 15, color: "#c4603a" }}>
-                      {r.rating}
+                    <div style={{ position: "absolute", top: 10, right: 10 }}>
+                      <FlameRating score={getFlameScore(r)} size={10} />
                     </div>
                     <div style={{ position: "absolute", bottom: 40, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
                       {r.name}
@@ -3590,8 +3590,8 @@ Return a JSON object with exactly these fields:
                     onClick={() => setDetailRestaurant(r)}
                     style={{ minWidth: 150, maxWidth: 150, height: 200, borderRadius: 14, flexShrink: 0 }}
                   >
-                    <div style={{ position: "absolute", top: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 15, color: "#c4603a" }}>
-                      {r.rating}
+                    <div style={{ position: "absolute", top: 10, right: 10 }}>
+                      <FlameRating score={getFlameScore(r)} size={10} />
                     </div>
                     <div style={{ position: "absolute", bottom: 28, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
                       {r.name}
@@ -3619,8 +3619,8 @@ Return a JSON object with exactly these fields:
                     onClick={() => setDetailRestaurant(r)}
                     style={{ minWidth: 170, maxWidth: 170, height: 220, borderRadius: 14, flexShrink: 0 }}
                   >
-                    <div style={{ position: "absolute", top: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 15, color: "#c4603a" }}>
-                      {r.rating}
+                    <div style={{ position: "absolute", top: 10, right: 10 }}>
+                      <FlameRating score={getFlameScore(r)} size={10} />
                     </div>
                     <div style={{ position: "absolute", bottom: 40, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
                       {r.name}
@@ -3650,8 +3650,8 @@ Return a JSON object with exactly these fields:
                   onClick={() => setDetailRestaurant(r)}
                   style={{ minWidth: 150, maxWidth: 150, height: 200, borderRadius: 14, flexShrink: 0 }}
                 >
-                  <div style={{ position: "absolute", top: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 15, color: "#c4603a" }}>
-                    {r.rating}
+                  <div style={{ position: "absolute", top: 10, right: 10 }}>
+                    <FlameRating score={getFlameScore(r)} size={10} />
                   </div>
                   <div style={{ position: "absolute", bottom: 28, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
                     {r.name}
@@ -5367,7 +5367,7 @@ Return a JSON object with exactly these fields:
                   <div style={{ display:"flex", gap:12, overflowX:"auto", padding:"0 18px 4px" }}>
                     {nearby.map(r => (
                       <HomePhotoCard key={`${r.id}-${photoCacheVersion}`} r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }} onClick={() => setDetailRestaurant(r)} style={{ minWidth:150, maxWidth:150, height:160, borderRadius:14, flexShrink:0 }}>
-                        <div style={{ position:"absolute", top:10, right:10, fontFamily:"Georgia,serif", fontWeight:"bold", fontSize:14, color:"#c4603a" }}>{r.rating}</div>
+                        <div style={{ position:"absolute", top:10, right:10 }}><FlameRating score={getFlameScore(r)} size={9} /></div>
                         <div style={{ position:"absolute", bottom:24, left:10, right:10, fontFamily:"Georgia,serif", fontWeight:"bold", fontSize:13, color:"#f0ebe2", lineHeight:1.2 }}>{r.name}</div>
                         <div style={{ position:"absolute", bottom:8, left:10, fontSize:11, color:"rgba(240,235,226,0.6)" }}>{r.cuisine}</div>
                       </HomePhotoCard>
