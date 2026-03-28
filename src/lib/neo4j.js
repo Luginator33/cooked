@@ -73,6 +73,10 @@ export async function syncRestaurant(r) {
      SET r.name = $name, r.city = $city, r.cuisine = $cuisine,
          r.price = $price, r.neighborhood = $neighborhood,
          r.rating = $rating, r.lat = $lat, r.lng = $lng
+     WITH r
+     OPTIONAL MATCH (r)-[oldRel:LOCATED_IN]->(:City)
+     DELETE oldRel
+     WITH r
      MERGE (c:City {name: $city})
      MERGE (r)-[:LOCATED_IN]->(c)`,
     {
