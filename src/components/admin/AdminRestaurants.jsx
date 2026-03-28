@@ -1,19 +1,75 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { C, cardStyle, inputStyle, btnPrimary, btnSecondary, btnDanger, btnSmall, btnOutline, sectionHeader, SearchBar, ConfirmDialog, Toast } from "./adminHelpers";
-import { upsertAdminOverride, deleteAdminOverride, addCommunityRestaurant, deleteCommunityRestaurant, updateCommunityRestaurant, saveSharedPhoto, logAdminAction } from "../../lib/supabase";
+import { upsertAdminOverride, deleteAdminOverride, addCommunityRestaurant, deleteCommunityRestaurant, updateCommunityRestaurant, saveSharedPhoto, logAdminAction, supabase } from "../../lib/supabase";
 import { transferLoves, syncRestaurant } from "../../lib/neo4j";
 import { normalizeCity } from "../../data/restaurants";
 
 const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_PLACES_KEY;
 const ANTHROPIC_PROXY = "https://cooked-proxy.luga-podesta.workers.dev/";
 
+const VENUE_TYPES = [
+  { key: "all", label: "All" },
+  { key: "restaurants", label: "Restaurants" },
+  { key: "bars", label: "Bars" },
+  { key: "coffee", label: "Coffee" },
+  { key: "hotels", label: "Hotels" },
+];
+
+const CUISINE_OPTIONS = [
+  "American", "Italian", "French", "Japanese", "Sushi", "Ramen", "Korean", "Chinese",
+  "Mexican", "Seafood", "Steakhouse", "Mediterranean", "Spanish", "Thai", "Vietnamese",
+  "Indian", "Pizza", "Peruvian", "Contemporary", "Vegan", "Bakery", "Sandwiches",
+];
+
+const PRICE_OPTIONS = ["$", "$$", "$$$", "$$$$"];
+const PAGE_SIZE = 30;
+
+const BAR_KEYWORDS = ["bar", "cocktail", "wine bar", "lounge", "pub", "speakeasy", "nightclub", "brewery", "dive", "jazz", "karaoke", "hookah", "tiki", "rooftop"];
+const COFFEE_KEYWORDS = ["coffee", "cafe", "café", "espresso", "tea house", "matcha", "bakery cafe"];
+const HOTEL_KEYWORDS = ["hotel", "resort", "inn", "lodge"];
+
+function matchesVenueType(r, type) {
+  if (type === "all") return true;
+  const c = (r.cuisine || "").toLowerCase();
+  const isBar = r.isBar || BAR_KEYWORDS.some(k => c.includes(k));
+  const isCoffee = COFFEE_KEYWORDS.some(k => c.includes(k));
+  const isHotel = HOTEL_KEYWORDS.some(k => c.includes(k));
+  if (type === "bars") return isBar;
+  if (type === "coffee") return isCoffee;
+  if (type === "hotels") return isHotel;
+  if (type === "restaurants") return !isBar && !isCoffee && !isHotel;
+  return true;
+}
+
+function MiniFlame({ size = 10, color = C.terracotta }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <path d="M12 23c-4.97 0-8-3.03-8-7 0-3.5 2.5-6.5 4-8 .5 2.5 2 4 2 4s1.5-3 1-6c3.5 2 5.5 5.5 5.5 8.5 0 1-.5 2-1 2.5 1-1 1.5-2.5 1.5-2.5s1 1.5 1 3c0 3.97-2.53 5.5-6 5.5z"/>
+    </svg>
+  );
+}
+
+function FlameDisplay({ score, size = 10 }) {
+  if (!score || score <= 0) return <span style={{ fontSize: 10, color: C.muted }}>—</span>;
+  const full = Math.floor(score);
+  const hasHalf = score - full >= 0.25;
+  return (
+    <div style={{ display: "flex", gap: 1, alignItems: "center" }}>
+      {Array.from({ length: 5 }, (_, i) => {
+        if (i < full) return <MiniFlame key={i} size={size} color={C.terracotta} />;
+        if (i === full && hasHalf) return <MiniFlame key={i} size={size} color="#7a3a20" />;
+        return <MiniFlame key={i} size={size} color={C.bg3} />;
+      })}
+      <span style={{ fontSize: 10, color: C.muted, marginLeft: 3 }}>{score}</span>
+    </div>
+  );
+}
+
 // Check if a restaurant already exists by lat/lng proximity (~50m) or exact name match
 function findDuplicate(allRestaurants, name, lat, lng) {
-  const threshold = 0.0005; // ~50 meters
+  const threshold = 0.0005;
   for (const r of allRestaurants) {
-    // Exact name match (case-insensitive)
     if (r.name && name && r.name.toLowerCase().trim() === name.toLowerCase().trim()) return r;
-    // Lat/lng proximity check
     if (lat && lng && r.lat && r.lng) {
       if (Math.abs(r.lat - lat) < threshold && Math.abs(r.lng - lng) < threshold) return r;
     }
@@ -23,25 +79,45 @@ function findDuplicate(allRestaurants, name, lat, lng) {
 
 export default function AdminRestaurants({ allRestaurants, userId, onRestaurantsChanged }) {
   const [section, setSection] = useState("search");
-  const [search, setSearch] = useState("");
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [confirm, setConfirm] = useState(null);
   const [toast, setToast] = useState(null);
+
+  // Browse / Search & Edit state
+  const [browseMode, setBrowseMode] = useState("browse"); // "browse" | "search"
+  const [search, setSearch] = useState("");
+  const [browseCity, setBrowseCity] = useState("");
+  const [browseVenue, setBrowseVenue] = useState("all");
+  const [browseCuisine, setBrowseCuisine] = useState("");
+  const [browsePrice, setBrowsePrice] = useState("");
+  const [browseSearch, setBrowseSearch] = useState("");
+  const [browsePage, setBrowsePage] = useState(0);
+  const [expandedId, setExpandedId] = useState(null);
+
+  // Flame score state
+  const [allFlameScores, setAllFlameScores] = useState({});
+  const [flameInput, setFlameInput] = useState("");
+  const [flameSaving, setFlameSaving] = useState(false);
+  const [bulkFlameCity, setBulkFlameCity] = useState("");
+  const [bulkFlameScore, setBulkFlameScore] = useState("");
+  const [bulkFlameSaving, setBulkFlameSaving] = useState(false);
+  const [recomputeStatus, setRecomputeStatus] = useState(null);
+  const scoresLoadedRef = useRef(false);
 
   // Smart Import state
   const [importSearch, setImportSearch] = useState("");
   const [importCity, setImportCity] = useState("");
   const [placesResults, setPlacesResults] = useState([]);
   const [importLoading, setImportLoading] = useState(false);
-  const [importStage, setImportStage] = useState(null); // null | "searching" | "enriching" | "preview"
+  const [importStage, setImportStage] = useState(null);
   const [importPreview, setImportPreview] = useState(null);
   const [importPhotos, setImportPhotos] = useState([]);
   const [selectedPhotoIdx, setSelectedPhotoIdx] = useState(0);
 
-  // Bulk import via Google Maps links
+  // Bulk import
   const [bulkLinks, setBulkLinks] = useState("");
-  const [bulkQueue, setBulkQueue] = useState([]); // array of { name, placeId, status, data, photos, selectedPhoto }
+  const [bulkQueue, setBulkQueue] = useState([]);
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [bulkCurrentIdx, setBulkCurrentIdx] = useState(-1);
 
@@ -52,13 +128,94 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
   const showToast = (msg, type = "success") => { setToast({ message: msg, type }); setTimeout(() => setToast(null), 2500); };
   const isCommunity = (id) => Number(id) >= 100000;
 
-  // ── SEARCH & EDIT ──
+  // Load all flame scores
+  useEffect(() => {
+    if (scoresLoadedRef.current) return;
+    scoresLoadedRef.current = true;
+    (async () => {
+      const { data } = await supabase
+        .from("restaurant_flame_scores")
+        .select("restaurant_id, flame_score, interaction_count, community_score, external_score");
+      if (data) {
+        const map = {};
+        data.forEach(d => { map[d.restaurant_id] = d; });
+        setAllFlameScores(map);
+      }
+    })();
+  }, []);
+
+  const cities = useMemo(() => [...new Set(allRestaurants.map(r => r.city).filter(Boolean))].sort(), [allRestaurants]);
+
+  const getFlameScore = (r) => {
+    const cached = allFlameScores[String(r.id)];
+    if (cached && cached.interaction_count >= 3) return cached.flame_score;
+    const ext = r.googleRating || (r.rating ? r.rating / 2 : 3);
+    return Math.min(3, Math.max(1, Math.round(ext * 2) / 2));
+  };
+
+  const getScoreData = (r) => allFlameScores[String(r.id)] || null;
+
+  const loadScore = async (id) => {
+    const { data } = await supabase
+      .from("restaurant_flame_scores")
+      .select("*")
+      .eq("restaurant_id", String(id))
+      .single();
+    if (data) {
+      setAllFlameScores(prev => ({ ...prev, [String(id)]: data }));
+    }
+  };
+
+  const saveFlameScore = async (restaurant, score) => {
+    const s = Math.min(5, Math.max(0.5, parseFloat(score)));
+    if (isNaN(s)) return;
+    setFlameSaving(true);
+    const { error } = await supabase
+      .from("restaurant_flame_scores")
+      .upsert({
+        restaurant_id: String(restaurant.id),
+        flame_score: s,
+        interaction_count: 999,
+        community_score: s,
+        external_score: s,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "restaurant_id" });
+    setFlameSaving(false);
+    if (error) {
+      showToast("Error: " + error.message, "error");
+    } else {
+      showToast(`Set ${restaurant.name} to ${s} flames`);
+      setAllFlameScores(prev => ({ ...prev, [String(restaurant.id)]: { flame_score: s, interaction_count: 999, community_score: s, external_score: s } }));
+      setFlameInput("");
+    }
+  };
+
+  // ── BROWSE FILTERING ──
+  const browseFiltered = useMemo(() => {
+    return allRestaurants.filter(r => {
+      if (browseCity && r.city !== browseCity) return false;
+      if (!matchesVenueType(r, browseVenue)) return false;
+      if (browseCuisine && !(r.cuisine || "").toLowerCase().includes(browseCuisine.toLowerCase())) return false;
+      if (browsePrice && r.price !== browsePrice) return false;
+      if (browseSearch.trim().length >= 2) {
+        const q = browseSearch.toLowerCase();
+        if (!(r.name || "").toLowerCase().includes(q) && !String(r.id).includes(browseSearch.trim())) return false;
+      }
+      return true;
+    });
+  }, [allRestaurants, browseCity, browseVenue, browseCuisine, browsePrice, browseSearch]);
+
+  const totalPages = Math.ceil(browseFiltered.length / PAGE_SIZE);
+  const browsePaged = browseFiltered.slice(browsePage * PAGE_SIZE, (browsePage + 1) * PAGE_SIZE);
+
+  // ── SEARCH (old mode) ──
   const filtered = useMemo(() => {
     if (!search.trim()) return [];
     const q = search.toLowerCase();
     return allRestaurants.filter(r => r.name?.toLowerCase().includes(q) || r.city?.toLowerCase().includes(q) || String(r.id) === q).slice(0, 20);
   }, [search, allRestaurants]);
 
+  // ── ACTIONS ──
   const handleRemove = async (r) => {
     if (isCommunity(r.id)) await deleteCommunityRestaurant(r.id);
     else await upsertAdminOverride(r.id, "delete", null, userId);
@@ -89,6 +246,56 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
     onRestaurantsChanged?.();
   };
 
+  // ── BULK FLAME OPERATIONS ──
+  const bulkSetFlameCity = async () => {
+    if (!bulkFlameCity || !bulkFlameScore) return;
+    const score = Math.min(5, Math.max(0.5, parseFloat(bulkFlameScore)));
+    if (isNaN(score)) return;
+    setBulkFlameSaving(true);
+    const cityRestaurants = allRestaurants.filter(r => r.city === bulkFlameCity);
+    let count = 0;
+    for (const r of cityRestaurants) {
+      await supabase
+        .from("restaurant_flame_scores")
+        .upsert({
+          restaurant_id: String(r.id),
+          flame_score: score,
+          interaction_count: 999,
+          community_score: score,
+          external_score: score,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "restaurant_id" });
+      count++;
+    }
+    setBulkFlameSaving(false);
+    showToast(`Set ${count} restaurants in ${bulkFlameCity} to ${score} flames`);
+  };
+
+  const recomputeAll = async () => {
+    setRecomputeStatus("Computing...");
+    const { data: interactions } = await supabase
+      .from("restaurant_interactions")
+      .select("restaurant_id")
+      .limit(10000);
+    if (!interactions) { setRecomputeStatus("No interactions found"); return; }
+    const uniqueIds = [...new Set(interactions.map(i => i.restaurant_id))];
+    setRecomputeStatus(`Recomputing ${uniqueIds.length} restaurants...`);
+    let done = 0;
+    for (const id of uniqueIds) {
+      const r = allRestaurants.find(ar => String(ar.id) === id);
+      const ext = r?.googleRating || (r?.rating ? r.rating / 2 : 3);
+      await supabase.rpc("compute_flame_score", {
+        p_restaurant_id: id,
+        p_external_rating: ext,
+      });
+      done++;
+      if (done % 50 === 0) setRecomputeStatus(`${done}/${uniqueIds.length}...`);
+    }
+    setRecomputeStatus(`Done! Recomputed ${uniqueIds.length} restaurants.`);
+    scoresLoadedRef.current = false;
+    setTimeout(() => setRecomputeStatus(null), 5000);
+  };
+
   // ── SMART IMPORT ──
   const searchGooglePlaces = async () => {
     if (!importSearch.trim()) return;
@@ -113,45 +320,33 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
   const selectPlace = async (place) => {
     setImportStage("enriching");
     try {
-      // Fetch full details
       const detailRes = await fetch(`https://places.googleapis.com/v1/places/${place.id}`, {
         headers: { "X-Goog-Api-Key": GOOGLE_KEY, "X-Goog-FieldMask": "displayName,formattedAddress,nationalPhoneNumber,internationalPhoneNumber,regularOpeningHours,websiteUri,location,photos,rating,userRatingCount,priceLevel,addressComponents" },
       });
       const d = await detailRes.json();
-
-      // Parse city/neighborhood from address components
       let city = "", neighborhood = "";
       (d.addressComponents || []).forEach(c => {
         if (c.types?.includes("locality")) city = c.longText;
         if (c.types?.includes("neighborhood")) neighborhood = c.longText;
         if (!neighborhood && c.types?.includes("sublocality")) neighborhood = c.longText;
       });
-
-      // Price conversion
       const priceMap = { PRICE_LEVEL_FREE: "$", PRICE_LEVEL_INEXPENSIVE: "$", PRICE_LEVEL_MODERATE: "$$", PRICE_LEVEL_EXPENSIVE: "$$$", PRICE_LEVEL_VERY_EXPENSIVE: "$$$$" };
       const price = priceMap[d.priceLevel] || "$$";
-
-      // Fetch photos — use direct media URL (no skipHttpRedirect, just the image URL)
       const photos = [];
       for (const p of (d.photos || []).slice(0, 8)) {
         try {
-          // Try the JSON approach first
           const photoRes = await fetch(`https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&skipHttpRedirect=true`, { headers: { "X-Goog-Api-Key": GOOGLE_KEY } });
           if (photoRes.ok) {
             const photoData = await photoRes.json();
             if (photoData.photoUri) { photos.push(photoData.photoUri); continue; }
           }
-          // Fallback: construct direct URL
           photos.push(`https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${GOOGLE_KEY}`);
         } catch {
           photos.push(`https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${GOOGLE_KEY}`);
         }
       }
       setImportPhotos(photos);
-
       const baseName = d.displayName?.text || place.displayName?.text || importSearch;
-
-      // AI enrichment via Claude
       let aiData = {};
       try {
         const aiRes = await fetch(ANTHROPIC_PROXY, {
@@ -168,8 +363,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
         if (text.includes("```")) text = text.split("```")[1].replace(/^json/, "").trim();
         aiData = JSON.parse(text);
       } catch (e) { console.error("AI enrichment failed:", e); }
-
-      // Search for reservation link
       let reservationUrl = d.websiteUri || "";
       try {
         const otRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
@@ -183,37 +376,21 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
           reservationUrl = otUrl;
         }
       } catch {}
-
       const preview = {
-        name: baseName,
-        city: normalizeCity(city || importCity || "") || city || importCity || "",
-        neighborhood: neighborhood || "",
-        address: d.formattedAddress || "",
+        name: baseName, city: normalizeCity(city || importCity || "") || city || importCity || "",
+        neighborhood: neighborhood || "", address: d.formattedAddress || "",
         phone: d.nationalPhoneNumber || d.internationalPhoneNumber || "",
         website: reservationUrl || d.websiteUri || "",
         hours: d.regularOpeningHours?.weekdayDescriptions || [],
-        lat: d.location?.latitude || 0,
-        lng: d.location?.longitude || 0,
+        lat: d.location?.latitude || 0, lng: d.location?.longitude || 0,
         rating: d.rating ? Math.min(10, Math.round(d.rating * 2 * 10) / 10) : 8.5,
-        googleRating: d.rating || 0,
-        googleReviews: d.userRatingCount || 0,
-        price,
-        placeId: place.id,
-        cuisine: aiData.cuisine || "",
-        tags: aiData.tags || [],
-        desc: aiData.desc || "",
-        about: aiData.about || "",
-        must_order: aiData.must_order || [],
-        vibe: aiData.vibe || "",
-        best_for: aiData.best_for || [],
-        known_for: aiData.known_for || "",
-        insider_tip: aiData.insider_tip || "",
-        source: "Admin Import",
-        heat: "🔥🔥",
-        img: photos[0] || "",
-        img2: photos[1] || photos[0] || "",
+        googleRating: d.rating || 0, googleReviews: d.userRatingCount || 0, price,
+        placeId: place.id, cuisine: aiData.cuisine || "", tags: aiData.tags || [],
+        desc: aiData.desc || "", about: aiData.about || "", must_order: aiData.must_order || [],
+        vibe: aiData.vibe || "", best_for: aiData.best_for || [], known_for: aiData.known_for || "",
+        insider_tip: aiData.insider_tip || "", source: "Admin Import", heat: "🔥🔥",
+        img: photos[0] || "", img2: photos[1] || photos[0] || "",
       };
-
       setImportPreview(preview);
       setImportStage("preview");
     } catch (e) {
@@ -231,53 +408,26 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
       }
     }
     const photoUrl = importPhotos[selectedPhotoIdx] || importPreview.img;
-    // Build restaurant object with only the fields the community_restaurants table accepts
     const r = {
-      name: importPreview.name,
-      city: importPreview.city,
-      neighborhood: importPreview.neighborhood,
-      cuisine: importPreview.cuisine,
-      price: importPreview.price,
-      rating: importPreview.rating,
-      desc: importPreview.desc || importPreview.about || "",
-      tags: importPreview.tags,
-      lat: importPreview.lat,
-      lng: importPreview.lng,
-      address: importPreview.address,
-      phone: importPreview.phone,
-      website: importPreview.website,
-      img: photoUrl,
-      img2: photoUrl,
-      source: "Admin Import",
-      heat: importPreview.heat || "🔥🔥",
+      name: importPreview.name, city: importPreview.city, neighborhood: importPreview.neighborhood,
+      cuisine: importPreview.cuisine, price: importPreview.price, rating: importPreview.rating,
+      desc: importPreview.desc || importPreview.about || "", tags: importPreview.tags,
+      lat: importPreview.lat, lng: importPreview.lng, address: importPreview.address,
+      phone: importPreview.phone, website: importPreview.website,
+      img: photoUrl, img2: photoUrl, source: "Admin Import", heat: importPreview.heat || "🔥🔥",
     };
     try {
       const { data, error } = await addCommunityRestaurant(r);
-      if (error) {
-        console.error("Import error:", error);
-        showToast("Save failed: " + (error.message || "unknown error"), "error");
-        return;
-      }
+      if (error) { showToast("Save failed: " + (error.message || "unknown error"), "error"); return; }
       const savedId = data?.[0]?.id || r.id;
-      if (photoUrl) {
-        await saveSharedPhoto(String(savedId), photoUrl);
-      }
-      // Sync to Neo4j with the saved ID
+      if (photoUrl) await saveSharedPhoto(String(savedId), photoUrl);
       await syncRestaurant({ ...r, id: savedId });
       await logAdminAction("restaurant_smart_import", userId, "restaurant", String(savedId), { name: r.name, city: r.city });
       showToast(`Imported ${r.name} (ID: ${savedId})`);
-      setImportPreview(null);
-      setImportStage(null);
-      setImportSearch("");
-      setImportCity("");
-      setPlacesResults([]);
-      setImportPhotos([]);
-      setSelectedPhotoIdx(0);
+      setImportPreview(null); setImportStage(null); setImportSearch(""); setImportCity("");
+      setPlacesResults([]); setImportPhotos([]); setSelectedPhotoIdx(0);
       onRestaurantsChanged?.();
-    } catch (e) {
-      console.error("Import exception:", e);
-      showToast("Import failed: " + e.message, "error");
-    }
+    } catch (e) { showToast("Import failed: " + e.message, "error"); }
   };
 
   // ── MERGE ──
@@ -298,11 +448,32 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
     return allRestaurants.filter(r => !r.website || !r.lat || !r.lng || !r.desc).slice(0, 50);
   }, [section, allRestaurants]);
 
+  // ── SHARED STYLES ──
+  const pillStyle = (active) => ({
+    padding: "5px 12px", borderRadius: 20, fontSize: 11, cursor: "pointer",
+    border: `1px solid ${active ? C.terracotta : C.border}`,
+    background: active ? C.terracotta : "transparent",
+    color: active ? "#fff" : C.muted,
+    fontFamily: "-apple-system,sans-serif", whiteSpace: "nowrap",
+  });
+
+  const selectStyle = {
+    padding: "7px 10px", borderRadius: 8, border: `1px solid ${C.border}`,
+    background: C.bg2, color: C.text, fontSize: 12, outline: "none",
+    fontFamily: "-apple-system,sans-serif",
+  };
+
+  const sectionLabel = {
+    fontSize: 11, color: C.terracotta, fontFamily: "'DM Mono',monospace",
+    letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8,
+  };
+
   // ── UI ──
   const sections = [
     { key: "search", label: "Search & Edit", icon: "🔍" },
     { key: "import", label: "Smart Import", icon: "✦" },
     { key: "bulk", label: "Bulk Import", icon: "📦" },
+    { key: "flames", label: "Bulk Flames", icon: "🔥" },
     { key: "merge", label: "Merge", icon: "🔗" },
     { key: "missing", label: "Missing Data", icon: "⚠" },
   ];
@@ -342,6 +513,93 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
     );
   };
 
+  // Render a restaurant row for browse mode
+  const renderBrowseRow = (r) => {
+    const fs = getFlameScore(r);
+    const sd = getScoreData(r);
+    const isExpanded = expandedId === r.id;
+    return (
+      <div key={r.id}>
+        <button type="button" onClick={() => { setExpandedId(isExpanded ? null : r.id); setFlameInput(""); }}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 10,
+            padding: "8px 10px", background: isExpanded ? C.bg3 : C.bg2,
+            border: `1px solid ${isExpanded ? C.terracotta : C.border}`,
+            borderRadius: isExpanded ? "10px 10px 0 0" : 10,
+            cursor: "pointer", textAlign: "left",
+          }}>
+          <div style={{ width: 40, height: 40, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: C.bg3 }}>
+            <img src={r.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              onError={e => { e.target.style.display = "none"; }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", fontSize: 13, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {r.name}
+            </div>
+            <div style={{ fontSize: 10, color: C.muted, fontFamily: "-apple-system,sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {r.city}{r.cuisine ? ` · ${r.cuisine}` : ""}{r.price ? ` · ${r.price}` : ""}
+            </div>
+          </div>
+          <div style={{ flexShrink: 0 }}>
+            <FlameDisplay score={fs} size={9} />
+          </div>
+        </button>
+
+        {isExpanded && (
+          <div style={{ background: C.bg3, border: `1px solid ${C.terracotta}`, borderTop: "none", borderRadius: "0 0 10px 10px", padding: 12 }}>
+            {/* Flame score details */}
+            <div style={sectionLabel}>Flame Score</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
+              {[
+                { label: "Flame", val: sd ? sd.flame_score : "—", color: C.terracotta },
+                { label: "Interactions", val: sd ? sd.interaction_count : "—", color: C.text },
+                { label: "Community", val: sd ? Number(sd.community_score).toFixed(1) : "—", color: C.text },
+                { label: "External", val: sd ? Number(sd.external_score).toFixed(1) : "—", color: C.text },
+              ].map(item => (
+                <div key={item.label} style={{ background: C.bg, borderRadius: 6, padding: "5px 8px", textAlign: "center" }}>
+                  <div style={{ fontSize: 8, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</div>
+                  <div style={{ fontSize: 14, color: item.color, fontWeight: "bold" }}>{item.val}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 12 }}>
+              <input
+                value={flameInput}
+                onChange={e => setFlameInput(e.target.value)}
+                placeholder="1-5"
+                type="number" min="0.5" max="5" step="0.5"
+                style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, color: C.text, fontSize: 13, outline: "none" }}
+              />
+              <button type="button"
+                onClick={() => saveFlameScore(r, flameInput)}
+                disabled={flameSaving || !flameInput}
+                style={{ padding: "8px 16px", borderRadius: 8, background: C.terracotta, border: "none", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: flameSaving || !flameInput ? 0.5 : 1 }}>
+                {flameSaving ? "..." : "Set Flames"}
+              </button>
+            </div>
+
+            {/* Restaurant info */}
+            <div style={sectionLabel}>Restaurant Details</div>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 6, fontFamily: "-apple-system,sans-serif", lineHeight: 1.6 }}>
+              <div><span style={{ color: C.dim }}>ID:</span> {r.id}</div>
+              <div><span style={{ color: C.dim }}>Neighborhood:</span> {r.neighborhood || "—"}</div>
+              <div><span style={{ color: C.dim }}>Rating:</span> {r.rating || "—"} · Google: {r.googleRating || "—"}</div>
+              <div><span style={{ color: C.dim }}>Website:</span> {r.website ? <span style={{ color: C.terracotta }}>{r.website.slice(0, 40)}...</span> : "—"}</div>
+              {r.tags?.length > 0 && <div><span style={{ color: C.dim }}>Tags:</span> {r.tags.join(", ")}</div>}
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+              <button type="button" onClick={() => startEdit(r)} style={{ ...btnSmall, flex: 1 }}>Edit Details</button>
+              <button type="button" onClick={() => setConfirm({ message: `Remove "${r.name}" from the app?`, onConfirm: () => handleRemove(r), onCancel: () => setConfirm(null) })}
+                style={{ ...btnSmall, flex: 1, color: C.red, borderColor: C.red }}>Remove</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div>
       {toast && <Toast {...toast} />}
@@ -362,23 +620,107 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
 
       {/* ── SEARCH & EDIT ── */}
       {section === "search" && !editing && (
-        <>
-          <SearchBar value={search} onChange={setSearch} placeholder="Search restaurants by name, city, or ID..." />
-          {filtered.map(r => (
-            <div key={r.id} style={{ ...cardStyle, display: "flex", alignItems: "center", gap: 12 }}>
-              {r.img && <img src={r.img} alt="" style={{ width: 48, height: 48, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} onError={e => { e.target.style.display = "none"; }} />}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, color: C.text, fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: "bold", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{r.cuisine} · {r.city} · {r.neighborhood}</div>
+        <div>
+          {/* Browse / Search toggle */}
+          <div style={{ display: "flex", gap: 0, marginBottom: 12, borderRadius: 8, overflow: "hidden", border: `1px solid ${C.border}` }}>
+            {[{ key: "browse", label: "Browse" }, { key: "search", label: "Search" }].map(m => (
+              <button key={m.key} type="button" onClick={() => setBrowseMode(m.key)}
+                style={{
+                  flex: 1, padding: "8px 0", background: browseMode === m.key ? C.terracotta : C.bg2,
+                  border: "none", color: browseMode === m.key ? "#fff" : C.muted, fontSize: 12,
+                  fontFamily: "-apple-system,sans-serif", cursor: "pointer", fontWeight: browseMode === m.key ? 600 : 400,
+                }}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {/* BROWSE MODE */}
+          {browseMode === "browse" && (
+            <>
+              {/* Filters */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                <input
+                  value={browseSearch}
+                  onChange={e => { setBrowseSearch(e.target.value); setBrowsePage(0); }}
+                  placeholder="Filter by name..."
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg2, color: C.text, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "-apple-system,sans-serif" }}
+                />
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={browseCity} onChange={e => { setBrowseCity(e.target.value); setBrowsePage(0); }} style={{ ...selectStyle, flex: 2 }}>
+                    <option value="">All Cities</option>
+                    {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <select value={browseCuisine} onChange={e => { setBrowseCuisine(e.target.value); setBrowsePage(0); }} style={{ ...selectStyle, flex: 2 }}>
+                    <option value="">All Cuisines</option>
+                    {CUISINE_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <select value={browsePrice} onChange={e => { setBrowsePrice(e.target.value); setBrowsePage(0); }} style={{ ...selectStyle, flex: 1 }}>
+                    <option value="">$</option>
+                    {PRICE_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {VENUE_TYPES.map(v => (
+                    <button key={v.key} type="button"
+                      onClick={() => { setBrowseVenue(v.key); setBrowsePage(0); }}
+                      style={pillStyle(browseVenue === v.key)}>
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                <button type="button" onClick={() => startEdit(r)} style={btnSmall}>Edit</button>
-                <button type="button" onClick={() => setConfirm({ message: `Remove "${r.name}" from the app?`, onConfirm: () => handleRemove(r), onCancel: () => setConfirm(null) })} style={{ ...btnSmall, color: C.red, borderColor: C.red }}>Remove</button>
+
+              {/* Results count + pagination */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: 11, color: C.muted, fontFamily: "-apple-system,sans-serif" }}>
+                  {browseFiltered.length} restaurants
+                </span>
+                {totalPages > 1 && (
+                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                    <button type="button" onClick={() => setBrowsePage(p => Math.max(0, p - 1))} disabled={browsePage === 0}
+                      style={{ background: "none", border: "none", color: browsePage === 0 ? C.bg3 : C.muted, cursor: "pointer", fontSize: 14, padding: "2px 6px" }}>‹</button>
+                    <span style={{ fontSize: 11, color: C.muted }}>{browsePage + 1}/{totalPages}</span>
+                    <button type="button" onClick={() => setBrowsePage(p => Math.min(totalPages - 1, p + 1))} disabled={browsePage >= totalPages - 1}
+                      style={{ background: "none", border: "none", color: browsePage >= totalPages - 1 ? C.bg3 : C.muted, cursor: "pointer", fontSize: 14, padding: "2px 6px" }}>›</button>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
-          {search && filtered.length === 0 && <div style={{ color: C.muted, fontSize: 13 }}>No restaurants found.</div>}
-        </>
+
+              {/* Restaurant list */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {browsePaged.map(r => renderBrowseRow(r))}
+                {browsePaged.length === 0 && (
+                  <div style={{ padding: 20, textAlign: "center", color: C.muted, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>
+                    No restaurants match filters
+                  </div>
+                )}
+              </div>
+
+              {/* Bottom pagination */}
+              {totalPages > 1 && (
+                <div style={{ display: "flex", justifyContent: "center", gap: 4, alignItems: "center", marginTop: 12 }}>
+                  <button type="button" onClick={() => setBrowsePage(p => Math.max(0, p - 1))} disabled={browsePage === 0}
+                    style={{ background: "none", border: "none", color: browsePage === 0 ? C.bg3 : C.muted, cursor: "pointer", fontSize: 14, padding: "4px 8px" }}>‹ Prev</button>
+                  <span style={{ fontSize: 11, color: C.muted }}>{browsePage + 1} / {totalPages}</span>
+                  <button type="button" onClick={() => setBrowsePage(p => Math.min(totalPages - 1, p + 1))} disabled={browsePage >= totalPages - 1}
+                    style={{ background: "none", border: "none", color: browsePage >= totalPages - 1 ? C.bg3 : C.muted, cursor: "pointer", fontSize: 14, padding: "4px 8px" }}>Next ›</button>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* SEARCH MODE */}
+          {browseMode === "search" && (
+            <>
+              <SearchBar value={search} onChange={setSearch} placeholder="Search restaurants by name, city, or ID..." />
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 6 }}>
+                {filtered.map(r => renderBrowseRow(r))}
+              </div>
+              {search && filtered.length === 0 && <div style={{ color: C.muted, fontSize: 13 }}>No restaurants found.</div>}
+            </>
+          )}
+        </div>
       )}
       {section === "search" && editing && renderEditForm()}
 
@@ -449,8 +791,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                 </div>
                 <button type="button" onClick={() => { setImportStage("results"); setImportPreview(null); }} style={{ ...btnSmall, border: "none" }}>← Back</button>
               </div>
-
-              {/* Photo picker */}
               {importPhotos.length > 0 && (
                 <div style={{ marginBottom: 14 }}>
                   <div style={{ borderRadius: 14, overflow: "hidden", height: 180, marginBottom: 8 }}>
@@ -466,8 +806,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                   </div>
                 </div>
               )}
-
-              {/* Restaurant info */}
               <div style={cardStyle}>
                 <div style={{ fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: "bold", fontSize: 22, color: C.text }}>{importPreview.name}</div>
                 <div style={{ fontSize: 11, color: C.terracotta, marginTop: 4, fontFamily: "'DM Mono', monospace" }}>
@@ -475,8 +813,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                 </div>
                 {importPreview.desc && <div style={{ fontSize: 13, color: C.muted, marginTop: 8, fontStyle: "italic", lineHeight: 1.5 }}>{importPreview.desc}</div>}
               </div>
-
-              {/* Details grid */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
                 {[
                   { label: "Rating", value: importPreview.rating },
@@ -490,8 +826,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                   </div>
                 ))}
               </div>
-
-              {/* AI insights */}
               {importPreview.about && (
                 <div style={{ ...cardStyle, borderLeft: `3px solid ${C.terracotta}` }}>
                   <div style={{ fontSize: 9, color: C.terracotta, fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", marginBottom: 4 }}>AI INSIGHTS</div>
@@ -501,8 +835,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                   {importPreview.insider_tip && <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Tip: {importPreview.insider_tip}</div>}
                 </div>
               )}
-
-              {/* Tags */}
               {importPreview.tags?.length > 0 && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
                   {importPreview.tags.map(t => (
@@ -510,7 +842,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                   ))}
                 </div>
               )}
-
               <button type="button" onClick={confirmImport} style={{ ...btnPrimary, width: "100%", padding: "14px", fontSize: 15 }}>
                 Import {importPreview.name}
               </button>
@@ -549,14 +880,11 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                   queue.push({ link, displayName, status: "pending", data: null, photos: [], selectedPhoto: 0, isShortUrl, isPlainText: !isUrl });
                 }
                 setBulkQueue(queue);
-                // Process each one
                 for (let i = 0; i < queue.length; i++) {
                   setBulkCurrentIdx(i);
                   queue[i].status = "processing";
                   setBulkQueue([...queue]);
                   try {
-                    // For plain text entries or short URLs, use the text directly as search query
-                    // For full Google Maps URLs, extract place name from URL path
                     let searchQuery = queue[i].displayName;
                     const searchRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
                       method: "POST",
@@ -566,8 +894,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                     const searchData = await searchRes.json();
                     const place = searchData.places?.[0];
                     if (!place) { queue[i].status = "error"; queue[i].error = "Not found"; setBulkQueue([...queue]); continue; }
-
-                    // Fetch details
                     const detailRes = await fetch(`https://places.googleapis.com/v1/places/${place.id}`, {
                       headers: { "X-Goog-Api-Key": GOOGLE_KEY, "X-Goog-FieldMask": "displayName,formattedAddress,nationalPhoneNumber,internationalPhoneNumber,regularOpeningHours,websiteUri,location,photos,rating,userRatingCount,priceLevel,addressComponents" },
                     });
@@ -579,8 +905,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                       if (!neighborhood && c.types?.includes("sublocality")) neighborhood = c.longText;
                     });
                     const priceMap = { PRICE_LEVEL_FREE: "$", PRICE_LEVEL_INEXPENSIVE: "$", PRICE_LEVEL_MODERATE: "$$", PRICE_LEVEL_EXPENSIVE: "$$$", PRICE_LEVEL_VERY_EXPENSIVE: "$$$$" };
-
-                    // Fetch photos
                     const photos = [];
                     for (const p of (d.photos || []).slice(0, 8)) {
                       try {
@@ -589,8 +913,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                         photos.push(`https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${GOOGLE_KEY}`);
                       } catch { photos.push(`https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${GOOGLE_KEY}`); }
                     }
-
-                    // AI enrichment
                     let aiData = {};
                     try {
                       const baseName = d.displayName?.text || searchQuery;
@@ -608,7 +930,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                       if (text.includes("```")) text = text.split("```")[1].replace(/^json/, "").trim();
                       aiData = JSON.parse(text);
                     } catch {}
-
                     city = normalizeCity(city) || city;
                     queue[i].data = {
                       name: d.displayName?.text || searchQuery, city, neighborhood,
@@ -620,18 +941,10 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                       source: "Admin Import", heat: "🔥🔥",
                     };
                     queue[i].photos = photos;
-                    // Check for duplicates
                     const dup = findDuplicate(allRestaurants, queue[i].data.name, queue[i].data.lat, queue[i].data.lng);
-                    if (dup) {
-                      queue[i].status = "duplicate";
-                      queue[i].error = `Already exists: "${dup.name}" (ID ${dup.id})`;
-                    } else {
-                      queue[i].status = "ready";
-                    }
-                  } catch (e) {
-                    queue[i].status = "error";
-                    queue[i].error = e.message;
-                  }
+                    if (dup) { queue[i].status = "duplicate"; queue[i].error = `Already exists: "${dup.name}" (ID ${dup.id})`; }
+                    else { queue[i].status = "ready"; }
+                  } catch (e) { queue[i].status = "error"; queue[i].error = e.message; }
                   setBulkQueue([...queue]);
                 }
                 setBulkProcessing(false);
@@ -642,7 +955,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
             </>
           )}
 
-          {/* Queue display */}
           {bulkQueue.length > 0 && (
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -670,7 +982,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                     </div>
                   </div>
 
-                  {/* Photo picker for ready items */}
                   {item.status === "ready" && item.photos.length > 0 && (
                     <div style={{ marginTop: 8 }}>
                       <div style={{ display: "flex", gap: 4, overflowX: "auto", marginBottom: 8 }}>
@@ -726,7 +1037,6 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                 </div>
               ))}
 
-              {/* Import all ready */}
               {!bulkProcessing && bulkQueue.some(q => q.status === "ready") && (
                 <button type="button" onClick={async () => {
                   for (let i = 0; i < bulkQueue.length; i++) {
@@ -752,6 +1062,53 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── BULK FLAMES ── */}
+      {section === "flames" && (
+        <div>
+          <div style={{ marginBottom: 24 }}>
+            <div style={sectionLabel}>Bulk Set Flames by City</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <select value={bulkFlameCity} onChange={e => setBulkFlameCity(e.target.value)} style={{ ...selectStyle, flex: 2 }}>
+                <option value="">Select city...</option>
+                {cities.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input
+                value={bulkFlameScore}
+                onChange={e => setBulkFlameScore(e.target.value)}
+                placeholder="Score"
+                type="number" min="0.5" max="5" step="0.5"
+                style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg2, color: C.text, fontSize: 13, outline: "none" }}
+              />
+              <button type="button" onClick={bulkSetFlameCity} disabled={bulkFlameSaving}
+                style={{ padding: "8px 16px", borderRadius: 8, background: C.terracotta, border: "none", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: bulkFlameSaving ? 0.5 : 1 }}>
+                {bulkFlameSaving ? "..." : "Set All"}
+              </button>
+            </div>
+            {bulkFlameCity && (
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontFamily: "-apple-system,sans-serif" }}>
+                {allRestaurants.filter(r => r.city === bulkFlameCity).length} restaurants in {bulkFlameCity}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div style={sectionLabel}>Recompute Scores</div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <button type="button" onClick={recomputeAll}
+                style={{ padding: "10px 20px", borderRadius: 10, background: C.bg2, border: `1px solid ${C.border}`, color: C.text, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
+                Recompute All Flame Scores
+              </button>
+              {recomputeStatus && (
+                <span style={{ fontSize: 12, color: C.muted, fontFamily: "-apple-system,sans-serif" }}>{recomputeStatus}</span>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontFamily: "-apple-system,sans-serif" }}>
+              Recalculates scores from all interactions using the formula. Manual overrides will be replaced.
+            </div>
+          </div>
         </div>
       )}
 

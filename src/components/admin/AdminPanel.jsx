@@ -7,15 +7,12 @@ import AdminPhotos from "./AdminPhotos";
 import AdminContent from "./AdminContent";
 import AdminAnalytics from "./AdminAnalytics";
 import AdminSystem from "./AdminSystem";
-import AdminFlames from "./AdminFlames";
-
 const TABS = [
   { key: "restaurants", label: "Restaurants" },
   { key: "users", label: "Users" },
   { key: "photos", label: "Photos" },
   { key: "content", label: "Content" },
   { key: "analytics", label: "Analytics" },
-  { key: "flames", label: "Flames" },
   { key: "system", label: "System" },
 ];
 
@@ -65,7 +62,6 @@ export default function AdminPanel({ onClose, allRestaurants, userId, onRestaura
           {tab === "photos" && <AdminPhotos {...tabProps} />}
           {tab === "content" && <AdminContent {...tabProps} />}
           {tab === "analytics" && <AdminAnalytics {...tabProps} />}
-          {tab === "flames" && <AdminFlames {...tabProps} />}
           {tab === "system" && <AdminSystem {...tabProps} />}
         </div>
       </div>
