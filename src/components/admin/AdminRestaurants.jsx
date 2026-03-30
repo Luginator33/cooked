@@ -65,13 +65,40 @@ function FlameDisplay({ score, size = 10 }) {
   );
 }
 
+// Words to ignore when comparing restaurant names — too generic to indicate a match
+const STOP_WORDS = new Set([
+  "restaurant", "restaurants", "bar", "bars", "cafe", "coffee", "club", "lounge",
+  "grill", "grille", "bistro", "brasserie", "tavern", "pub", "kitchen", "house",
+  "dining", "eatery", "food", "foods", "pizzeria", "trattoria", "osteria",
+  "steakhouse", "chophouse", "bakery", "deli", "cantina", "taqueria",
+  "the", "and", "del", "las", "los", "des",
+  "new", "old", "east", "west", "north", "south",
+  "hotel", "resort", "inn", "residences", "four", "seasons",
+  // City names
+  "vail", "aspen", "miami", "chicago", "austin", "dallas", "denver", "detroit",
+  "atlanta", "boise", "houston", "nashville", "seattle", "portland",
+  "los angeles", "new york", "san francisco", "san diego", "santa barbara",
+  "las vegas", "new orleans", "scottsdale", "sacramento", "savannah",
+  "malibu", "maui", "napa", "ojai", "ventura",
+  "london", "paris", "rome", "berlin", "barcelona", "madrid", "lisbon",
+  "amsterdam", "copenhagen", "stockholm", "munich", "vienna", "prague",
+  "istanbul", "dubai", "tokyo", "bangkok", "singapore", "hong kong",
+  "seoul", "mumbai", "bali", "mexico city", "toronto", "montreal", "vancouver",
+]);
+
+function getSignificantWords(name) {
+  return name.toLowerCase().trim().replace(/[^a-z0-9 ]/g, "")
+    .split(/\s+/)
+    .filter(w => w.length >= 3 && !STOP_WORDS.has(w));
+}
+
 // Check if a restaurant already exists
 // Rules: exact name match, OR nearby + at least one significant shared word
 function findDuplicate(allRestaurants, name, lat, lng) {
   if (!name) return null;
   const threshold = 0.0005; // ~50 meters
   const incomingName = name.toLowerCase().trim().replace(/[^a-z0-9 ]/g, "");
-  const incomingWords = new Set(incomingName.split(/\s+/).filter(w => w.length >= 3));
+  const incomingSignificant = new Set(getSignificantWords(name));
 
   for (const r of allRestaurants) {
     if (!r.name) continue;
@@ -80,20 +107,19 @@ function findDuplicate(allRestaurants, name, lat, lng) {
     // 1. Exact name match → always duplicate
     if (incomingName === existingName) return r;
 
-    // 2. One name's WORDS are all found as whole words in the other
-    //    (e.g. "La Tour" vs "La Tour Restaurant" — but NOT "Den" inside "Residences")
-    const existingWords = new Set(existingName.split(/\s+/).filter(w => w.length >= 3));
-    if (existingWords.size > 0 && incomingWords.size > 0) {
-      const allExistingInIncoming = [...existingWords].every(w => incomingWords.has(w));
-      const allIncomingInExisting = [...incomingWords].every(w => existingWords.has(w));
+    // 2. All significant words from one name found in the other
+    //    (e.g. "La Tour" vs "La Tour Restaurant" — ignoring "restaurant")
+    const existingSignificant = new Set(getSignificantWords(r.name));
+    if (existingSignificant.size > 0 && incomingSignificant.size > 0) {
+      const allExistingInIncoming = [...existingSignificant].every(w => incomingSignificant.has(w));
+      const allIncomingInExisting = [...incomingSignificant].every(w => existingSignificant.has(w));
       if (allExistingInIncoming || allIncomingInExisting) return r;
     }
 
-    // 3. Nearby + at least one significant shared word (3+ chars)
+    // 3. Nearby + at least one significant shared word
     if (lat && lng && r.lat && r.lng) {
       if (Math.abs(r.lat - lat) < threshold && Math.abs(r.lng - lng) < threshold) {
-        const existingWords = new Set(existingName.split(/\s+/).filter(w => w.length >= 3));
-        const hasSharedWord = [...incomingWords].some(w => existingWords.has(w));
+        const hasSharedWord = [...incomingSignificant].some(w => existingSignificant.has(w));
         if (hasSharedWord) return r;
       }
     }
