@@ -96,7 +96,8 @@ function getSignificantWords(name) {
 // Rules: exact name match, OR nearby + at least one significant shared word
 function findDuplicate(allRestaurants, name, lat, lng) {
   if (!name) return null;
-  const threshold = 0.0005; // ~50 meters
+  const halfMile = 0.008; // ~0.5 miles in degrees (~800 meters)
+  const nearby = 0.0005;  // ~50 meters
   const incomingName = name.toLowerCase().trim().replace(/[^a-z0-9 ]/g, "");
   const incomingSignificant = new Set(getSignificantWords(name));
 
@@ -104,24 +105,29 @@ function findDuplicate(allRestaurants, name, lat, lng) {
     if (!r.name) continue;
     const existingName = r.name.toLowerCase().trim().replace(/[^a-z0-9 ]/g, "");
 
-    // 1. Exact name match → always duplicate
+    // 1. Exact name match → always duplicate (regardless of distance)
     if (incomingName === existingName) return r;
 
-    // 2. All significant words from one name found in the other
-    //    (e.g. "La Tour" vs "La Tour Restaurant" — ignoring "restaurant")
+    // For all other checks, must be within 0.5 miles — far apart = never duplicate
+    const hasCoords = lat && lng && r.lat && r.lng;
+    const withinHalfMile = hasCoords && Math.abs(r.lat - lat) < halfMile && Math.abs(r.lng - lng) < halfMile;
+    if (!withinHalfMile) continue;
+
     const existingSignificant = new Set(getSignificantWords(r.name));
+
+    // 2. Within 0.5 miles + all significant words from one name found in the other
+    //    (e.g. "La Tour" vs "La Tour Restaurant" — ignoring "restaurant")
     if (existingSignificant.size > 0 && incomingSignificant.size > 0) {
       const allExistingInIncoming = [...existingSignificant].every(w => incomingSignificant.has(w));
       const allIncomingInExisting = [...incomingSignificant].every(w => existingSignificant.has(w));
       if (allExistingInIncoming || allIncomingInExisting) return r;
     }
 
-    // 3. Nearby + at least one significant shared word
-    if (lat && lng && r.lat && r.lng) {
-      if (Math.abs(r.lat - lat) < threshold && Math.abs(r.lng - lng) < threshold) {
-        const hasSharedWord = [...incomingSignificant].some(w => existingSignificant.has(w));
-        if (hasSharedWord) return r;
-      }
+    // 3. Very nearby (~50m) + at least one significant shared word
+    const veryNearby = Math.abs(r.lat - lat) < nearby && Math.abs(r.lng - lng) < nearby;
+    if (veryNearby) {
+      const hasSharedWord = [...incomingSignificant].some(w => existingSignificant.has(w));
+      if (hasSharedWord) return r;
     }
   }
   return null;
