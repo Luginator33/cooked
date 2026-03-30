@@ -65,32 +65,31 @@ function FlameDisplay({ score, size = 10 }) {
   );
 }
 
-// Check if a restaurant already exists by exact or fuzzy name match
-// Only uses proximity if names are also similar (avoids false positives from nearby different restaurants)
-function nameSimilarity(a, b) {
-  if (!a || !b) return 0;
-  const na = a.toLowerCase().trim().replace(/[^a-z0-9 ]/g, "");
-  const nb = b.toLowerCase().trim().replace(/[^a-z0-9 ]/g, "");
-  if (na === nb) return 1;
-  // Check if one contains the other (e.g. "La Tour" vs "La Tour Restaurant")
-  if (na.includes(nb) || nb.includes(na)) return 0.8;
-  // Check word overlap
-  const wa = new Set(na.split(/\s+/));
-  const wb = new Set(nb.split(/\s+/));
-  const overlap = [...wa].filter(w => wb.has(w) && w.length > 2).length;
-  const total = Math.max(wa.size, wb.size);
-  return total > 0 ? overlap / total : 0;
-}
-
+// Check if a restaurant already exists
+// Rules: exact name match, OR nearby + at least one significant shared word
 function findDuplicate(allRestaurants, name, lat, lng) {
+  if (!name) return null;
   const threshold = 0.0005; // ~50 meters
+  const incomingName = name.toLowerCase().trim().replace(/[^a-z0-9 ]/g, "");
+  const incomingWords = new Set(incomingName.split(/\s+/).filter(w => w.length >= 3));
+
   for (const r of allRestaurants) {
-    const sim = nameSimilarity(r.name, name);
-    // Exact or very close name match → duplicate regardless of location
-    if (sim >= 0.8) return r;
-    // Nearby AND somewhat similar name → duplicate (catches slight name variations)
-    if (sim >= 0.4 && lat && lng && r.lat && r.lng) {
-      if (Math.abs(r.lat - lat) < threshold && Math.abs(r.lng - lng) < threshold) return r;
+    if (!r.name) continue;
+    const existingName = r.name.toLowerCase().trim().replace(/[^a-z0-9 ]/g, "");
+
+    // 1. Exact name match → always duplicate
+    if (incomingName === existingName) return r;
+
+    // 2. One name contains the other (e.g. "La Tour" vs "La Tour Restaurant")
+    if (incomingName.includes(existingName) || existingName.includes(incomingName)) return r;
+
+    // 3. Nearby + at least one significant shared word (3+ chars)
+    if (lat && lng && r.lat && r.lng) {
+      if (Math.abs(r.lat - lat) < threshold && Math.abs(r.lng - lng) < threshold) {
+        const existingWords = new Set(existingName.split(/\s+/).filter(w => w.length >= 3));
+        const hasSharedWord = [...incomingWords].some(w => existingWords.has(w));
+        if (hasSharedWord) return r;
+      }
     }
   }
   return null;
