@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { useUser } from "@clerk/clerk-react";
+import { useUser, useClerk } from "@clerk/clerk-react";
 import { getFollowers, getFollowing, getUserProfile, saveSharedPhoto, saveUserData, saveUserPhotos, supabase, followCity, unfollowCity, getFollowedCities } from "../lib/supabase";
-import { CITIES } from "../data/restaurants";
+import { CITIES, CITY_REGIONS, CITY_FLAGS, sortCityRegions } from "../data/restaurants";
 import { getCookedScore, getCityReadiness } from "../lib/neo4j";
+import { ProfilePhoto, parseProfilePhoto } from "../components/AvatarIcon";
 import AdminPanel from "../components/admin/AdminPanel";
 
 function safeSetItem(key, value) {
@@ -25,19 +26,37 @@ function safeSetItem(key, value) {
 }
 
 const C = {
-  bg: "#0f0c09", bg2: "#1a1208", bg3: "#2e1f0e",
-  border: "#2e1f0e", border2: "#1e1208",
-  text: "#f0ebe2", muted: "#5a3a20", dim: "#3d2a18",
-  terracotta: "#c4603a",
+  bg: "#0a0a0f", bg2: "#12121a", bg3: "#1a1a24",
+  border: "rgba(255,255,255,0.04)", border2: "rgba(255,255,255,0.06)",
+  text: "#f5f0eb", muted: "rgba(245,240,235,0.3)", dim: "rgba(245,240,235,0.18)",
+  terracotta: "#ff9632", terra2: "#e07850", rose: "#c44060",
+  cream: "#f5f0eb",
 };
 
 const FLAME_PATH = "M91.583336,1 C94.858902,4.038088 94.189636,6.998662 92.316727,10.376994 C86.895416,20.155888 85.394997,30.387159 91.844238,40.137669 C94.758018,44.542976 99.042587,48.235645 103.260361,51.543896 C111.956841,58.365055 117.641266,67.217140 120.816948,77.480293 C122.970314,84.439537 123.615982,91.865288 124.990936,99.383125 C125.884773,97.697456 127.039993,95.775894 127.944977,93.742935 C128.933945,91.521332 129.326263,88.947304 130.661072,86.992996 C131.803146,85.320847 133.925720,83.260689 135.585968,83.285553 C137.393021,83.312607 140.050140,85.157921 140.808014,86.882332 C144.849472,96.078102 149.743393,104.919754 151.119156,115.202736 C152.871628,128.301437 152.701294,141.175125 147.925400,153.556519 C139.636047,175.046417 124.719681,190.729568 102.956436,198.024307 C93.917976,201.053894 83.325455,199.328156 73.460648,200.051529 C66.457748,200.565033 60.038956,198.566650 54.104954,195.470612 C35.696693,185.866180 23.564285,170.592270 20.351917,150.306000 C17.271206,130.851151 16.262779,110.901123 26.722290,92.532166 C29.376348,87.871117 31.035656,82.643089 33.696789,77.986916 C34.711685,76.211151 37.195370,74.463982 39.125217,74.326584 C40.279823,74.244370 42.065300,77.132980 42.850647,78.989388 C44.449970,82.769890 45.564117,86.755646 47.322094,90.502388 C43.896488,53.348236 54.672562,22.806646 86.900139,1.333229 Z";
 
+let _pFlameId = 0;
 function FlameIcon({ size = 14, filled = true, color }) {
-  const c = color || (filled ? C.terracotta : C.dim);
+  const id = useMemo(() => `pfg${_pFlameId++}`, []);
+  if (!filled) {
+    const c = color || C.dim;
+    return (
+      <svg width={size} height={size * 1.2} viewBox="0 0 167 200" fill="none" stroke={c} strokeWidth={12} strokeLinecap="round">
+        <path d={FLAME_PATH} />
+      </svg>
+    );
+  }
   return (
-    <svg width={size} height={size * 1.2} viewBox="0 0 167 200" fill={filled ? c : "none"} stroke={filled ? "none" : c} strokeWidth={filled ? 0 : 12} strokeLinecap="round">
-      <path d={FLAME_PATH} />
+    <svg width={size} height={size * 1.2} viewBox="0 0 167 200" style={{ filter: "drop-shadow(0 2px 6px rgba(255,120,40,0.35)) drop-shadow(0 0 10px rgba(255,150,50,0.15))" }}>
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="0.3" y2="1">
+          <stop offset="0%" stopColor="#ffcc44" />
+          <stop offset="30%" stopColor="#ffaa30" />
+          <stop offset="60%" stopColor="#f07830" />
+          <stop offset="100%" stopColor="#c44828" />
+        </linearGradient>
+      </defs>
+      <path d={FLAME_PATH} fill={`url(#${id})`} />
     </svg>
   );
 }
@@ -67,6 +86,7 @@ export default function Profile({
   onOpenIgImport,
 }) {
   const { user } = useUser();
+  const { signOut } = useClerk();
   const NOTIFICATION_TYPES = [
     { key: "followed_you", label: "Someone follows you", sublabel: "Get notified when someone follows your profile." },
     { key: "friend_loved_your_watchlist", label: "Friend loved a restaurant you watchlisted", sublabel: "See when friends love places you've saved." },
@@ -501,203 +521,146 @@ export default function Profile({
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, paddingBottom: 100, color: C.text }}>
+    <div className="d-profile">
 
       {/* HERO BANNER — full width with gradient fade */}
-      <div style={{ position: "relative", height: 260 }}>
-        {/* Banner image */}
+      <div className="d-profile-hero">
         {currentBanner ? (
-          <img
-            src={currentBanner}
-            alt=""
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
-          />
+          <img src={currentBanner} alt="" style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }} />
         ) : (
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, #1e1208 0%, #3a1f0d 60%, #2e1008 100%)" }} />
+          <div style={{ position:"absolute", inset:0, background:"linear-gradient(160deg, #12121a 0%, #1a1a24 60%, #0a0a0f 100%)" }} />
         )}
+        <div className="gradient-fade" />
 
-        {/* Gradient fade to bg at bottom — where content begins */}
-        <div style={{
-          position: "absolute", inset: 0,
-          background: "linear-gradient(to bottom, rgba(15,12,9,0.05) 0%, rgba(15,12,9,0.2) 30%, rgba(15,12,9,0.75) 60%, rgba(15,12,9,1) 100%)",
-        }} />
+        {/* top settings button removed — using stats gear instead */}
 
-        {/* Settings top-right */}
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(true)}
-          style={{ position: "absolute", top: 16, right: 16, background: "rgba(15,12,9,0.5)", border: "1px solid rgba(240,235,226,0.15)", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: C.text }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
-        </button>
-
-        {/* Profile info overlaid at the fade zone */}
-        <div style={{ position: "absolute", bottom: 16, left: 18, right: 18, display: "flex", alignItems: "flex-end", gap: 14 }}>
-          {/* Avatar — tap to change */}
-          <div
-            onClick={() => fileRef.current?.click()}
-            style={{
-              width: 76, height: 76, borderRadius: "50%",
-              border: `2.5px solid ${C.terracotta}`,
-              overflow: "hidden", cursor: "pointer", flexShrink: 0,
-              background: C.bg2, boxShadow: "0 4px 20px rgba(0,0,0,0.6)",
-            }}
-          >
-            {photo ? (
-              <img src={photo} alt="profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            ) : (
-              <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="1.5" strokeLinecap="round">
-                  <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-                </svg>
-              </div>
-            )}
+        <div className="d-profile-overlay">
+          <div className="d-profile-avatar" onClick={() => fileRef.current?.click()}>
+            <ProfilePhoto photo={photo} size={60} />
           </div>
-          <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhotoUpload} />
-
-          {/* Name + cities */}
-          <div style={{ flex: 1, paddingBottom: 4 }}>
-            <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", fontSize: 26, color: "#fff", lineHeight: 1.05 }}>{name}</div>
-            <div style={{ fontSize: 12, color: "rgba(240,235,226,0.65)", marginTop: 4, fontFamily: "-apple-system,sans-serif" }}>
+          <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handlePhotoUpload} />
+          <div className="d-profile-overlay-text">
+            <div className="d-profile-name">{name}</div>
+            <div className="d-profile-cities-inline">
               {(() => {
                 const home = defaultCity || cities[0] || "";
-                // Top 2 cities by loved restaurant count (excluding home)
                 const cityCounts = {};
                 lovedRestaurants.forEach(r => { if (r.city && r.city !== home) cityCounts[r.city] = (cityCounts[r.city] || 0) + 1; });
                 const top2 = Object.entries(cityCounts).sort((a, b) => b[1] - a[1]).slice(0, 2).map(e => e[0]);
-                return [home, ...top2].filter(Boolean).join(" · ");
+                const allCities = [home, ...top2].filter(Boolean);
+                return allCities.map((c, i) => (
+                  <span key={c}>{i > 0 && <span>·</span>}{c}</span>
+                ));
               })()}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Stats — plain, no card/pill */}
-      <div style={{ display: "flex", padding: "16px 18px 0", alignItems: "center" }}>
-        <div style={{ display: "flex", flex: 1 }}>
+      {/* Stats row */}
+      <div className="d-profile-stats">
         {stats.map((s, i) => (
-          <button
+          <div
             key={s.label}
-            type="button"
+            className="d-stat-card"
             onClick={() => {
               if (s.onClick) { s.onClick(); return; }
               if (s.items.length > 0) setListModal({ title: s.title, items: s.items });
             }}
-            style={{
-              flex: 1, background: "none", border: "none",
-              borderRight: i < stats.length - 1 ? `1px solid ${C.border}` : "none",
-              padding: "0 6px 0", cursor: (s.onClick || s.items.length > 0) ? "pointer" : "default",
-              textAlign: "center",
-            }}
+            style={{ cursor: (s.onClick || s.items.length > 0) ? "pointer" : "default" }}
           >
-            <div style={{ fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 26, color: C.text, lineHeight: 1 }}>{s.val}</div>
-            <div style={{ fontSize: 9, color: C.muted, marginTop: 4, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "-apple-system,sans-serif" }}>{s.label}</div>
-          </button>
+            <div className="d-stat-num">{s.val}</div>
+            <div className="d-stat-label">{s.label}</div>
+          </div>
         ))}
-        </div>
-        {/* Settings gear — always visible here */}
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(true)}
-          style={{ background: "none", border: "none", cursor: "pointer", padding: "0 0 0 14px", color: C.muted, flexShrink: 0 }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
-        </button>
+        <div className="d-stats-gear" onClick={() => setSettingsOpen(true)}>⚙</div>
       </div>
 
       {user?.id && onOpenTasteProfile ? (
-        <div
-          style={{
-            margin: "12px 18px 0",
-            padding: "14px 16px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            background: C.bg2,
-            border: `1px solid ${C.border}`,
-            borderRadius: 14,
-          }}
-        >
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 9, color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "-apple-system,sans-serif", marginBottom: 4 }}>
-              Cooked score
+        <div className="d-heat-section">
+          <div className="d-heat-card glass">
+            <div className="d-heat-left">
+              <div className="d-heat-label">COOKED SCORE</div>
+              <div className="d-heat-score">{cookedScore}</div>
             </div>
-            <div style={{ fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 28, color: C.terracotta, lineHeight: 1 }}>{cookedScore}</div>
+            <button className="d-heat-btn glass-pill" type="button" onClick={() => onOpenTasteProfile()}>
+              View taste profile →
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => onOpenTasteProfile()}
-            style={{
-              flexShrink: 0,
-              background: "transparent",
-              border: `1px solid ${C.terracotta}`,
-              color: C.terracotta,
-              borderRadius: 20,
-              padding: "8px 14px",
-              fontSize: 13,
-              fontFamily: "-apple-system,sans-serif",
-              cursor: "pointer",
-            }}
-          >
-            View taste profile →
-          </button>
         </div>
       ) : null}
 
-      {/* City Readiness */}
-      <div style={{ padding: "12px 18px 0" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <div style={{ fontSize: 10, color: C.muted, fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            {cityReadiness.length > 0 ? "City readiness" : "Your Cities"}
+      {/* Personality card */}
+      {lovedRestaurants.length > 0 && (() => {
+        const tagCounts = {};
+        lovedRestaurants.forEach(r => (r.tags || []).forEach(t => { tagCounts[t.toLowerCase()] = (tagCounts[t.toLowerCase()] || 0) + 1; }));
+        const topTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).map(e => e[0]);
+        const cuisineCounts = {};
+        lovedRestaurants.forEach(r => { if (r.cuisine) cuisineCounts[r.cuisine] = (cuisineCounts[r.cuisine] || 0) + 1; });
+        const topCuisine = Object.entries(cuisineCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+        const secondCuisine = Object.entries(cuisineCounts).sort((a, b) => b[1] - a[1])[1]?.[0] || "";
+        const isNightOwl = topTags.some(t => ["late night", "date night", "bar", "cocktails", "wine bar"].includes(t));
+        const isAdventurer = topTags.some(t => ["hidden gem", "hole in the wall", "neighborhood gem"].includes(t));
+        const isFoodie = topTags.some(t => ["tasting menu", "chef's table", "omakase", "fine dining"].includes(t));
+        const badge = isFoodie ? { icon: "👨‍🍳", name: "The Connoisseur" } : isNightOwl ? { icon: "🌙", name: "The Night Owl" } : isAdventurer ? { icon: "🗺️", name: "The Explorer" } : { icon: "🔥", name: "The Enthusiast" };
+        const desc = isFoodie ? `You seek out the best of the best. ${topCuisine} is your go-to, but you'll cross town for the right omakase or tasting menu.` :
+          isNightOwl ? `You chase late-night gems and date night spots. ${topCuisine} runs deep in your DNA, but you'll cross town for the right ${secondCuisine ? secondCuisine.toLowerCase() : "cocktail"}.` :
+          isAdventurer ? `You love discovering hidden gems and neighborhood spots. ${topCuisine} is your comfort zone, but you're always hunting for something new.` :
+          `You've got great taste. ${topCuisine} leads your lineup${secondCuisine ? `, with a healthy love for ${secondCuisine}` : ""}.`;
+        return (
+          <div className="d-personality-card glass-heavy" style={{ marginTop:0 }}>
+            <div className="d-personality-badge"><span className="icon" style={{ filter:"grayscale(1) brightness(0.7)" }}>{badge.icon}</span> {badge.name}</div>
+            <div className="d-personality-desc">{desc}</div>
           </div>
-          <button type="button" onClick={() => setShowCityFollowPicker(true)} style={{ background: "none", border: `1px solid ${C.terracotta}`, borderRadius: 20, padding: "4px 12px", color: C.terracotta, fontSize: 11, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
+        );
+      })()}
+
+      {/* City Readiness */}
+      <div className="d-cities-section">
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"0 20px", marginBottom:12 }}>
+          <div className="p-section-label" style={{ marginBottom:0 }}>
+            {cityReadiness.length > 0 ? "City Readiness" : "Your Cities"}
+          </div>
+          <button className="glass-pill" type="button" onClick={() => setShowCityFollowPicker(true)} style={{ fontSize:11, color:C.terracotta, padding:"5px 14px", cursor:"pointer", textDecoration:"none" }}>
             + Follow Cities
           </button>
         </div>
         {cityReadiness.length > 0 && (
-          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
+          <div className="d-cities-row">
+            <svg width="0" height="0" style={{ position:"absolute" }}>
+              <defs>
+                <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#ffb040" />
+                  <stop offset="100%" stopColor="#c44060" />
+                </linearGradient>
+              </defs>
+            </svg>
             {cityReadiness.map(c => {
               const pct = Math.round((c.pctExplored || 0) * 100);
-              const circumference = 2 * Math.PI * 22;
+              const circumference = 2 * Math.PI * 24;
               const offset = circumference - (pct / 100) * circumference;
+              const flag = CITY_FLAGS[c.city] || "🌍";
               return (
-                <div key={c.city} style={{ minWidth: 110, maxWidth: 110, flexShrink: 0, background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 10px", textAlign: "center" }}>
-                  <svg width="52" height="52" viewBox="0 0 52 52" style={{ display: "block", margin: "0 auto 6px" }}>
-                    <circle cx="26" cy="26" r="22" fill="none" stroke={C.dim} strokeWidth="4" />
-                    <circle cx="26" cy="26" r="22" fill="none" stroke={C.terracotta} strokeWidth="4"
-                      strokeDasharray={circumference} strokeDashoffset={offset}
-                      strokeLinecap="round" transform="rotate(-90 26 26)" />
-                    <text x="26" y="28" textAnchor="middle" fill={C.text} fontSize="13" fontFamily="Georgia,serif" fontWeight="bold">
-                      {pct}%
-                    </text>
-                  </svg>
-                  <div style={{ fontSize: 12, color: C.text, fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", marginBottom: 2 }}>
-                    {c.city}
+                <div key={c.city} className="d-city-card glass">
+                  <div className="d-city-ring">
+                    <svg viewBox="0 0 56 56">
+                      <circle className="ring-bg" cx="28" cy="28" r="24"/>
+                      <circle className="ring-fill" cx="28" cy="28" r="24" strokeDasharray={circumference} strokeDashoffset={offset}/>
+                    </svg>
+                    <div className="ring-pct">{pct}%</div>
                   </div>
-                  <div style={{ fontSize: 9, color: C.muted }}>
-                    {c.lovedInCity}/{c.totalInCity} spots
-                  </div>
-                  {c.untriedCuisines.length > 0 && (
-                    <div style={{ fontSize: 8, color: C.terracotta, marginTop: 4, lineHeight: 1.3 }}>
-                      Try: {c.untriedCuisines.slice(0, 2).join(", ")}
-                    </div>
-                  )}
+                  <span className="d-city-flag">{flag}</span>
+                  <div className="d-city-name">{c.city}</div>
+                  <div className="d-city-count">{c.lovedInCity} of {c.totalInCity} loved</div>
                 </div>
               );
             })}
           </div>
         )}
         {followedCitiesList.length > 0 && cityReadiness.length === 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8, padding:"0 20px" }}>
             {followedCitiesList.map(c => (
-              <span key={c} style={{ padding: "6px 14px", borderRadius: 20, background: `${C.terracotta}18`, border: `1px solid ${C.terracotta}`, color: C.terracotta, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>★ {c}</span>
+              <span key={c} className="glass-pill" style={{ padding:"6px 14px", color:C.terracotta, fontSize:12 }}>★ {c}</span>
             ))}
           </div>
         )}
@@ -708,107 +671,173 @@ export default function Profile({
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => setShowCityFollowPicker(false)}>
           <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px", maxHeight: "70vh", overflowY: "auto" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Follow Cities</div>
+              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Follow Cities</div>
               <button type="button" onClick={() => setShowCityFollowPicker(false)} style={{ background: "none", border: "none", color: C.muted, fontSize: 20, cursor: "pointer" }}>×</button>
             </div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontFamily: "-apple-system,sans-serif" }}>Tap cities you want to follow. These will show up in your city filter and city readiness.</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {(() => {
-                const allCities = [...new Set([...CITIES, ...allCitiesFromDb, ...(allRestaurants || []).map(r => r.city).filter(Boolean)])].sort();
-                return allCities.map(c => {
-                  const isFollowed = followedCitiesList.includes(c);
-                  return (
-                    <button key={c} type="button" onClick={async () => {
-                      if (!user?.id) return;
-                      if (isFollowed) {
-                        await unfollowCity(user.id, c);
-                        setFollowedCitiesList(prev => prev.filter(x => x !== c));
-                      } else {
-                        await followCity(user.id, c);
-                        setFollowedCitiesList(prev => [...prev, c]);
-                      }
-                    }} style={{
-                      padding: "8px 16px", borderRadius: 24,
-                      border: `1.5px solid ${isFollowed ? C.terracotta : C.border}`,
-                      background: isFollowed ? C.terracotta + "22" : C.bg,
-                      color: isFollowed ? C.terracotta : C.text,
-                      fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif",
-                      fontWeight: isFollowed ? 600 : 400,
-                    }}>
-                      {isFollowed ? `★ ${c}` : c}
-                    </button>
-                  );
-                });
-              })()}
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontFamily: "'Inter', -apple-system, sans-serif" }}>Tap cities you want to follow. These will show up in your city filter and city readiness.</div>
+            <div>
+              {sortCityRegions(CITY_REGIONS, followedCitiesList).map(({ region, cities }) => (
+                <div key={region}>
+                  <div style={{ padding:"10px 0 6px", fontFamily:"'Inter', sans-serif", fontSize:8, color:"#ff9632", letterSpacing:"1.8px", textTransform:"uppercase" }}>{region}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
+                    {cities.map(c => {
+                      const isFollowed = followedCitiesList.includes(c);
+                      return (
+                        <button key={c} type="button" onClick={async () => {
+                          if (!user?.id) return;
+                          if (isFollowed) {
+                            await unfollowCity(user.id, c);
+                            setFollowedCitiesList(prev => prev.filter(x => x !== c));
+                          } else {
+                            await followCity(user.id, c);
+                            setFollowedCitiesList(prev => [...prev, c]);
+                          }
+                        }} style={{
+                          padding: "8px 16px", borderRadius: 24,
+                          border: `1.5px solid ${isFollowed ? C.terracotta : C.border}`,
+                          background: isFollowed ? C.terracotta + "22" : C.bg,
+                          color: isFollowed ? C.terracotta : C.text,
+                          fontSize: 13, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif",
+                          fontWeight: isFollowed ? 600 : 400,
+                        }}>
+                          {isFollowed ? `★ ${c}` : c}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* Username */}
-      <div style={{ padding: "10px 18px 0", fontSize: 12, color: C.muted, fontFamily: "-apple-system,sans-serif" }}>{username}</div>
-
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: 8, padding: "16px 18px 0" }}>
-        {tabs.map(t => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setActiveTab(t.key)}
-            style={{
-              padding: "7px 18px", borderRadius: 20,
-              border: activeTab === t.key ? "none" : `1px solid ${C.border}`,
-              background: activeTab === t.key ? C.terracotta : "transparent",
-              color: activeTab === t.key ? "#fff" : C.muted,
-              fontSize: 13, fontFamily: "-apple-system,sans-serif",
-              cursor: "pointer",
-            }}
-          >{t.label}</button>
-        ))}
-      </div>
-
-      {/* Section label */}
-      {activeItems.length > 0 && (
-        <div style={{ padding: "14px 18px 4px", display: "flex", alignItems: "center", gap: 6 }}>
-          {activeTab === "watchlist"
-            ? <EyeIcon size={11} color={C.muted} />
-            : <FlameIcon size={11} filled={activeTab === "loved"} color={activeTab === "loved" ? C.terracotta : C.muted} />
-          }
-          <span style={{ fontSize: 10, color: C.muted, letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: "-apple-system,sans-serif" }}>
-            {activeTab === "loved" ? "LOVED" : activeTab === "watchlist" ? "WATCHLIST" : "FINDS"}
-          </span>
+      {/* Tabs — Loved / Watchlist / Finds */}
+      <div className="d-tab-section">
+        <div className="d-tab-bar">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              type="button"
+              className={`tab-btn ${activeTab === t.key ? "active" : ""}`}
+              onClick={() => setActiveTab(t.key)}
+            >{t.label}</button>
+          ))}
         </div>
-      )}
 
-      {/* Restaurant list */}
-      <div style={{ padding: "4px 18px 0" }}>
+        {/* Loved/Watchlist/Finds content */}
         {activeItems.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "44px 20px", color: C.muted }}>
-            <div style={{ marginBottom: 14, display: "flex", justifyContent: "center" }}>
+          <div style={{ textAlign:"center", padding:"44px 20px", color:C.muted }}>
+            <div style={{ marginBottom:14, display:"flex", justifyContent:"center" }}>
               {activeTab === "watchlist"
                 ? <EyeIcon size={40} color={C.dim} />
                 : <FlameIcon size={36} filled={false} color={C.dim} />
               }
             </div>
-            <div style={{ fontSize: 13, lineHeight: 1.6, fontFamily: "-apple-system,sans-serif" }}>
+            <div style={{ fontSize:13, lineHeight:1.6, fontFamily:"'Inter', -apple-system, sans-serif" }}>
               {activeTab === "loved" ? "Swipe right in Heat to love restaurants" :
                activeTab === "watchlist" ? "Tap Watch on any restaurant to save it here" :
                "Finds come from your Instagram imports"}
             </div>
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {activeItems.map(r => <RestCard key={r.id} r={r} onOpen={onOpenDetail} photoCache={photoCache} />)}
+          <div className="d-loved-scroll" style={{ padding:"0 20px" }}>
+            {activeItems.map(r => {
+              const imgSrc = (photoCache && (photoCache[r.id] || photoCache[String(r.id)])) || r.img;
+              const score = Math.min(5, r.googleRating || (r.rating ? r.rating / 2 : 3));
+              return (
+                <div key={r.id} className="d-loved-card" onClick={() => onOpenDetail && onOpenDetail(r)}>
+                  {imgSrc && <img src={imgSrc} alt={r.name} />}
+                  <div className="shade" />
+                  <div className="card-flame glass-pill">🔥 {score.toFixed(1)}</div>
+                  <div className="card-info">
+                    <div className="card-name">{r.name}</div>
+                    <div className="card-meta">{[r.cuisine, r.city].filter(Boolean).join(" · ")}</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
+
+      {/* Vibes */}
+      {lovedRestaurants.length > 0 && (() => {
+        const vibeMap = { "date night": "🕯️", "late night": "🌙", "wine bar": "🍷", "cocktails": "🍸", "buzzy": "🔥", "scene": "🔥", "chef's table": "👨‍🍳", "omakase": "🍣", "tasting menu": "✨", "brunch": "☀️", "outdoor": "🌿", "rooftop": "🏙️", "casual": "😎", "family": "👨‍👩‍👧‍👦", "hole in the wall": "🗺️" };
+        const tagCounts = {};
+        lovedRestaurants.forEach(r => (r.tags || []).forEach(t => {
+          const k = t.toLowerCase();
+          if (vibeMap[k]) tagCounts[k] = (tagCounts[k] || 0) + 1;
+        }));
+        const topVibes = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        if (topVibes.length === 0) return null;
+        return (
+          <div className="d-vibe-section">
+            <div className="p-section-label">Your Vibes</div>
+            <div className="d-vibe-pills">
+              {topVibes.map(([v]) => (
+                <div key={v} className="d-vibe-pill glass-pill"><span className="vi">{vibeMap[v]}</span> {v.split(" ").map(w => w[0].toUpperCase() + w.slice(1)).join(" ")}</div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Taste Profile */}
+      {lovedRestaurants.length > 0 && (() => {
+        const cuisineCounts = {};
+        lovedRestaurants.forEach(r => { if (r.cuisine) cuisineCounts[r.cuisine] = (cuisineCounts[r.cuisine] || 0) + 1; });
+        const total = lovedRestaurants.length;
+        const sorted = Object.entries(cuisineCounts).sort((a, b) => b[1] - a[1]).slice(0, 4);
+        if (sorted.length === 0) return null;
+        const emojiMap = { "Italian": "🍝", "Japanese": "🍣", "Mexican": "🌮", "Chinese": "🥟", "French": "🥐", "Korean": "🍜", "Indian": "🍛", "Thai": "🍲", "American": "🍔", "Mediterranean": "🫒", "Seafood": "🦞", "Pizza": "🍕", "Sushi": "🍣", "Cocktail Bars": "🍸", "Wine Bar": "🍷" };
+        return (
+          <div className="d-taste-section">
+            <div className="p-section-label">Taste Profile</div>
+            {sorted.map(([cuisine, count]) => {
+              const pct = Math.round((count / total) * 100);
+              return (
+                <div key={cuisine} className="d-taste-row">
+                  <div className="glass-icon">{emojiMap[cuisine] || "🍽️"}</div>
+                  <div className="d-taste-info">
+                    <div className="d-taste-name">{cuisine}</div>
+                    <div className="d-taste-bar-bg"><div className="d-taste-bar-fill" style={{ width:`${pct}%` }} /></div>
+                  </div>
+                  <div className="d-taste-pct">{pct}%</div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {/* Recent Activity */}
+      {lovedRestaurants.length > 0 && (
+        <div className="d-activity-section">
+          <div className="p-section-label">Recent Activity</div>
+          {lovedRestaurants.slice(0, 3).map(r => {
+            const imgSrc = (photoCache && (photoCache[r.id] || photoCache[String(r.id)])) || r.img;
+            const score = Math.min(5, r.googleRating || (r.rating ? r.rating / 2 : 3));
+            return (
+              <div key={r.id} className="d-activity-item" onClick={() => onOpenDetail && onOpenDetail(r)} style={{ cursor:"pointer" }}>
+                {imgSrc && <img className="d-activity-img" src={imgSrc} alt={r.name} />}
+                <div className="d-activity-info">
+                  <div className="d-activity-text">Loved <strong>{r.name}</strong></div>
+                  <div className="d-activity-time">Recently</div>
+                </div>
+                <div className="d-activity-flame">🔥 {score.toFixed(1)}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Stats list modal */}
       {listModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => setListModal(null)}>
           <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", maxHeight: "70vh", display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>{listModal.title}</div>
+              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 18, color: C.text }}>{listModal.title}</div>
               <button type="button" onClick={() => setListModal(null)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}>×</button>
             </div>
             <div style={{ overflowY: "auto", padding: "8px 18px 24px" }}>
@@ -818,7 +847,7 @@ export default function Profile({
                     <RestCard r={r} compact onOpen={onOpenDetail} photoCache={photoCache} />
                   </div>
                 ) : (
-                  <div key={r.id || r.name} style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, color: C.text, fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 16 }}>
+                  <div key={r.id || r.name} style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, color: C.text, fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 16 }}>
                     {r.name}
                   </div>
                 )
@@ -832,12 +861,12 @@ export default function Profile({
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => setSocialModal(null)}>
           <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", maxHeight: "70vh", display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>{socialModal.title}</div>
+              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 18, color: C.text }}>{socialModal.title}</div>
               <button type="button" onClick={() => setSocialModal(null)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}>×</button>
             </div>
             <div style={{ overflowY: "auto", padding: "8px 18px 24px" }}>
               {socialModal.loading ? (
-                <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Loading…</div>
+                <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "'Inter', -apple-system, sans-serif" }}>Loading…</div>
               ) : (
                 socialModal.users.map((u) => (
                   <button
@@ -853,8 +882,8 @@ export default function Profile({
                       {u.profile_photo ? <img src={u.profile_photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
                     </div>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ color: C.text, fontSize: 14, fontFamily: "-apple-system,sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.profile_name}</div>
-                      <div style={{ color: C.muted, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>{u.profile_username}</div>
+                      <div style={{ color: C.text, fontSize: 14, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.profile_name}</div>
+                      <div style={{ color: C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif" }}>{u.profile_username}</div>
                     </div>
                   </button>
                 ))
@@ -867,11 +896,11 @@ export default function Profile({
       {/* Settings modal */}
       {settingsOpen && (() => {
         const SectionLabel = ({ children }) => (
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, marginBottom: 6, marginTop: 16, fontFamily: "-apple-system,sans-serif" }}>{children}</div>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, marginBottom: 6, marginTop: 16, fontFamily: "'Inter', -apple-system, sans-serif" }}>{children}</div>
         );
         const Row = ({ label, sub, onClick, right, danger }) => (
           <button type="button" onClick={onClick}
-            style={{ width: "100%", padding: "13px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: danger ? "#e74c3c" : C.text, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "left", marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            style={{ width: "100%", padding: "13px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: danger ? "#e74c3c" : C.text, fontSize: 14, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif", textAlign: "left", marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <div>{label}</div>
               {sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{sub}</div>}
@@ -882,8 +911,8 @@ export default function Profile({
         const Toggle = ({ label, sub, value, onChange }) => (
           <div style={{ width: "100%", padding: "13px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
-              <div style={{ color: C.text, fontSize: 14, fontFamily: "-apple-system,sans-serif" }}>{label}</div>
-              {sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: "-apple-system,sans-serif" }}>{sub}</div>}
+              <div style={{ color: C.text, fontSize: 14, fontFamily: "'Inter', -apple-system, sans-serif" }}>{label}</div>
+              {sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: "'Inter', -apple-system, sans-serif" }}>{sub}</div>}
             </div>
             <div onClick={() => onChange(!value)} style={{ width: 44, height: 24, borderRadius: 12, background: value ? C.terracotta : C.border, cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
               <div style={{ width: 20, height: 20, borderRadius: 10, background: "#fff", position: "absolute", top: 2, left: value ? 22 : 2, transition: "left 0.2s" }} />
@@ -900,8 +929,8 @@ export default function Profile({
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => { setSettingsSection(null); }}>
             <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px", maxHeight: "80vh", overflowY: "auto" }}>
               <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
-                <button type="button" onClick={() => setSettingsSection(null)} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
-                <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Notifications</div>
+                <button type="button" onClick={() => setSettingsSection(null)} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
+                <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Notifications</div>
               </div>
               {NOTIFICATION_TYPES.map(n => (
                 <Toggle key={n.key} label={n.label} sub={n.sublabel} value={notifPrefs[n.key] !== false} onChange={v => {
@@ -918,10 +947,10 @@ export default function Profile({
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => setSettingsSection(null)}>
             <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px" }}>
               <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
-                <button type="button" onClick={() => setSettingsSection(null)} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
-                <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Dietary Preferences</div>
+                <button type="button" onClick={() => setSettingsSection(null)} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
+                <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Dietary Preferences</div>
               </div>
-              <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontFamily: "-apple-system,sans-serif" }}>These help the chatbot and recommendations filter for you.</div>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontFamily: "'Inter', -apple-system, sans-serif" }}>These help the chatbot and recommendations filter for you.</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {DIETARY_OPTIONS.map(d => {
                   const active = dietaryPrefs.includes(d);
@@ -930,7 +959,7 @@ export default function Profile({
                       const updated = active ? dietaryPrefs.filter(x => x !== d) : [...dietaryPrefs, d];
                       setDietaryPrefs(updated);
                       savePref("cooked_dietary_prefs", updated);
-                    }} style={{ padding: "8px 16px", borderRadius: 20, border: `1px solid ${active ? C.terracotta : C.border}`, background: active ? C.terracotta + "22" : C.bg, color: active ? C.terracotta : C.text, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
+                    }} style={{ padding: "8px 16px", borderRadius: 20, border: `1px solid ${active ? C.terracotta : C.border}`, background: active ? C.terracotta + "22" : C.bg, color: active ? C.terracotta : C.text, fontSize: 13, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif" }}>
                       {d}
                     </button>
                   );
@@ -944,19 +973,19 @@ export default function Profile({
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => setSettingsSection(null)}>
             <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px" }}>
               <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
-                <button type="button" onClick={() => setSettingsSection(null)} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
-                <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>About</div>
+                <button type="button" onClick={() => setSettingsSection(null)} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
+                <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 18, color: C.text }}>About</div>
               </div>
               <div style={{ textAlign: "center", padding: "20px 0" }}>
-                <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 28, color: C.text }}>cook<span style={{ color: C.terracotta }}>ed</span></div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 4, fontFamily: "-apple-system,sans-serif" }}>Your personal concierge</div>
-                <div style={{ fontSize: 11, color: C.muted, marginTop: 12, fontFamily: "-apple-system,sans-serif" }}>Version 1.0.0</div>
+                <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 28, color: C.text }}>cook<span style={{ color: C.terracotta }}>ed</span></div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 4, fontFamily: "'Inter', -apple-system, sans-serif" }}>Your personal concierge</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 12, fontFamily: "'Inter', -apple-system, sans-serif" }}>Version 1.0.0</div>
               </div>
               <Row label="What's New" sub="See recent updates" onClick={() => { /* TODO: changelog */ }} />
               <Row label="Help & Feedback" sub="Report a bug or request a feature" onClick={() => window.open("mailto:support@getcooked.app", "_blank")} />
               <Row label="Privacy Policy" onClick={() => { /* TODO: link */ }} />
               <Row label="Terms of Service" onClick={() => { /* TODO: link */ }} />
-              <div style={{ textAlign: "center", marginTop: 20, fontSize: 11, color: C.muted, fontFamily: "-apple-system,sans-serif" }}>Made with ♡ in Los Angeles</div>
+              <div style={{ textAlign: "center", marginTop: 20, fontSize: 11, color: C.muted, fontFamily: "'Inter', -apple-system, sans-serif" }}>Made with ♡ in Los Angeles</div>
             </div>
           </div>
         );
@@ -970,10 +999,10 @@ export default function Profile({
             <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => setSettingsSection(null)}>
               <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px", maxHeight: "80vh", overflowY: "auto" }}>
                 <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
-                  <button type="button" onClick={() => setSettingsSection(null)} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
-                  <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Home City</div>
+                  <button type="button" onClick={() => setSettingsSection(null)} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
+                  <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Home City</div>
                 </div>
-                <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontFamily: "-apple-system,sans-serif" }}>Your home city. This is what loads when you open the app and shows on your profile.</div>
+                <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontFamily: "'Inter', -apple-system, sans-serif" }}>Your home city. This is what loads when you open the app and shows on your profile.</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {cities.map(city => {
                     const isDefault = defaultCity === city;
@@ -987,7 +1016,7 @@ export default function Profile({
                         border: `1.5px solid ${isDefault ? C.terracotta : C.border}`,
                         background: isDefault ? C.terracotta + "22" : C.bg,
                         color: isDefault ? C.terracotta : C.text,
-                        fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif",
+                        fontSize: 14, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif",
                         fontWeight: isDefault ? 600 : 400,
                       }}>
                         {city} {isDefault && "✓"}
@@ -1004,7 +1033,7 @@ export default function Profile({
         return (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => { setSettingsOpen(false); setSettingsSection(null); }}>
             <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px", maxHeight: "85vh", overflowY: "auto" }}>
-              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 20, color: C.text, marginBottom: 4 }}>Settings</div>
+              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 20, color: C.text, marginBottom: 4 }}>Settings</div>
 
               {/* ACCOUNT */}
               <SectionLabel>Account</SectionLabel>
@@ -1027,11 +1056,11 @@ export default function Profile({
               {/* SOCIAL */}
               <SectionLabel>Social</SectionLabel>
               <div style={{ width: "100%", padding: "13px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 6 }}>
-                <div style={{ color: C.text, fontSize: 14, fontFamily: "-apple-system,sans-serif", marginBottom: 8 }}>Who can DM me</div>
+                <div style={{ color: C.text, fontSize: 14, fontFamily: "'Inter', -apple-system, sans-serif", marginBottom: 8 }}>Who can DM me</div>
                 <div style={{ display: "flex", gap: 6 }}>
                   {[{ value: "everyone", label: "Everyone" }, { value: "followers", label: "Followers" }, { value: "nobody", label: "Nobody" }].map(o => (
                     <button key={o.value} type="button" onClick={() => { setDmPref(o.value); savePref("cooked_dm_pref", o.value); }}
-                      style={{ flex: 1, padding: "6px 0", borderRadius: 8, border: `1px solid ${dmPref === o.value ? C.terracotta : C.border}`, background: dmPref === o.value ? C.terracotta + "22" : "transparent", color: dmPref === o.value ? C.terracotta : C.muted, fontSize: 12, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
+                      style={{ flex: 1, padding: "6px 0", borderRadius: 8, border: `1px solid ${dmPref === o.value ? C.terracotta : C.border}`, background: dmPref === o.value ? C.terracotta + "22" : "transparent", color: dmPref === o.value ? C.terracotta : C.muted, fontSize: 12, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif" }}>
                       {o.label}
                     </button>
                   ))}
@@ -1057,11 +1086,11 @@ export default function Profile({
               <SectionLabel>Data</SectionLabel>
               <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
                 <button type="button" onClick={() => { exportBackup(); }}
-                  style={{ flex: 1, padding: "12px 8px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
+                  style={{ flex: 1, padding: "12px 8px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 13, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif" }}>
                   Export Backup
                 </button>
                 <button type="button" onClick={() => { importBackup(); }}
-                  style={{ flex: 1, padding: "12px 8px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif" }}>
+                  style={{ flex: 1, padding: "12px 8px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 13, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif" }}>
                   Import Backup
                 </button>
               </div>
@@ -1107,7 +1136,7 @@ export default function Profile({
                   )}
                   <Row label="Sync Photos to Library" sub={photoSyncRunning ? `Syncing... ${photoSyncCount}/${photoSyncTotal}` : (photoSyncMessage || "Push local photos to shared library")} onClick={syncPhotosToSharedLibrary} />
                   <button type="button" onClick={() => { setSettingsOpen(false); setSettingsSection(null); setAdminOpen(true); }}
-                    style={{ width: "100%", padding: "14px 16px", background: C.terracotta, border: "none", borderRadius: 12, color: "#fff", fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", textAlign: "center", marginBottom: 6, fontWeight: 600 }}>
+                    style={{ width: "100%", padding: "14px 16px", background: C.terracotta, border: "none", borderRadius: 12, color: "#fff", fontSize: 14, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif", textAlign: "center", marginBottom: 6, fontWeight: 600 }}>
                     Open Admin Panel
                   </button>
                 </>
@@ -1115,16 +1144,28 @@ export default function Profile({
 
               {/* SIGN OUT */}
               <div style={{ marginTop: 16 }} />
-              <Row label="Sign Out" danger onClick={() => {
-                if (confirm("Sign out of Cooked?")) {
-                  window.Clerk?.signOut?.();
-                  localStorage.removeItem("cooked_profile_setup_done");
-                  window.location.reload();
+              <Row label="Sign Out" danger onClick={async () => {
+                try {
+                  // Clear ALL user-specific localStorage
+                  const keysToRemove = [
+                    "cooked_profile_setup_done", "cooked_onboarding_v3", "cooked_onboarding_done",
+                    "cooked_graph_seeded_v2", "cooked_heat", "cooked_loved", "cooked_hidden",
+                    "cooked_watchlist", "cooked_finds", "cooked_profile_photo", "cooked_banner_photo",
+                    "cooked_profile_name", "cooked_profile_username", "cooked_data_version",
+                    "cooked_followed_cities", "cooked_home_city", "cooked_signup_username",
+                  ];
+                  keysToRemove.forEach(k => localStorage.removeItem(k));
+                  // Sign out from Clerk (clears session + cookies)
+                  await signOut();
+                } catch (e) {
+                  console.error("Sign out error:", e);
                 }
+                // Always reload regardless of success/failure
+                window.location.href = window.location.origin;
               }} right={<span style={{ color: "#e74c3c", fontSize: 16 }}>›</span>} />
 
               <button type="button" onClick={() => { setSettingsOpen(false); setSettingsSection(null); }}
-                style={{ width: "100%", padding: 14, background: "transparent", border: "none", borderRadius: 12, color: C.muted, fontSize: 13, cursor: "pointer", fontFamily: "-apple-system,sans-serif", marginTop: 8 }}>
+                style={{ width: "100%", padding: 14, background: "transparent", border: "none", borderRadius: 12, color: C.muted, fontSize: 13, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif", marginTop: 8 }}>
                 Close
               </button>
             </div>
@@ -1140,8 +1181,8 @@ export default function Profile({
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 999, display: "flex", alignItems: "flex-end" }} onClick={() => { setEditing(false); setSettingsOpen(true); }}>
           <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px" }}>
             <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
-              <button type="button" onClick={() => { setEditing(false); setSettingsOpen(true); }} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "-apple-system,sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
-              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 20, color: C.text }}>Edit Profile</div>
+              <button type="button" onClick={() => { setEditing(false); setSettingsOpen(true); }} style={{ background: "none", border: "none", color: C.terracotta, fontSize: 14, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif", padding: "0 8px 0 0" }}>‹ Back</button>
+              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 20, color: C.text }}>Edit Profile</div>
             </div>
             {/* Profile photo */}
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
@@ -1165,13 +1206,13 @@ export default function Profile({
             </div>
             {[{ label: "Name", val: editName, set: setEditName }, { label: "Username", val: editUsername, set: setEditUsername }].map(f => (
               <div key={f.label} style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 9, letterSpacing: "0.14em", color: C.muted, marginBottom: 6, textTransform: "uppercase", fontFamily: "-apple-system,sans-serif" }}>{f.label}</div>
+                <div style={{ fontSize: 9, letterSpacing: "0.14em", color: C.muted, marginBottom: 6, textTransform: "uppercase", fontFamily: "'Inter', -apple-system, sans-serif" }}>{f.label}</div>
                 <input value={f.val} onChange={e => f.set(e.target.value)}
-                  style={{ width: "100%", padding: "11px 14px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 15, outline: "none", boxSizing: "border-box", fontFamily: "-apple-system,sans-serif" }} />
+                  style={{ width: "100%", padding: "11px 14px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 15, outline: "none", boxSizing: "border-box", fontFamily: "'Inter', -apple-system, sans-serif" }} />
               </div>
             ))}
             <button type="button" onClick={saveEdit}
-              style={{ width: "100%", padding: 14, background: C.terracotta, border: "none", borderRadius: 12, color: "#fff", fontSize: 14, cursor: "pointer", fontFamily: "Georgia,serif", fontStyle: "italic", marginTop: 6 }}>Save</button>
+              style={{ width: "100%", padding: 14, background: C.terracotta, border: "none", borderRadius: 12, color: "#fff", fontSize: 14, cursor: "pointer", fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", marginTop: 6 }}>Save</button>
           </div>
         </div>
       )}
@@ -1200,8 +1241,8 @@ function RestCard({ r, compact, onOpen, photoCache }) {
         {imgSrc && <img src={imgSrc} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setImgSrc(null)} />}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", fontSize: compact ? 15 : 17, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</div>
-        <div style={{ fontSize: 10, color: C.muted, marginTop: 2, letterSpacing: "0.04em", fontFamily: "-apple-system,sans-serif" }}>
+        <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: "bold", fontSize: compact ? 15 : 17, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</div>
+        <div style={{ fontSize: 10, color: C.muted, marginTop: 2, letterSpacing: "0.04em", fontFamily: "'Inter', -apple-system, sans-serif" }}>
           {[r.cuisine, r.neighborhood].filter(Boolean).join(" · ")}
         </div>
         {!compact && (

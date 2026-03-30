@@ -15,23 +15,43 @@ import {
 import { syncFollow, removeFollow, getOverlapRestaurants } from "../lib/neo4j";
 
 const C = {
-  bg: "#0f0c09",
-  bg2: "#1a1208",
-  bg3: "#2e1f0e",
-  border: "#2e1f0e",
-  text: "#f0ebe2",
-  muted: "#5a3a20",
-  dim: "#3d2a18",
-  terracotta: "#c4603a",
+  bg: "#0a0a0f",
+  bg2: "#12121a",
+  bg3: "#1a1a24",
+  border: "rgba(255,255,255,0.04)",
+  border2: "rgba(255,255,255,0.06)",
+  text: "#f5f0eb",
+  muted: "rgba(245,240,235,0.3)",
+  dim: "rgba(245,240,235,0.18)",
+  terracotta: "#ff9632",
+  terra2: "#e07850",
+  rose: "#c44060",
+  cream: "#f5f0eb",
 };
 
 const FLAME_PATH = "M91.583336,1 C94.858902,4.038088 94.189636,6.998662 92.316727,10.376994 C86.895416,20.155888 85.394997,30.387159 91.844238,40.137669 C94.758018,44.542976 99.042587,48.235645 103.260361,51.543896 C111.956841,58.365055 117.641266,67.217140 120.816948,77.480293 C122.970314,84.439537 123.615982,91.865288 124.990936,99.383125 C125.884773,97.697456 127.039993,95.775894 127.944977,93.742935 C128.933945,91.521332 129.326263,88.947304 130.661072,86.992996 C131.803146,85.320847 133.925720,83.260689 135.585968,83.285553 C137.393021,83.312607 140.050140,85.157921 140.808014,86.882332 C144.849472,96.078102 149.743393,104.919754 151.119156,115.202736 C152.871628,128.301437 152.701294,141.175125 147.925400,153.556519 C139.636047,175.046417 124.719681,190.729568 102.956436,198.024307 C93.917976,201.053894 83.325455,199.328156 73.460648,200.051529 C66.457748,200.565033 60.038956,198.566650 54.104954,195.470612 C35.696693,185.866180 23.564285,170.592270 20.351917,150.306000 C17.271206,130.851151 16.262779,110.901123 26.722290,92.532166 C29.376348,87.871117 31.035656,82.643089 33.696789,77.986916 C34.711685,76.211151 37.195370,74.463982 39.125217,74.326584 C40.279823,74.244370 42.065300,77.132980 42.850647,78.989388 C44.449970,82.769890 45.564117,86.755646 47.322094,90.502388 C43.896488,53.348236 54.672562,22.806646 86.900139,1.333229 Z";
 
+let _uFlameId = 0;
 function FlameIcon({ size = 12, filled = true }) {
-  const c = filled ? C.terracotta : C.dim;
+  const id = useMemo(() => `ufg${_uFlameId++}`, []);
+  if (!filled) {
+    return (
+      <svg width={size} height={size * 1.2} viewBox="0 0 167 200" fill="none" stroke={C.dim} strokeWidth={12} strokeLinecap="round">
+        <path d={FLAME_PATH} />
+      </svg>
+    );
+  }
   return (
-    <svg width={size} height={size * 1.2} viewBox="0 0 167 200" fill={filled ? c : "none"} stroke={filled ? "none" : c} strokeWidth={filled ? 0 : 12} strokeLinecap="round">
-      <path d={FLAME_PATH} />
+    <svg width={size} height={size * 1.2} viewBox="0 0 167 200" style={{ filter: "drop-shadow(0 2px 6px rgba(255,120,40,0.35)) drop-shadow(0 0 10px rgba(255,150,50,0.15))" }}>
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="0.3" y2="1">
+          <stop offset="0%" stopColor="#ffcc44" />
+          <stop offset="30%" stopColor="#ffaa30" />
+          <stop offset="60%" stopColor="#f07830" />
+          <stop offset="100%" stopColor="#c44828" />
+        </linearGradient>
+      </defs>
+      <path d={FLAME_PATH} fill={`url(#${id})`} />
     </svg>
   );
 }
@@ -74,8 +94,8 @@ function RestCard({ r, onOpen }) {
         {imgSrc ? <img src={imgSrc} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", fontSize: 17, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</div>
-        <div style={{ fontSize: 10, color: C.muted, marginTop: 2, letterSpacing: "0.04em", fontFamily: "-apple-system,sans-serif" }}>
+        <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: "bold", fontSize: 17, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</div>
+        <div style={{ fontSize: 10, color: C.muted, marginTop: 2, letterSpacing: "0.04em", fontFamily: "'Inter', -apple-system, sans-serif" }}>
           {[r.cuisine, r.neighborhood].filter(Boolean).join(" · ")}
         </div>
         <div style={{ display: "flex", gap: 2, marginTop: 6 }}>
@@ -327,8 +347,8 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
               {avatar ? <img src={avatar} alt="profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
             </div>
             <div style={{ flex: 1, paddingBottom: 4 }}>
-              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", fontSize: 26, color: "#fff", lineHeight: 1.05 }}>{name}</div>
-              <div style={{ fontSize: 12, color: "rgba(240,235,226,0.65)", marginTop: 4, fontFamily: "-apple-system,sans-serif" }}>{username || "@"}</div>
+              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: "bold", fontSize: 26, color: "#fff", lineHeight: 1.05 }}>{name}</div>
+              <div style={{ fontSize: 12, color: "rgba(240,235,226,0.65)", marginTop: 4, fontFamily: "'Inter', -apple-system, sans-serif" }}>{username || "@"}</div>
             </div>
           </div>
         </div>
@@ -382,13 +402,13 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
                 color: "inherit",
               }}
             >
-              <div style={{ fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 26, color: C.text, lineHeight: 1 }}>{s.val}</div>
-              <div style={{ fontSize: 9, color: C.muted, marginTop: 4, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "-apple-system,sans-serif" }}>{s.label}</div>
+              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: "bold", fontSize: 26, color: C.text, lineHeight: 1 }}>{s.val}</div>
+              <div style={{ fontSize: 9, color: C.muted, marginTop: 4, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'Inter', -apple-system, sans-serif" }}>{s.label}</div>
             </button>
           ))}
         </div>
 
-        <div style={{ padding: "10px 18px 0", fontSize: 12, color: C.muted, fontFamily: "-apple-system,sans-serif" }}>
+        <div style={{ padding: "10px 18px 0", fontSize: 12, color: C.muted, fontFamily: "'Inter', -apple-system, sans-serif" }}>
           {cities.slice(0, 3).join(" · ") || ""}
         </div>
 
@@ -405,7 +425,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
                 border: isFollowingUser ? `1px solid ${C.terracotta}` : "none",
                 background: isFollowingUser ? "transparent" : C.terracotta,
                 color: "#fff",
-                fontFamily: "-apple-system,sans-serif",
+                fontFamily: "'Inter', -apple-system, sans-serif",
                 fontSize: 14,
                 cursor: pendingFollow ? "default" : "pointer",
                 opacity: pendingFollow ? 0.7 : 1,
@@ -423,7 +443,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
                   border: `1px solid ${C.border}`,
                   background: "transparent",
                   color: C.text,
-                  fontFamily: "-apple-system,sans-serif",
+                  fontFamily: "'Inter', -apple-system, sans-serif",
                   fontSize: 14,
                   cursor: "pointer",
                 }}
@@ -437,7 +457,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
         {/* Restaurants in Common */}
         {user?.id && user.id !== clerkUserId && overlapRestaurants.length > 0 && (
           <div style={{ padding: "14px 18px 0" }}>
-            <div style={{ fontSize: 10, color: C.muted, fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
+            <div style={{ fontSize: 10, color: C.muted, fontFamily: "'Inter', -apple-system, sans-serif", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
               {overlapRestaurants.length} {overlapRestaurants.length === 1 ? "restaurant" : "restaurants"} in common
             </div>
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
@@ -458,7 +478,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
                     <div style={{ width: 100, height: 100, borderRadius: 12, overflow: "hidden", background: C.bg2, border: `1px solid ${C.border}` }}>
                       {imgSrc ? <img src={imgSrc} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
                     </div>
-                    <div style={{ fontSize: 11, color: C.text, fontFamily: "Georgia,serif", fontStyle: "italic", marginTop: 4, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: 11, color: C.text, fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", marginTop: 4, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {r.name}
                     </div>
                     <div style={{ fontSize: 9, color: C.muted, marginTop: 1 }}>
@@ -473,8 +493,8 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
 
         {!loading && !canViewContent ? (
           <div style={{ textAlign: "center", padding: "56px 20px", color: C.muted }}>
-            <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 24, color: C.text, marginBottom: 8 }}>This account is private</div>
-            <div style={{ fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Follow to see Loved, Watchlist, and Finds.</div>
+            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 24, color: C.text, marginBottom: 8 }}>This account is private</div>
+            <div style={{ fontSize: 13, fontFamily: "'Inter', -apple-system, sans-serif" }}>Follow to see Loved, Watchlist, and Finds.</div>
           </div>
         ) : (
           <>
@@ -491,7 +511,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
                     background: activeTab === t.key ? C.terracotta : "transparent",
                     color: activeTab === t.key ? "#fff" : C.muted,
                     fontSize: 13,
-                    fontFamily: "-apple-system,sans-serif",
+                    fontFamily: "'Inter', -apple-system, sans-serif",
                     cursor: "pointer",
                   }}
                 >
@@ -502,9 +522,9 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
 
             <div style={{ padding: "12px 18px 90px" }}>
               {loading ? (
-                <div style={{ color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Loading profile...</div>
+                <div style={{ color: C.muted, fontSize: 13, fontFamily: "'Inter', -apple-system, sans-serif" }}>Loading profile...</div>
               ) : activeItems.length === 0 ? (
-                <div style={{ color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>No restaurants yet.</div>
+                <div style={{ color: C.muted, fontSize: 13, fontFamily: "'Inter', -apple-system, sans-serif" }}>No restaurants yet.</div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {activeItems.map((r) => (
@@ -536,7 +556,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
             }}
           >
             <div style={{ padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>
+              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 18, color: C.text }}>
                 {showFollowersSheet ? "Followers" : showFollowingSheet ? "Following" : "Cities"}
               </div>
               <button type="button" onClick={closeSocialSheets} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}>
@@ -545,15 +565,15 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
             </div>
             <div style={{ overflowY: "auto", padding: "8px 18px 24px" }}>
               {sheetLoading ? (
-                <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Loading…</div>
+                <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "'Inter', -apple-system, sans-serif" }}>Loading…</div>
               ) : showCitiesSheet ? (
                 citiesSheetList.length === 0 ? (
-                  <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>No cities yet.</div>
+                  <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "'Inter', -apple-system, sans-serif" }}>No cities yet.</div>
                 ) : (
                   citiesSheetList.map((city) => (
                     <div
                       key={city}
-                      style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, color: C.text, fontFamily: "-apple-system,sans-serif", fontSize: 14 }}
+                      style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif", fontSize: 14 }}
                     >
                       {city}
                     </div>
@@ -561,7 +581,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
                 )
               ) : showFollowersSheet ? (
                 followersSheetUsers.length === 0 ? (
-                  <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>No users yet.</div>
+                  <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "'Inter', -apple-system, sans-serif" }}>No users yet.</div>
                 ) : (
                   followersSheetUsers.map((u) => (
                     <button
@@ -588,14 +608,14 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
                         {u.profile_photo ? <img src={u.profile_photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
                       </div>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ color: C.text, fontSize: 14, fontFamily: "-apple-system,sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.profile_name}</div>
-                        <div style={{ color: C.muted, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>{u.profile_username}</div>
+                        <div style={{ color: C.text, fontSize: 14, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.profile_name}</div>
+                        <div style={{ color: C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif" }}>{u.profile_username}</div>
                       </div>
                     </button>
                   ))
                 )
               ) : followingSheetUsers.length === 0 ? (
-                <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>No users yet.</div>
+                <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "'Inter', -apple-system, sans-serif" }}>No users yet.</div>
               ) : (
                 followingSheetUsers.map((u) => (
                   <button
@@ -622,8 +642,8 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
                       {u.profile_photo ? <img src={u.profile_photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
                     </div>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ color: C.text, fontSize: 14, fontFamily: "-apple-system,sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.profile_name}</div>
-                      <div style={{ color: C.muted, fontSize: 12, fontFamily: "-apple-system,sans-serif" }}>{u.profile_username}</div>
+                      <div style={{ color: C.text, fontSize: 14, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.profile_name}</div>
+                      <div style={{ color: C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif" }}>{u.profile_username}</div>
                     </div>
                   </button>
                 ))

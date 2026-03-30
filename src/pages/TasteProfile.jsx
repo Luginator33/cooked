@@ -3,14 +3,18 @@ import { useUser } from "@clerk/clerk-react";
 import { getTasteFingerprint, getCookedScore, getPeopleLikeYou, getWhoToFollow, getYoudLoveThis } from "../lib/neo4j";
 
 const C = {
-  bg: "#0f0c09",
-  bg2: "#1a1208",
-  bg3: "#2e1f0e",
-  border: "#2e1f0e",
-  text: "#f0ebe2",
-  muted: "#5a3a20",
-  dim: "#3d2a18",
-  terracotta: "#c4603a",
+  bg: "#0a0a0f",
+  bg2: "#12121a",
+  bg3: "#1a1a24",
+  border: "rgba(255,255,255,0.04)",
+  border2: "rgba(255,255,255,0.06)",
+  text: "#f5f0eb",
+  muted: "rgba(245,240,235,0.3)",
+  dim: "rgba(245,240,235,0.18)",
+  terracotta: "#ff9632",
+  terra2: "#e07850",
+  rose: "#c44060",
+  cream: "#f5f0eb",
   priceLight: "#8B5E3C",
 };
 
@@ -115,8 +119,8 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
     <>
       <style>{`
         @keyframes orb-pulse {
-          0%, 100% { transform: scale(1); box-shadow: 0 0 20px 6px rgba(196,96,58,0.4), 0 0 40px 12px rgba(196,96,58,0.15); }
-          50% { transform: scale(1.1); box-shadow: 0 0 28px 10px rgba(228,110,50,0.5), 0 0 56px 20px rgba(196,96,58,0.2); }
+          0%, 100% { transform: scale(1); box-shadow: 0 0 20px 6px rgba(255,150,50,0.4), 0 0 40px 12px rgba(255,150,50,0.15); }
+          50% { transform: scale(1.1); box-shadow: 0 0 28px 10px rgba(255,180,80,0.5), 0 0 56px 20px rgba(255,150,50,0.2); }
         }
         @keyframes orb-inner {
           0%, 100% { opacity: 0.6; transform: scale(1); }
@@ -146,7 +150,7 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
           width: 44px;
           height: 44px;
           border-radius: 50%;
-          background: radial-gradient(circle at 40% 38%, #ff9a4a 0%, #c4603a 45%, #8b2a12 100%);
+          background: radial-gradient(circle at 40% 38%, #ff9a4a 0%, #ff9632 45%, #8b2a12 100%);
           animation: orb-pulse 2.4s ease-in-out infinite;
         }
         .taste-flame .orb-inner {
@@ -158,7 +162,7 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
           width: 28px;
           height: 28px;
           border-radius: 50%;
-          background: radial-gradient(circle at 45% 42%, #ffe0b0 0%, #ffaa50 40%, #c4603a 100%);
+          background: radial-gradient(circle at 45% 42%, #ffe0b0 0%, #ffaa50 40%, #ff9632 100%);
           animation: orb-inner 2.4s ease-in-out infinite;
           animation-delay: 0.3s;
         }
@@ -172,70 +176,26 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
           zIndex: 999,
           overflowY: "auto",
           WebkitOverflowScrolling: "touch",
-          fontFamily: "DM Sans, sans-serif",
+          fontFamily: "'Inter', -apple-system, sans-serif",
           display: "flex",
           justifyContent: "center",
         }}
       >
         <div style={{ width: "100%", maxWidth: MAX_W, minHeight: "100%", position: "relative" }}>
           {/* Header */}
-          <div
-            style={{
-              position: "sticky",
-              top: 0,
-              background: C.bg,
-              padding: "14px 20px 12px",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              zIndex: 20,
-              boxSizing: "border-box",
-            }}
-          >
+          <div className="taste-header">
             <button
               type="button"
               onClick={onBack}
               aria-label="Back"
-              style={{
-                background: C.bg2,
-                border: "none",
-                color: C.text,
-                borderRadius: "50%",
-                width: 40,
-                height: 40,
-                cursor: "pointer",
-                fontSize: 18,
-                lineHeight: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
+              className="taste-back-btn"
             >
               ←
             </button>
-            <span
-              style={{
-                fontFamily: '"Cormorant Garamond", Georgia, serif',
-                fontStyle: "italic",
-                fontSize: 22,
-                color: C.text,
-                flex: 1,
-              }}
-            >
+            <span className="taste-title">
               Your Taste Profile
             </span>
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: 1,
-                background: C.terracotta,
-                opacity: 0.85,
-              }}
-            />
+            <div className="taste-header-line" />
           </div>
 
           {loading ? (
@@ -299,37 +259,16 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
           ) : (
             <div style={{ padding: "20px 20px 100px" }}>
               {/* Cooked Score hero */}
-              <div
-                style={{
-                  borderRadius: 22,
-                  padding: "28px 22px 26px",
-                  marginBottom: 28,
-                  background: "radial-gradient(ellipse 120% 100% at 50% 30%, #2a1810 0%, #120c08 45%, #0a0806 100%)",
-                  border: `1px solid ${C.border}`,
-                  display: "flex",
-                  alignItems: "stretch",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
-                }}
-              >
+              <div className="taste-score-card">
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      color: C.muted,
-                      fontSize: 10,
-                      fontFamily: '"DM Mono", ui-monospace, monospace',
-                      letterSpacing: "2px",
-                      marginBottom: 8,
-                    }}
-                  >
+                  <div className="taste-section-label">
                     COOKED SCORE
                   </div>
                   <div
                     style={{
                       fontSize: 96,
                       lineHeight: 0.95,
-                      fontFamily: '"Cormorant Garamond", Georgia, serif',
+                      fontFamily: "'Playfair Display', Georgia, serif",
                       fontStyle: "italic",
                       fontWeight: 600,
                       color: C.terracotta,
@@ -344,7 +283,7 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
                       fontSize: 13,
                       marginTop: 14,
                       lineHeight: 1.45,
-                      fontFamily: "DM Sans, sans-serif",
+                      fontFamily: "'Inter', -apple-system, sans-serif",
                     }}
                   >
                     Based on {fingerprint.totalLoves} loves across {fingerprint.topCities.length} cities
@@ -361,7 +300,7 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
               {/* You'd Love This */}
               {recommendations.length > 0 && (
                 <section style={{ marginBottom: 28 }}>
-                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, fontFamily: "'DM Mono', monospace", marginBottom: 10 }}>
+                  <div className="taste-section-label" style={{ marginBottom: 10 }}>
                     YOU'D LOVE THIS
                   </div>
                   <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch", marginLeft: -16, paddingLeft: 16, marginRight: -16, paddingRight: 16 }}>
@@ -375,21 +314,22 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
                         <div
                           key={r.id}
                           onClick={() => onOpenDetail?.(r)}
+                          className="taste-rec-card"
                           style={{ minWidth: 130, maxWidth: 130, flexShrink: 0, cursor: "pointer" }}
                         >
-                          <div style={{ width: 130, height: 130, borderRadius: 14, overflow: "hidden", background: C.bg2, border: `1px solid ${C.border}`, position: "relative" }}>
+                          <div className="taste-rec-img" style={{ width: 130, height: 130 }}>
                             {imgSrc ? <img src={imgSrc} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-                            <div style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,0.5)", borderRadius: 8, padding: "2px 6px", fontSize: 11, color: C.terracotta, fontFamily: "Georgia,serif", fontWeight: "bold" }}>
+                            <div className="taste-rec-badge">
                               {r.rating}
                             </div>
                           </div>
-                          <div style={{ fontSize: 12, color: C.text, fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", marginTop: 6, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <div className="taste-rec-name">
                             {r.name}
                           </div>
                           <div style={{ fontSize: 9, color: C.muted, marginTop: 2 }}>
                             {r.cuisine} · {r.city}
                           </div>
-                          <div style={{ fontSize: 9, color: C.terracotta, marginTop: 2, fontFamily: "'DM Mono', monospace" }}>
+                          <div style={{ fontSize: 9, color: C.terracotta, marginTop: 2, fontFamily: "'Inter', -apple-system, sans-serif" }}>
                             {r._weight} {r._weight === 1 ? "taste match" : "taste matches"}
                           </div>
                         </div>
@@ -402,15 +342,7 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
               {/* Top Cuisines */}
               {cuisinesFiltered.length > 0 && (
                 <section style={{ marginBottom: 28 }}>
-                  <div
-                    style={{
-                      color: C.muted,
-                      fontSize: 10,
-                      fontFamily: '"DM Mono", ui-monospace, monospace',
-                      letterSpacing: "2px",
-                      marginBottom: 14,
-                    }}
-                  >
+                  <div className="taste-section-label" style={{ marginBottom: 14 }}>
                     TOP CUISINES
                   </div>
                   {cuisinesFiltered.map(({ name, count }, i) => {
@@ -422,23 +354,13 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
                             {i === 0 ? <span style={{ fontSize: 13 }}>🥇</span> : null}
                             {name}
                           </span>
-                          <span style={{ color: C.muted, fontSize: 12, fontFamily: '"DM Mono", monospace' }}>{count}</span>
+                          <span style={{ color: C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif" }}>{count}</span>
                         </div>
-                        <div
-                          style={{
-                            background: C.border,
-                            borderRadius: 8,
-                            height: 8,
-                            overflow: "hidden",
-                          }}
-                        >
+                        <div className="taste-bar-track">
                           <div
+                            className="taste-bar-fill"
                             style={{
-                              height: "100%",
                               width: cuisineBarsReady ? `${pct}%` : "0%",
-                              borderRadius: 8,
-                              background: "linear-gradient(90deg, #c4603a 0%, #8a3a18 100%)",
-                              transition: "width 0.85s cubic-bezier(0.22, 1, 0.36, 1)",
                               transitionDelay: `${i * 0.07}s`,
                             }}
                           />
@@ -452,15 +374,7 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
               {/* Price range bar */}
               {priceDistribution.some((p) => p.count > 0) && priceTotal > 0 && (
                 <section style={{ marginBottom: 28 }}>
-                  <div
-                    style={{
-                      color: C.muted,
-                      fontSize: 10,
-                      fontFamily: '"DM Mono", ui-monospace, monospace',
-                      letterSpacing: "2px",
-                      marginBottom: 14,
-                    }}
-                  >
+                  <div className="taste-section-label" style={{ marginBottom: 14 }}>
                     PRICE RANGE
                   </div>
                   <div
@@ -499,7 +413,7 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
                         }}
                       >
                         <div style={{ fontSize: 12, fontWeight: 600, color: count > 0 ? priceColors[idx] : C.dim }}>{price}</div>
-                        <div style={{ fontSize: 10, color: C.muted, fontFamily: '"DM Mono", monospace', marginTop: 2 }}>{count}</div>
+                        <div style={{ fontSize: 10, color: C.muted, fontFamily: "'Inter', -apple-system, sans-serif", marginTop: 2 }}>{count}</div>
                       </div>
                     ))}
                   </div>
@@ -509,15 +423,7 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
               {/* Cities — horizontal scroll */}
               {topCitiesFiltered.length > 0 && (
                 <section style={{ marginBottom: 28 }}>
-                  <div
-                    style={{
-                      color: C.muted,
-                      fontSize: 10,
-                      fontFamily: '"DM Mono", ui-monospace, monospace',
-                      letterSpacing: "2px",
-                      marginBottom: 12,
-                    }}
-                  >
+                  <div className="taste-section-label" style={{ marginBottom: 12 }}>
                     YOUR CITIES
                   </div>
                   <div
@@ -535,40 +441,12 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
                     {topCitiesFiltered.map(({ name, count }) => (
                       <div
                         key={name}
-                        style={{
-                          flexShrink: 0,
-                          padding: "12px 18px",
-                          borderRadius: 999,
-                          border: `1px solid ${C.border}`,
-                          background: C.bg2,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
-                        }}
+                        className="taste-city-pill"
                       >
-                        <span
-                          style={{
-                            fontFamily: '"Cormorant Garamond", Georgia, serif',
-                            fontStyle: "italic",
-                            fontSize: 17,
-                            color: C.text,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <span className="taste-city-name">
                           {name}
                         </span>
-                        <span
-                          style={{
-                            background: C.terracotta,
-                            color: "#fff",
-                            borderRadius: 999,
-                            padding: "3px 9px",
-                            fontSize: 11,
-                            fontFamily: '"DM Mono", monospace',
-                            fontWeight: 600,
-                          }}
-                        >
+                        <span className="taste-city-count">
                           {count}
                         </span>
                       </div>
@@ -580,15 +458,7 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
               {/* Vibes word cloud */}
               {topTags.length > 0 && (
                 <section style={{ marginBottom: 28 }}>
-                  <div
-                    style={{
-                      color: C.muted,
-                      fontSize: 10,
-                      fontFamily: '"DM Mono", ui-monospace, monospace',
-                      letterSpacing: "2px",
-                      marginBottom: 12,
-                    }}
-                  >
+                  <div className="taste-section-label" style={{ marginBottom: 12 }}>
                     YOUR VIBES
                   </div>
                   <div
@@ -611,7 +481,7 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
                             fontSize,
                             fontWeight: topTier ? 600 : 400,
                             color: topTier ? C.terracotta : C.muted,
-                            fontFamily: "DM Sans, sans-serif",
+                            fontFamily: "'Inter', -apple-system, sans-serif",
                           }}
                         >
                           {tag}
@@ -625,15 +495,7 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
               {/* People like you */}
               {peopleLikeYou.length > 0 && (
                 <section style={{ marginBottom: 28 }}>
-                  <div
-                    style={{
-                      color: C.muted,
-                      fontSize: 10,
-                      fontFamily: '"DM Mono", ui-monospace, monospace',
-                      letterSpacing: "2px",
-                      marginBottom: 12,
-                    }}
-                  >
+                  <div className="taste-section-label" style={{ marginBottom: 12 }}>
                     PEOPLE LIKE YOU
                   </div>
                   {peopleLikeYou.map((person) => (
@@ -650,15 +512,7 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
               {/* Who to follow */}
               {whoToFollow.length > 0 && (
                 <section style={{ marginBottom: 28 }}>
-                  <div
-                    style={{
-                      color: C.muted,
-                      fontSize: 10,
-                      fontFamily: '"DM Mono", ui-monospace, monospace',
-                      letterSpacing: "2px",
-                      marginBottom: 12,
-                    }}
-                  >
+                  <div className="taste-section-label" style={{ marginBottom: 12 }}>
                     WHO TO FOLLOW
                   </div>
                   {whoToFollow.map((person) => (
@@ -685,52 +539,10 @@ function PersonRow({ person, subtitle, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      style={{
-        width: "100%",
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "12px 14px 12px 0",
-        marginBottom: 10,
-        background: C.bg2,
-        borderRadius: 14,
-        border: `1px solid ${C.border}`,
-        borderLeft: "none",
-        cursor: "pointer",
-        textAlign: "left",
-        position: "relative",
-        boxSizing: "border-box",
-      }}
+      className="taste-person-row"
     >
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: 3,
-          background: C.terracotta,
-          borderRadius: "14px 0 0 14px",
-        }}
-      />
-      <div
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: "50%",
-          marginLeft: 14,
-          flexShrink: 0,
-          background: `linear-gradient(145deg, ${C.bg3}, ${C.border})`,
-          border: `1px solid ${C.border}`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 13,
-          fontFamily: '"DM Mono", monospace',
-          fontWeight: 600,
-          color: C.text,
-        }}
-      >
+      <div className="tp-accent" />
+      <div className="tp-avatar">
         {initials}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -738,7 +550,7 @@ function PersonRow({ person, subtitle, onClick }) {
           style={{
             color: C.text,
             fontSize: 17,
-            fontFamily: '"Cormorant Garamond", Georgia, serif',
+            fontFamily: "'Playfair Display', Georgia, serif",
             fontStyle: "italic",
             fontWeight: 600,
             lineHeight: 1.2,
@@ -750,7 +562,7 @@ function PersonRow({ person, subtitle, onClick }) {
           style={{
             color: C.muted,
             fontSize: 10,
-            fontFamily: '"DM Mono", ui-monospace, monospace',
+            fontFamily: "'Inter', -apple-system, sans-serif",
             letterSpacing: "0.06em",
             marginTop: 4,
           }}

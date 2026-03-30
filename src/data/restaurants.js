@@ -11,6 +11,9 @@ export const CITIES = [
   "Tel Aviv", "Hong Kong", "Bangkok", "Bali", "Singapore", "Mumbai", "Toronto",
   "Canouan Island", "Liberia",
   "UK",
+  "Beirut", "San Juan", "Frankfurt", "Madrid", "Mallorca", "Sardinia", "Taormina",
+  "Kalahari", "Nairobi", "South Africa", "Los Cabos", "Riyadh",
+  "Montreal", "Vancouver", "Whistler",
 ];
 
 export const CITY_GROUPS = {
@@ -74,8 +77,23 @@ export const CITY_GROUPS = {
   "Canouan Island": ["Canouan Island","St Vincent & the Grenadines"],
   "Liberia": ["Liberia","Guanacaste"],
   "UK": ["UK","Chipping Norton","Somerset","Brighton","Berkshire","Sandbanks"],
-  "Dallas": "United States",
-  "Dubai": "International",
+  "Dallas": ["Dallas","Deep Ellum","Uptown Dallas","Bishop Arts","Oak Lawn","Knox-Henderson"],
+  "Dubai": ["Dubai","Downtown Dubai","DIFC","Jumeirah","Business Bay","Al Quoz","Dubai Marina","Palm Jumeirah"],
+  "Beirut": ["Beirut","Gemmayzeh","Mar Mikhael","Hamra","Achrafieh","Downtown Beirut"],
+  "San Juan": ["San Juan","Old San Juan","Condado","Santurce","Isla Verde"],
+  "Frankfurt": ["Frankfurt","Sachsenhausen","Nordend","Bornheim","Westend","Innenstadt"],
+  "Madrid": ["Madrid","Malasaña","Chueca","La Latina","Salamanca","Lavapiés","Sol","Retiro"],
+  "Mallorca": ["Mallorca","Palma","Deià","Sóller","Valldemossa","Port de Pollença"],
+  "Sardinia": ["Sardinia","Cagliari","Porto Cervo","Alghero","Olbia","Costa Smeralda"],
+  "Taormina": ["Taormina","Giardini Naxos","Castelmola"],
+  "Kalahari": ["Kalahari"],
+  "Nairobi": ["Nairobi","Westlands","Karen","Kilimani","Lavington"],
+  "South Africa": ["South Africa","Cape Town","Johannesburg","Franschhoek","Stellenbosch","Constantia"],
+  "Los Cabos": ["Los Cabos","Cabo San Lucas","San José del Cabo","Corridor"],
+  "Riyadh": ["Riyadh","Al Olaya","Al Malaz","Diplomatic Quarter"],
+  "Montreal": ["Montreal","Plateau","Mile End","Old Montreal","Griffintown","Little Italy"],
+  "Vancouver": ["Vancouver","Gastown","Yaletown","Kitsilano","Main Street","Chinatown","West End"],
+  "Whistler": ["Whistler","Whistler Village","Creekside"],
 };
 
 export const CITY_COORDS = {
@@ -141,7 +159,70 @@ export const CITY_COORDS = {
   "Canouan Island": { lat: 12.7167, lng: -61.3333 },
   "Liberia": { lat: 10.6340, lng: -85.4377 },
   "UK": { lat: 51.5074, lng: -0.1278 },
+  "Beirut": { lat: 33.8938, lng: 35.5018 },
+  "San Juan": { lat: 18.4655, lng: -66.1057 },
+  "Frankfurt": { lat: 50.1109, lng: 8.6821 },
+  "Madrid": { lat: 40.4168, lng: -3.7038 },
+  "Mallorca": { lat: 39.6953, lng: 3.0176 },
+  "Sardinia": { lat: 39.2238, lng: 9.1217 },
+  "Taormina": { lat: 37.8516, lng: 15.2881 },
+  "Kalahari": { lat: -25.5920, lng: 20.6518 },
+  "Nairobi": { lat: -1.2921, lng: 36.8219 },
+  "South Africa": { lat: -33.9249, lng: 18.4241 },
+  "Los Cabos": { lat: 22.8905, lng: -109.9167 },
+  "Riyadh": { lat: 24.7136, lng: 46.6753 },
+  "Montreal": { lat: 45.5017, lng: -73.5673 },
+  "Vancouver": { lat: 49.2827, lng: -123.1207 },
+  "Whistler": { lat: 50.1163, lng: -122.9574 },
 };
+
+// ---------------------------------------------------------------------------
+// Canonical city regions — single source of truth for the entire app.
+// Every city picker, filter, and follow-cities screen should use this.
+// ---------------------------------------------------------------------------
+export const CITY_REGIONS = [
+  { region: "United States", cities: ["Aspen","Atlanta","Austin","Boise","Chicago","Dallas","Denver","Detroit","Las Vegas","Los Angeles","Malibu","Maui","Miami","Napa Valley","Nashville","New Orleans","New York","Ojai","Portland","Sacramento","San Diego","San Francisco","Santa Barbara","Savannah","Scottsdale","Seattle","St. Louis","Vail","Ventura County"] },
+  { region: "Europe", cities: ["Amsterdam","Barcelona","Berlin","Cannes","Copenhagen","Frankfurt","Ibiza","Istanbul","Lisbon","London","Madrid","Mallorca","Malta","Munich","Mykonos","Paris","Prague","Rome","Sardinia","Stockholm","Taormina","UK","Vienna"] },
+  { region: "Asia", cities: ["Bali","Bangkok","Hong Kong","Mumbai","Seoul","Singapore","Tokyo"] },
+  { region: "Mexico & Caribbean", cities: ["Canouan Island","Guadalajara","Los Cabos","Mexico City","Playa del Carmen","San Juan"] },
+  { region: "Africa", cities: ["Kalahari","Liberia","Nairobi","South Africa"] },
+  { region: "Middle East", cities: ["Beirut","Dubai","Riyadh","Tel Aviv"] },
+  { region: "Canada", cities: ["Montreal","Toronto","Vancouver","Whistler"] },
+];
+
+export const CITY_FLAGS = {
+  // United States
+  "Aspen":"🇺🇸","Atlanta":"🇺🇸","Austin":"🇺🇸","Boise":"🇺🇸","Chicago":"🇺🇸","Dallas":"🇺🇸","Denver":"🇺🇸","Detroit":"🇺🇸","Las Vegas":"🇺🇸","Los Angeles":"🇺🇸","Malibu":"🇺🇸","Maui":"🇺🇸","Miami":"🇺🇸","Napa Valley":"🇺🇸","Nashville":"🇺🇸","New Orleans":"🇺🇸","New York":"🇺🇸","Ojai":"🇺🇸","Portland":"🇺🇸","Sacramento":"🇺🇸","San Diego":"🇺🇸","San Francisco":"🇺🇸","Santa Barbara":"🇺🇸","Savannah":"🇺🇸","Scottsdale":"🇺🇸","Seattle":"🇺🇸","St. Louis":"🇺🇸","Vail":"🇺🇸","Ventura County":"🇺🇸",
+  // Europe
+  "Amsterdam":"🇳🇱","Barcelona":"🇪🇸","Berlin":"🇩🇪","Cannes":"🇫🇷","Copenhagen":"🇩🇰","Frankfurt":"🇩🇪","Ibiza":"🇪🇸","Istanbul":"🇹🇷","Lisbon":"🇵🇹","London":"🇬🇧","Madrid":"🇪🇸","Mallorca":"🇪🇸","Malta":"🇲🇹","Munich":"🇩🇪","Mykonos":"🇬🇷","Paris":"🇫🇷","Prague":"🇨🇿","Rome":"🇮🇹","Sardinia":"🇮🇹","Stockholm":"🇸🇪","Taormina":"🇮🇹","UK":"🇬🇧","Vienna":"🇦🇹",
+  // Asia
+  "Bali":"🇮🇩","Bangkok":"🇹🇭","Hong Kong":"🇨🇳","Mumbai":"🇮🇳","Seoul":"🇰🇷","Singapore":"🇸🇬","Tokyo":"🇯🇵",
+  // Mexico & Caribbean
+  "Canouan Island":"🇻🇨","Guadalajara":"🇲🇽","Los Cabos":"🇲🇽","Mexico City":"🇲🇽","Playa del Carmen":"🇲🇽","San Juan":"🇵🇷",
+  // Africa
+  "Kalahari":"🇿🇦","Liberia":"🇱🇷","Nairobi":"🇰🇪","South Africa":"🇿🇦",
+  // Middle East
+  "Beirut":"🇱🇧","Dubai":"🇦🇪","Riyadh":"🇸🇦","Tel Aviv":"🇮🇱",
+  // Canada
+  "Montreal":"🇨🇦","Toronto":"🇨🇦","Vancouver":"🇨🇦","Whistler":"🇨🇦",
+};
+
+/**
+ * Sort cities within each region: user's followed cities first, then alphabetical.
+ * Returns a new array of { region, cities } with the same structure.
+ */
+export function sortCityRegions(cityRegions, followedCities = []) {
+  const followed = new Set(followedCities);
+  return cityRegions.map(({ region, cities }) => ({
+    region,
+    cities: [...cities].sort((a, b) => {
+      const aF = followed.has(a) ? 0 : 1;
+      const bF = followed.has(b) ? 0 : 1;
+      if (aF !== bF) return aF - bF;
+      return a.localeCompare(b);
+    }),
+  }));
+}
 
 // ---------------------------------------------------------------------------
 // City normalization — maps Google Places variants & neighborhoods to

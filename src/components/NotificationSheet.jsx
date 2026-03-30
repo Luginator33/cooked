@@ -5,15 +5,19 @@ import { followUser, supabase } from "../lib/supabase";
 import { syncFollow } from "../lib/neo4j";
 
 const C = {
-  bg:        "#0f0c09",
-  bg2:       "#1a1208",
-  bg3:       "#2e1f0e",
-  border:    "#2e1f0e",
-  text:      "#f0ebe2",
-  muted:     "#5a3a20",
-  dim:       "#3d2a18",
-  terracotta:"#c4603a",
-  cream:     "#faf6f0",
+  bg:        "#0a0a0f",
+  bg2:       "#12121a",
+  bg3:       "#1a1a24",
+  border:    "rgba(255,255,255,0.04)",
+  border2:   "rgba(255,255,255,0.06)",
+  text:      "#f5f0eb",
+  muted:     "rgba(245,240,235,0.3)",
+  dim:       "rgba(245,240,235,0.18)",
+  terracotta:"#ff9632",
+  terra2:    "#e07850",
+  rose:      "#c44060",
+  cream:     "#f5f0eb",
+  card:      "rgba(255,220,180,0.02)",
 };
 
 /* ── helpers ──────────────────────────────────────────── */
@@ -146,10 +150,7 @@ function buildGroupedMessage(row) {
 function ProfilePic({ src, size = 44 }) {
   const [err, setErr] = useState(false);
   return (
-    <div style={{
-      width: size, height: size, borderRadius: "50%", overflow: "hidden",
-      background: C.bg3, flexShrink: 0,
-    }}>
+    <div className="av-circle" style={{ width: size, height: size }}>
       {src && !err ? (
         <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setErr(true)} />
       ) : (
@@ -195,22 +196,16 @@ function FollowBackButton({ userId, onFollowBack }) {
 
   if (done) {
     return (
-      <button type="button" disabled style={{
-        height: 30, padding: "0 14px", borderRadius: 8, border: `1px solid ${C.border}`,
-        background: "transparent", color: C.muted, fontSize: 12, fontWeight: 600,
-        fontFamily: "-apple-system,sans-serif", cursor: "default", flexShrink: 0,
-      }}>
+      <button type="button" className="follow-btn done" disabled>
         Following
       </button>
     );
   }
 
   return (
-    <button type="button" onClick={handleClick} disabled={loading} style={{
-      height: 30, padding: "0 14px", borderRadius: 8, border: "none",
-      background: C.terracotta, color: "#fff", fontSize: 12, fontWeight: 600,
-      fontFamily: "-apple-system,sans-serif", cursor: loading ? "wait" : "pointer",
-      flexShrink: 0, opacity: loading ? 0.6 : 1,
+    <button type="button" className="follow-btn primary" onClick={handleClick} disabled={loading} style={{
+      cursor: loading ? "wait" : "pointer",
+      opacity: loading ? 0.6 : 1,
     }}>
       {loading ? "..." : "Follow Back"}
     </button>
@@ -271,49 +266,36 @@ export default function NotificationSheet({
 
   return createPortal(
     <div
+      className="modal-backdrop"
       onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 9999,
-        background: "rgba(0,0,0,0.55)",
-        display: "flex", flexDirection: "column", justifyContent: "flex-end",
-      }}
+      style={{ zIndex: 9999 }}
     >
       <div
+        className="sheet"
         onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "100%", maxWidth: 480, margin: "0 auto",
-          background: C.bg2, borderRadius: "20px 20px 0 0",
-          maxHeight: "80vh", display: "flex", flexDirection: "column",
-          overflow: "hidden",
-        }}
       >
         {/* Header */}
-        <div style={{
-          padding: "16px 18px 12px",
-          borderBottom: `1px solid ${C.border}`,
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          flexShrink: 0,
-        }}>
-          <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>
+        <div className="sheet-header">
+          <div className="sheet-header-title">
             Notifications
           </div>
           <button
             type="button"
+            className="sheet-close"
             onClick={onClose}
-            style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}
           >
             &times;
           </button>
         </div>
 
         {/* Body */}
-        <div style={{ overflowY: "auto", flex: 1, WebkitOverflowScrolling: "touch" }}>
+        <div className="sheet-body">
           {loading ? (
-            <div style={{ padding: "32px 0", textAlign: "center", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>
+            <div style={{ padding: "32px 0", textAlign: "center", color: C.muted, fontSize: 13, fontFamily: "'Inter', -apple-system, sans-serif" }}>
               Loading...
             </div>
           ) : grouped.length === 0 ? (
-            <div style={{ padding: "48px 0", textAlign: "center", color: C.muted, fontSize: 14, fontFamily: "-apple-system,sans-serif" }}>
+            <div style={{ padding: "48px 0", textAlign: "center", color: C.muted, fontSize: 14, fontFamily: "'Inter', -apple-system, sans-serif" }}>
               No notifications yet
             </div>
           ) : (
@@ -321,12 +303,7 @@ export default function NotificationSheet({
               // Section header
               if (item._sectionHeader) {
                 return (
-                  <div key={`section-${item._sectionHeader}`} style={{
-                    padding: "14px 16px 6px",
-                    fontSize: 14, fontWeight: 700, color: C.muted,
-                    fontFamily: "Georgia,serif", fontStyle: "italic",
-                    letterSpacing: 0.3,
-                  }}>
+                  <div key={`section-${item._sectionHeader}`} className="notif-section-header">
                     {item._sectionHeader}
                   </div>
                 );
@@ -357,6 +334,7 @@ export default function NotificationSheet({
               return (
                 <div
                   key={item.id ?? `${item.created_at}-${item.type}-${idx}`}
+                  className="notif-item"
                   onClick={() => {
                     if (isFollow && item.from_user_id) {
                       onClose(); onViewUser?.(item.from_user_id);
@@ -366,18 +344,10 @@ export default function NotificationSheet({
                       onClose(); onViewUser?.(item.from_user_id);
                     }
                   }}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: "10px 16px", cursor: "pointer",
-                    position: "relative",
-                  }}
                 >
                   {/* Unread dot */}
                   {unread && (
-                    <div style={{
-                      position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)",
-                      width: 6, height: 6, borderRadius: "50%", background: C.terracotta,
-                    }} />
+                    <div className="notif-dot" />
                   )}
 
                   {/* Profile pic */}
@@ -386,7 +356,7 @@ export default function NotificationSheet({
                   {/* Text content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
-                      fontSize: 13, color: C.text, fontFamily: "-apple-system,sans-serif",
+                      fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif",
                       lineHeight: 1.4, overflow: "hidden", display: "-webkit-box",
                       WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
                     }}>
@@ -398,11 +368,7 @@ export default function NotificationSheet({
                   {/* Right side: Follow Back / Following button OR restaurant thumbnail */}
                   {isFollow ? (
                     alreadyFollowing ? (
-                      <button type="button" disabled style={{
-                        height: 30, padding: "0 14px", borderRadius: 8, border: `1px solid ${C.border}`,
-                        background: "transparent", color: C.muted, fontSize: 12, fontWeight: 600,
-                        fontFamily: "-apple-system,sans-serif", cursor: "default", flexShrink: 0,
-                      }}>
+                      <button type="button" className="follow-btn done" disabled>
                         Following
                       </button>
                     ) : (

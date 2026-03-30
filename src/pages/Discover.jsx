@@ -3,20 +3,10 @@ import { createPortal } from "react-dom";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { SignInButton, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
-import { RESTAURANTS, ALL_TAGS, normalizeCity } from "../data/restaurants";
+import { RESTAURANTS, ALL_TAGS, normalizeCity, CITY_REGIONS as CANONICAL_CITY_REGIONS, sortCityRegions } from "../data/restaurants";
 
-/** All cities present in the restaurant database — single source for filters across tabs */
-const BASE_CITY_REGIONS = [
-  { region: "United States", cities: ["Los Angeles","New York","Ventura County","Malibu","Ojai","Santa Barbara","Chicago","Miami","Las Vegas","San Francisco","San Diego","Austin","Nashville","New Orleans","Maui","Napa Valley","Sacramento","Portland","Seattle","Denver","Vail","Aspen","Dallas","Atlanta","St. Louis","Detroit","Boise","Savannah","Scottsdale"] },
-  { region: "Mexico & Caribbean", cities: ["Mexico City","Playa del Carmen","Guadalajara","Canouan Island","Liberia","San Juan"] },
-  { region: "Europe", cities: ["London","UK","Paris","Barcelona","Amsterdam","Copenhagen","Lisbon","Rome","Berlin","Istanbul","Munich","Prague","Stockholm","Vienna","Ibiza","Mykonos","Malta","Cannes"] },
-  { region: "Middle East", cities: ["Dubai","Tel Aviv"] },
-  { region: "Asia", cities: ["Tokyo","Seoul","Hong Kong","Bangkok","Bali","Singapore","Mumbai"] },
-  { region: "Canada", cities: ["Toronto"] },
-  { region: "Africa", cities: [] },
-  { region: "South America", cities: [] },
-  { region: "Oceania", cities: [] },
-];
+/** All cities — imported from restaurants.js single source of truth */
+const BASE_CITY_REGIONS = CANONICAL_CITY_REGIONS;
 
 // Auto-classify a city into a region based on keywords/known patterns
 const REGION_HINTS = {
@@ -26,7 +16,7 @@ const REGION_HINTS = {
   "Middle East": ["UAE","Saudi","Qatar","Bahrain","Oman","Kuwait","Jordan","Lebanon","Israel","Egypt","Morocco","Tunisia"],
   "Asia": ["Japan","Korea","China","Taiwan","Thailand","Vietnam","Indonesia","Philippines","Malaysia","India","Sri Lanka","Nepal","Cambodia","Laos","Myanmar"],
   "Canada": ["Canada","Vancouver","Montreal","Calgary","Ottawa","Quebec","Winnipeg","Edmonton","Halifax"],
-  "Africa": ["South Africa","Kenya","Nigeria","Ghana","Tanzania","Ethiopia","Cape Town","Johannesburg","Nairobi","Lagos","Accra","Marrakech"],
+  "Africa": ["South Africa","Kenya","Nigeria","Ghana","Tanzania","Ethiopia","Cape Town","Johannesburg","Nairobi","Lagos","Accra","Marrakech","Kalahari","Liberia"],
   "South America": ["Brazil","Argentina","Colombia","Peru","Chile","Ecuador","Uruguay","Bolivia","São Paulo","Rio","Buenos Aires","Bogotá","Lima","Santiago","Medellín","Cartagena"],
   "Oceania": ["Australia","New Zealand","Sydney","Melbourne","Auckland","Brisbane","Perth","Fiji"],
 };
@@ -73,25 +63,8 @@ let CITY_REGIONS = BASE_CITY_REGIONS.filter(r => r.cities.length > 0);
 let ALL_CITIES = [...new Set(CITY_REGIONS.flatMap(r => r.cities))];
 
 function getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults, cityRegions) {
-  const cityScores = {};
-  // Score from loved restaurants
-  (lovedRestaurants || []).forEach(r => {
-    if (r.city) cityScores[r.city] = (cityScores[r.city] || 0) + 3;
-  });
-  // Score from followed cities
-  (followedCities || []).forEach(c => {
-    cityScores[c] = (cityScores[c] || 0) + 5;
-  });
-  // Score from heat loved
-  const heatLoved = heatResults?.loved || [];
-  heatLoved.forEach(id => {
-    const r = RESTAURANTS.find(x => x.id === id || x.id === Number(id));
-    if (r?.city) cityScores[r.city] = (cityScores[r.city] || 0) + 1;
-  });
-  return (cityRegions || CITY_REGIONS).map(region => ({
-    ...region,
-    cities: [...region.cities].sort((a, b) => (cityScores[b] || 0) - (cityScores[a] || 0)),
-  }));
+  // Sort: followed cities first within each region, then alphabetical
+  return sortCityRegions(cityRegions || CITY_REGIONS, followedCities || []);
 }
 import ChatBot from "../components/ChatBot";
 import Profile from "./Profile";
@@ -312,46 +285,69 @@ const CITY_COORDS = {
 };
 
 const C = {
-  bg:        "#0f0c09",
-  bg2:       "#1a1208",
-  bg3:       "#2e1f0e",
-  border:    "#2e1f0e",
-  border2:   "#1e1208",
-  text:      "#f0ebe2",
-  muted:     "#5a3a20",
-  dim:       "#3d2a18",
-  terracotta:"#c4603a",
-  cream:     "#faf6f0",
-  card:      "#1a1208",
+  bg:        "#0a0a0f",
+  bg2:       "#12121a",
+  bg3:       "#1a1a24",
+  border:    "rgba(255,255,255,0.04)",
+  border2:   "rgba(255,255,255,0.06)",
+  text:      "#f5f0eb",
+  muted:     "rgba(245,240,235,0.3)",
+  dim:       "rgba(245,240,235,0.18)",
+  terracotta:"#ff9632",
+  terra2:    "#e07850",
+  rose:      "#c44060",
+  cream:     "#f5f0eb",
+  card:      "rgba(255,220,180,0.02)",
 };
 
 const FLAME_PATH = "M91.583336,1 C94.858902,4.038088 94.189636,6.998662 92.316727,10.376994 C86.895416,20.155888 85.394997,30.387159 91.844238,40.137669 C94.758018,44.542976 99.042587,48.235645 103.260361,51.543896 C111.956841,58.365055 117.641266,67.217140 120.816948,77.480293 C122.970314,84.439537 123.615982,91.865288 124.990936,99.383125 C125.884773,97.697456 127.039993,95.775894 127.944977,93.742935 C128.933945,91.521332 129.326263,88.947304 130.661072,86.992996 C131.803146,85.320847 133.925720,83.260689 135.585968,83.285553 C137.393021,83.312607 140.050140,85.157921 140.808014,86.882332 C144.849472,96.078102 149.743393,104.919754 151.119156,115.202736 C152.871628,128.301437 152.701294,141.175125 147.925400,153.556519 C139.636047,175.046417 124.719681,190.729568 102.956436,198.024307 C93.917976,201.053894 83.325455,199.328156 73.460648,200.051529 C66.457748,200.565033 60.038956,198.566650 54.104954,195.470612 C35.696693,185.866180 23.564285,170.592270 20.351917,150.306000 C17.271206,130.851151 16.262779,110.901123 26.722290,92.532166 C29.376348,87.871117 31.035656,82.643089 33.696789,77.986916 C34.711685,76.211151 37.195370,74.463982 39.125217,74.326584 C40.279823,74.244370 42.065300,77.132980 42.850647,78.989388 C44.449970,82.769890 45.564117,86.755646 47.322094,90.502388 C43.896488,53.348236 54.672562,22.806646 86.900139,1.333229 Z";
 
-const FlameIcon = ({ size = 18, color = C.terracotta, filled = true }) => (
-  <svg
-    width={size}
-    height={size * 1.2}
-    viewBox="0 0 167 200"
-    fill={filled ? color : "none"}
-    stroke={filled ? "none" : color}
-    strokeWidth={filled ? 0 : 12}
-    strokeLinecap="round"
-  >
-    <path d={FLAME_PATH} />
-  </svg>
-);
+let _flameIdCounter = 0;
+const FlameIcon = ({ size = 18, color = C.terracotta, filled = true }) => {
+  const id = useMemo(() => `fg${_flameIdCounter++}`, []);
+  if (!filled) {
+    return (
+      <svg width={size} height={size * 1.2} viewBox="0 0 167 200" fill="none" stroke={color} strokeWidth={12} strokeLinecap="round">
+        <path d={FLAME_PATH} />
+      </svg>
+    );
+  }
+  return (
+    <svg width={size} height={size * 1.2} viewBox="0 0 167 200" style={{ filter: "drop-shadow(0 2px 6px rgba(255,120,40,0.35)) drop-shadow(0 0 10px rgba(255,150,50,0.15))" }}>
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="0.3" y2="1">
+          <stop offset="0%" stopColor="#ffcc44" />
+          <stop offset="30%" stopColor="#ffaa30" />
+          <stop offset="60%" stopColor="#f07830" />
+          <stop offset="100%" stopColor="#c44828" />
+        </linearGradient>
+      </defs>
+      <path d={FLAME_PATH} fill={`url(#${id})`} />
+    </svg>
+  );
+};
 
-const HalfFlameIcon = ({ size = 18, color = C.terracotta }) => (
-  <svg width={size} height={size * 1.2} viewBox="0 0 167 200">
-    <defs>
-      <clipPath id="halfFlame">
-        <rect x="0" y="0" width="84" height="200" />
-      </clipPath>
-    </defs>
-    <path d={FLAME_PATH} fill="none" stroke={C.bg3} strokeWidth={8} />
-    <path d={FLAME_PATH} fill={color} clipPath="url(#halfFlame)" />
-  </svg>
-);
+const HalfFlameIcon = ({ size = 18, color = C.terracotta }) => {
+  const id = useMemo(() => `hfg${_flameIdCounter++}`, []);
+  const clipId = useMemo(() => `hfc${_flameIdCounter++}`, []);
+  return (
+    <svg width={size} height={size * 1.2} viewBox="0 0 167 200" style={{ filter: "drop-shadow(0 1px 4px rgba(255,120,40,0.2))" }}>
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="0.3" y2="1">
+          <stop offset="0%" stopColor="#ffcc44" />
+          <stop offset="30%" stopColor="#ffaa30" />
+          <stop offset="60%" stopColor="#f07830" />
+          <stop offset="100%" stopColor="#c44828" />
+        </linearGradient>
+        <clipPath id={clipId}>
+          <rect x="0" y="0" width="84" height="200" />
+        </clipPath>
+      </defs>
+      <path d={FLAME_PATH} fill="none" stroke="rgba(245,240,235,0.15)" strokeWidth={8} />
+      <path d={FLAME_PATH} fill={`url(#${id})`} clipPath={`url(#${clipId})`} />
+    </svg>
+  );
+};
 
 const FlameRating = ({ count, score, total = 5, size = 11 }) => {
   const value = typeof count === "number" ? count : (score || 0);
@@ -362,7 +358,7 @@ const FlameRating = ({ count, score, total = 5, size = 11 }) => {
       {Array.from({ length: total }, (_, i) => {
         if (i < fullFlames) return <FlameIcon key={i} size={size} color={C.terracotta} filled />;
         if (i === fullFlames && hasHalf) return <HalfFlameIcon key={i} size={size} color={C.terracotta} />;
-        return <FlameIcon key={i} size={size} color={C.bg3} filled />;
+        return <FlameIcon key={i} size={size} color="rgba(245,240,235,0.15)" filled={false} />;
       })}
     </div>
   );
@@ -371,7 +367,7 @@ const FlameRating = ({ count, score, total = 5, size = 11 }) => {
 const Wordmark = ({ size = 22 }) => (
   <div
     style={{
-      fontFamily: "Georgia,serif",
+      fontFamily: "'Playfair Display', Georgia, serif",
       fontSize: size,
       fontWeight: 700,
       fontStyle: "italic",
@@ -518,12 +514,100 @@ function notificationMessage(row) {
     case "friend_visited_city": return `${userName} loved ${restName} in a city you follow`;
     case "restaurant_trending": return `${restName} is trending right now`;
     default:
-      // Fallback: try to construct something useful from available fields
       if (row?.restaurant_name && row?._fromUser?.profile_name) return `${userName} · ${restName}`;
       if (row?.restaurant_name) return restName;
       if (row?._fromUser?.profile_name) return `Activity from ${userName}`;
       return "New activity";
   }
+}
+
+/** Group notifications by time period like Instagram */
+function getNotifTimeGroup(iso) {
+  if (!iso) return "Earlier";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Earlier";
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const weekStart = new Date(todayStart); weekStart.setDate(weekStart.getDate() - 7);
+  if (d >= todayStart) return "Today";
+  if (d >= yesterdayStart) return "Yesterday";
+  if (d >= weekStart) return "This Week";
+  return "Earlier";
+}
+
+/** Group same restaurant+type notifications within the same time group */
+function groupNotifList(notifications) {
+  const TIME_ORDER = ["Today", "Yesterday", "This Week", "Earlier"];
+  const grouped = {};
+  for (const n of notifications) {
+    const tg = getNotifTimeGroup(n.created_at);
+    if (!grouped[tg]) grouped[tg] = [];
+    // Group restaurant-related notifs by restaurant+type
+    const canGroup = n.restaurant_id && (n.type === "friend_loved_your_watchlist" || n.type === "friend_new_find" || n.type === "friend_visited_city");
+    if (canGroup) {
+      const key = `${n.type}:${n.restaurant_id}`;
+      const existing = grouped[tg].find(g => g._groupKey === key);
+      if (existing) {
+        existing._users.push(n._fromUser);
+        existing._allNotifs.push(n);
+        if (!n.read) existing.read = false;
+        continue;
+      }
+    }
+    grouped[tg].push({
+      ...n,
+      _groupKey: canGroup ? `${n.type}:${n.restaurant_id}` : null,
+      _users: n._fromUser ? [n._fromUser] : [],
+      _allNotifs: [n],
+    });
+  }
+  const result = [];
+  for (const tg of TIME_ORDER) {
+    if (grouped[tg]?.length > 0) {
+      result.push({ _sectionHeader: tg });
+      result.push(...grouped[tg]);
+    }
+  }
+  return result;
+}
+
+/** Build grouped message text with bold name */
+function buildNotifMessage(row) {
+  const users = (row._users || []).filter(Boolean);
+  const restName = row.restaurant_name || "a restaurant";
+  if (users.length === 0) {
+    if (row.type === "restaurant_trending") return { bold: restName, text: `${restName} is trending right now` };
+    return { bold: "", text: notificationMessage(row) };
+  }
+  const firstName = users[0]?.profile_name || "Someone";
+  const othersCount = users.length - 1;
+  switch (row.type) {
+    case "followed_you":
+      return { bold: firstName, text: `${firstName} started following you.` };
+    case "friend_loved_your_watchlist": {
+      if (othersCount === 0) return { bold: firstName, text: `${firstName} loved ${restName} — it's on your watchlist!` };
+      if (othersCount === 1) return { bold: firstName, text: `${firstName} and ${users[1]?.profile_name || "someone"} loved ${restName}` };
+      return { bold: firstName, text: `${firstName} and ${othersCount} others loved ${restName}` };
+    }
+    case "friend_new_find": {
+      if (othersCount === 0) return { bold: firstName, text: `${firstName} added a new Find: ${restName}` };
+      return { bold: firstName, text: `${firstName} and ${othersCount} other${othersCount > 1 ? "s" : ""} added ${restName}` };
+    }
+    case "friend_visited_city": {
+      if (othersCount === 0) return { bold: firstName, text: `${firstName} loved ${restName} in a city you follow` };
+      return { bold: firstName, text: `${firstName} and ${othersCount} other${othersCount > 1 ? "s" : ""} loved ${restName} in a city you follow` };
+    }
+    default:
+      return { bold: firstName, text: notificationMessage(row) };
+  }
+}
+
+/** Render text with first bold name highlighted */
+function renderNotifBoldText({ text, bold }) {
+  if (!bold || !text.includes(bold)) return <span>{text}</span>;
+  const idx = text.indexOf(bold);
+  return <span>{text.slice(0, idx)}<span style={{ fontWeight: 700, color: "#f5f0eb" }}>{bold}</span>{text.slice(idx + bold.length)}</span>;
 }
 
 // Restaurant cuisine → display category (Tier 2 dropdown when Restaurants selected)
@@ -600,62 +684,48 @@ function RestCard({ r, loved, watched, onLove, onWatch, onShare, onOpenDetail, o
     return () => observer.disconnect();
   }, [r.id, r.img, photoCacheVersion, getCachedPhotoForId, usingSupabasePhotoCache, onPhotoFetched]);
 
+  const score = flameScore != null ? flameScore : Math.min(5, r.googleRating || (r.rating ? r.rating / 2 : 3));
+  const litCount = Math.round(score);
+  const dimCount = 5 - litCount;
+
   return (
-    <div ref={cardRef} style={{ margin:"0 16px 16px", borderRadius:18, overflow:"hidden", background:C.bg2, border:`0.5px solid ${C.border}`, cursor:"pointer" }} onClick={() => onOpenDetail?.(r)}>
-      <div style={{ position:"relative", height:150, overflow:"hidden" }}>
-        <img src={imgSrc} alt={r.name} style={{ width:"100%", height:"100%", objectFit:"cover", transition:"transform 0.4s" }} />
-        <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, transparent 50%, rgba(30,18,8,0.7) 100%)" }} />
+    <div ref={cardRef} className="disc-card" onClick={() => onOpenDetail?.(r)}>
+      <div className="disc-card-img">
+        <img src={imgSrc} alt={r.name} />
         {r.source && (
-          <div style={{ position:"absolute", top:10, left:10, background:"rgba(15,12,9,0.75)", border:`0.5px solid ${C.border2}`, borderRadius:16, padding:"3px 9px", fontFamily:"-apple-system, sans-serif", fontSize:9, color:C.cream, display:"flex", alignItems:"center", gap:6 }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={C.cream} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="11" cy="11" r="7" />
-              <path d="M20 20l-3.5-3.5" />
-            </svg>
+          <div className="disc-card-source">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
             {r.source}
           </div>
         )}
-        <div style={{ position:"absolute", top:10, right:10 }}>
-          <FlameRating score={flameScore != null ? flameScore : Math.min(3, r.googleRating || (r.rating ? r.rating / 2 : 3))} />
+        <div className="disc-card-flames">
+          <span className="lit">{"🔥".repeat(litCount)}</span>
+          {dimCount > 0 && <span className="dim">{"🔥".repeat(dimCount)}</span>}
         </div>
       </div>
-      <div style={{ padding:"14px 16px", background:C.bg2 }}>
-        <div style={{ fontFamily:"Cormorant Garamond,Georgia,serif", fontSize:20, fontWeight:700, lineHeight:1.1, marginBottom:4, color:C.text }}>{r.name}</div>
-        <div style={{ display:"flex", gap:7, alignItems:"center", marginBottom:8, flexWrap:"wrap" }}>
-          <span style={{ fontSize:11, color:C.muted, fontFamily:"'DM Mono',monospace" }}>{r.cuisine}</span>
-          <span style={{ color:C.dim }}>·</span>
-          <span style={{ fontSize:11, color:C.muted }}>{r.neighborhood}</span>
-          <span style={{ color:C.dim }}>·</span>
-          <span style={{ fontSize:11, color:C.terracotta, fontFamily:"'DM Mono',monospace" }}>{r.price}</span>
+      <div className="disc-card-body">
+        <div className="disc-card-name">{r.name}</div>
+        <div className="disc-card-cuisine">
+          <span className="type">{r.cuisine}</span>
+          <span className="sep">·</span>
+          <span className="loc">{r.neighborhood}</span>
+          <span className="sep">·</span>
+          <span className="price">{r.price}</span>
         </div>
-        <p style={{ fontSize:13, lineHeight:1.55, color:C.text, opacity:0.85, marginBottom:12 }}>{r.desc}</p>
-        <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:14 }}>
-          {r.tags.map(t => (
-            <span
-              key={t}
-              style={{
-                padding:"4px 10px",
-                borderRadius:20,
-                border:`0.5px solid ${C.border}`,
-                fontSize:10,
-                color:C.muted,
-                fontFamily:"'DM Mono',monospace",
-                background:C.bg3,
-              }}
-            >
-              {t}
-            </span>
+        {r.desc && <div className="disc-card-desc">{r.desc}</div>}
+        <div className="disc-card-tags">
+          {(r.tags || []).map(t => (
+            <span key={t} className="disc-tag">{t}</span>
           ))}
         </div>
-        <div style={{ display:"flex", gap:7 }} onClick={e => e.stopPropagation()}>
-          {[
-            { label: loved ? "Loved It ♥" : "Love It ♡", active: loved, onClick: onLove, activeColor: C.terracotta },
-            { label: watched ? "On Watchlist" : "Watchlist", active: watched, onClick: onWatch, activeColor: "#6b9fff" },
-            { label: "Share ↗", active: false, onClick: () => onShare(r.name), activeColor: C.terracotta },
-          ].map((btn, i) => (
-            <button key={i} onClick={btn.onClick} style={{ flex:1, padding:"9px 4px", borderRadius:10, border:`1.5px solid ${btn.active ? btn.activeColor : C.border}`, background: btn.active ? `${btn.activeColor}15` : "transparent", color: btn.active ? btn.activeColor : C.muted, cursor:"pointer", fontSize:12, fontFamily:"'DM Sans',sans-serif", transition:"all 0.18s" }}>
-              {btn.label}
-            </button>
-          ))}
+        <div className="disc-card-actions" onClick={e => e.stopPropagation()}>
+          <button className={`disc-action ${loved ? "loved" : "watch"}`} onClick={onLove}>
+            {loved ? "Loved It ♥" : "Love It ♡"}
+          </button>
+          <button className={`disc-action ${watched ? "loved" : "watch"}`} onClick={onWatch} style={watched ? { background:"linear-gradient(135deg, rgba(100,160,255,0.1), rgba(60,100,180,0.06))", color:"#6b9fff", borderColor:"rgba(100,160,255,0.12)" } : undefined}>
+            {watched ? "On Watchlist" : "Watchlist"}
+          </button>
+          <button className="disc-action share" onClick={() => onShare(r.name)}>Share ↗</button>
         </div>
       </div>
     </div>
@@ -683,28 +753,28 @@ function LazyPhotoRow({ item, pickerIndex, onLoad, onSelect, onRefresh, C }) {
   return (
     <div ref={ref}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10, gap:8 }}>
-        <div style={{ fontFamily:"Cormorant Garamond,Georgia,serif", fontSize:17, fontWeight:700, color:C.text }}>{item.restaurant.name}</div>
+        <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:17, fontWeight:700, color:C.text }}>{item.restaurant.name}</div>
         <div style={{ display:"flex", gap:6, alignItems:"center" }}>
           {totalPages > 1 && (
             <div style={{ display:"flex", gap:4 }}>
               <button type="button" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                style={{ fontSize:11, borderRadius:10, border:`1px solid ${C.border}`, padding:"3px 7px", background:C.bg2, color:C.muted, cursor: page === 0 ? "default" : "pointer", opacity: page === 0 ? 0.4 : 1, fontFamily:"'DM Mono',monospace" }}>‹</button>
-              <span style={{ fontSize:10, color:C.muted, fontFamily:"'DM Mono',monospace", lineHeight:"24px" }}>{page+1}/{totalPages}</span>
+                style={{ fontSize:11, borderRadius:10, border:`1px solid ${C.border}`, padding:"3px 7px", background:C.bg2, color:C.muted, cursor: page === 0 ? "default" : "pointer", opacity: page === 0 ? 0.4 : 1, fontFamily:"'Inter', -apple-system, sans-serif" }}>‹</button>
+              <span style={{ fontSize:10, color:C.muted, fontFamily:"'Inter', -apple-system, sans-serif", lineHeight:"24px" }}>{page+1}/{totalPages}</span>
               <button type="button" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}
-                style={{ fontSize:11, borderRadius:10, border:`1px solid ${C.border}`, padding:"3px 7px", background:C.bg2, color:C.muted, cursor: page === totalPages - 1 ? "default" : "pointer", opacity: page === totalPages - 1 ? 0.4 : 1, fontFamily:"'DM Mono',monospace" }}>›</button>
+                style={{ fontSize:11, borderRadius:10, border:`1px solid ${C.border}`, padding:"3px 7px", background:C.bg2, color:C.muted, cursor: page === totalPages - 1 ? "default" : "pointer", opacity: page === totalPages - 1 ? 0.4 : 1, fontFamily:"'Inter', -apple-system, sans-serif" }}>›</button>
             </div>
           )}
-          <button type="button" onClick={() => { setPage(0); onRefresh(pickerIndex); }} style={{ fontSize:11, borderRadius:14, border:`1px solid ${C.border}`, padding:"4px 8px", background:C.bg2, color:C.muted, cursor:"pointer", fontFamily:"'DM Mono',monospace" }}>Refresh</button>
+          <button type="button" onClick={() => { setPage(0); onRefresh(pickerIndex); }} style={{ fontSize:11, borderRadius:14, border:`1px solid ${C.border}`, padding:"4px 8px", background:C.bg2, color:C.muted, cursor:"pointer", fontFamily:"'Inter', -apple-system, sans-serif" }}>Refresh</button>
         </div>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:8 }}>
         {item.isRefreshing ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} style={{ aspectRatio:"1", background:C.bg3, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:C.muted, fontFamily:"'DM Mono',monospace" }}>…</div>
+            <div key={i} style={{ aspectRatio:"1", background:C.bg3, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:C.muted, fontFamily:"'Inter', -apple-system, sans-serif" }}>…</div>
           ))
         ) : item.photoOptions.length === 0 ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} style={{ aspectRatio:"1", background:C.bg3, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:C.muted, fontFamily:"'DM Mono',monospace" }}>{i === 0 ? (firedRef.current ? "No photos" : "Waiting") : "·"}</div>
+            <div key={i} style={{ aspectRatio:"1", background:C.bg3, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:C.muted, fontFamily:"'Inter', -apple-system, sans-serif" }}>{i === 0 ? (firedRef.current ? "No photos" : "Waiting") : "·"}</div>
           ))
         ) : (
           visiblePhotos.map((opt, idx) => {
@@ -968,6 +1038,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [chatInput, setChatInput] = useState("");
   const [restoredMessages, setRestoredMessages] = useState(null);
   const [homeChatKey, setHomeChatKey] = useState(0);
+  const [recentChatsOpen, setRecentChatsOpen] = useState(false);
   const headerRef = useRef(null);
   const [headerHeight, setHeaderHeight] = useState(52);
   useLayoutEffect(() => {
@@ -990,6 +1061,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [notifSheetOpen, setNotifSheetOpen] = useState(false);
   const [notifList, setNotifList] = useState([]);
   const [notifLoading, setNotifLoading] = useState(false);
+  const [notifFollowedBack, setNotifFollowedBack] = useState(new Set());
   const [headerProfilePhoto, setHeaderProfilePhoto] = useState(() =>
     typeof window !== "undefined" ? safeLocalStorageGetItem("cooked_profile_photo") : null
   );
@@ -1345,8 +1417,11 @@ export default function Discover({ tasteProfile, initialTab }) {
       const profileUsername = String(profile?.profile_username || "").trim();
       const needsSetup = !profileName || profileName.toLowerCase() === "user";
       if (needsSetup) {
-        setSetupName(profileName && profileName.toLowerCase() !== "user" ? profileName : (user.fullName || user.firstName || ""));
-        setSetupUsername(profileUsername || user.username || user.primaryEmailAddress?.emailAddress?.split("@")[0] || "");
+        // Pre-populate from Clerk user data (including onboarding sign-up)
+        const clerkName = user.fullName || `${user.firstName || ""} ${user.lastName || ""}`.trim() || "";
+        const clerkUsername = user.unsafeMetadata?.username || user.username || user.primaryEmailAddress?.emailAddress?.split("@")[0] || "";
+        setSetupName(profileName && profileName.toLowerCase() !== "user" ? profileName : clerkName);
+        setSetupUsername(profileUsername || clerkUsername);
         setSetupGateOpen(true);
       } else {
         setSetupGateOpen(false);
@@ -1494,6 +1569,12 @@ export default function Discover({ tasteProfile, initialTab }) {
     }));
     setNotifList(enriched);
     setNotifLoading(false);
+    // Check which follow-notification senders we already follow
+    const followNotifIds = [...new Set(rows.filter(r => r.type === "followed_you" && r.from_user_id).map(r => r.from_user_id))];
+    if (followNotifIds.length > 0) {
+      const { data: fData } = await supabase.from("follows").select("following_id").eq("follower_id", user.id).in("following_id", followNotifIds);
+      if (fData) setNotifFollowedBack(new Set(fData.map(d => d.following_id)));
+    }
     // Let one paint so unread rows briefly show the terracotta accent before we mark read
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     await supabase.from("notifications").update({ read: true }).eq("user_id", user.id).eq("read", false);
@@ -1507,6 +1588,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [swipeDelta, setSwipeDelta] = useState({ x: 0, y: 0 });
   const [swipeDir, setSwipeDir] = useState(null); // 'left' | 'right' | 'up' | null
   const [isDragging, setIsDragging] = useState(false);
+  const [heatFlyDir, setHeatFlyDir] = useState(null); // 'left' | 'right' | 'up' — current card flying out
   const dragStart = useRef(null);
   const swipeDeltaRef = useRef({ x: 0, y: 0 });
   const heatSwipeHandledRef = useRef(false);
@@ -1916,7 +1998,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
   };
 
-  function HomePhotoCard({ r, style, children, onClick }) {
+  function HomePhotoCard({ r, style, className, children, onClick }) {
     const photoSrc = getAnyCachedPhotoForId(r.id) || r.img || "";
     const [imgSrc, setImgSrc] = useState(photoSrc);
     const cardRef = useRef(null);
@@ -1944,6 +2026,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     return (
       <div
         ref={cardRef}
+        className={className || ""}
         onClick={onClick}
         style={{ ...style, position: "relative", overflow: "hidden", cursor: "pointer" }}
       >
@@ -1955,13 +2038,13 @@ export default function Discover({ tasteProfile, initialTab }) {
             onError={(e) => { e.target.style.display = "none"; }}
           />
         ) : (
-          <div style={{ position: "absolute", inset: 0, background: "#1a1208" }} />
+          <div style={{ position: "absolute", inset: 0, background: "#12121a" }} />
         )}
         <div
           style={{
             position: "absolute",
             inset: 0,
-            background: "linear-gradient(to bottom, rgba(15,12,9,0.1) 0%, rgba(15,12,9,0.8) 100%)",
+            background: "linear-gradient(to bottom, rgba(10,10,15,0.1) 0%, rgba(10,10,15,0.8) 100%)",
           }}
         />
         {children}
@@ -2169,8 +2252,11 @@ export default function Discover({ tasteProfile, initialTab }) {
       markersRef.current.forEach(m => m.remove());
       markersRef.current = [];
       mapRestaurants.forEach(r => {
+        const fs = getFlameScore(r);
+        const glowOpacity = 0.15 + (fs / 5) * 0.45;
+        const glowSpread = 2 + Math.round((fs / 5) * 6);
         const el = document.createElement("div");
-        el.style.cssText = "width:14px;height:14px;border-radius:50%;background:#c4603a;border:2px solid #fff;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.35);";
+        el.style.cssText = `width:16px;height:16px;border-radius:50%;background:linear-gradient(160deg,#ffb347 0%,#ff9632 40%,#e07850 70%,#c44060 100%);border:1.5px solid rgba(255,180,140,0.4);cursor:pointer;box-shadow:0 0 ${glowSpread}px ${Math.round(glowSpread*0.6)}px rgba(224,120,80,${glowOpacity});`;
         const marker = new mapboxgl.Marker({ element: el, anchor: "center" })
           .setLngLat([r.lng, r.lat])
           .addTo(map);
@@ -3187,7 +3273,7 @@ Return a JSON object with exactly these fields:
             background: discoverSearchMode === id ? C.terracotta : C.bg2,
             color: discoverSearchMode === id ? "#fff" : C.muted,
             fontSize: 11,
-            fontFamily: "'DM Mono',monospace",
+            fontFamily: "'Inter', -apple-system, sans-serif",
             letterSpacing: "0.4px",
             textTransform: "uppercase",
             cursor: "pointer",
@@ -3210,67 +3296,22 @@ Return a JSON object with exactly these fields:
           setShowOnboarding(false);
           skipNextTabPersistRef.current = true;
           setTab("heat");
-          setShowHeatTip(true);
         }}
       />
     );
   }
 
-  if (user?.id && setupGateOpen) {
-    return (
-      <div style={{ width: "100%", minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <div style={{ width: "100%", maxWidth: 460, background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
-          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 34, color: C.text, marginBottom: 4 }}>One last thing.</div>
-          <div style={{ color: C.muted, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, marginBottom: 16 }}>What should we call you?</div>
-          <input
-            value={setupName}
-            onChange={(e) => setSetupName(e.target.value)}
-            placeholder="Your name"
-            style={{ width: "100%", background: C.bg2, border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px 16px", marginBottom: 10, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, outline: "none" }}
-          />
-          <input
-            value={setupUsername}
-            onChange={(e) => setSetupUsername(e.target.value)}
-            placeholder="@handle"
-            style={{ width: "100%", background: C.bg2, border: `1px solid ${C.border}`, color: C.text, borderRadius: 10, padding: "12px 16px", marginBottom: 14, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, outline: "none" }}
-          />
-          <button
-            type="button"
-            disabled={setupSaving || !setupName.trim() || !setupUsername.trim()}
-            onClick={async () => {
-              if (!user?.id || !setupName.trim() || !setupUsername.trim()) return;
-              setSetupSaving(true);
-              try {
-                const username = setupUsername.trim().replace(/^@+/, "");
-                await saveUserData(user.id, {
-                  profile_name: setupName.trim(),
-                  profile_username: username,
-                });
-                safeSetItem("cooked_profile_name", setupName.trim());
-                safeSetItem("cooked_profile_username", username);
-                setSetupGateOpen(false);
-              } finally {
-                setSetupSaving(false);
-              }
-            }}
-            style={{ width: "100%", background: C.terracotta, color: "#fff", border: "none", borderRadius: 12, padding: "12px 16px", fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 14, fontWeight: 600, cursor: setupSaving ? "default" : "pointer", opacity: setupSaving ? 0.7 : 1 }}
-          >
-            Let's eat
-          </button>
-        </div>
-      </div>
-    );
-  }
+  /* "One last thing" gate removed — profile data is now fully collected during onboarding */
 
   return (
     <>
-    <SignedOut>
+    {false && <SignedOut>
       <div style={{ width:"100%", minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", padding:"24px" }}>
         <div style={{ width:"100%", maxWidth:480, textAlign:"center" }}>
           <div style={{ display:"flex", justifyContent:"center", marginBottom:16 }}>
             <Wordmark size={44} />
           </div>
-          <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:20, color:C.text, marginBottom:24 }}>
+          <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontStyle:"italic", fontSize:20, color:C.text, marginBottom:24 }}>
             your personal restaurant guide
           </div>
           <SignInButton mode="modal">
@@ -3282,7 +3323,7 @@ Return a JSON object with exactly these fields:
                 border:"none",
                 borderRadius:14,
                 padding:"14px 28px",
-                fontFamily:"-apple-system,sans-serif",
+                fontFamily:"'Inter', -apple-system, sans-serif",
                 fontSize:15,
                 fontWeight:600,
                 cursor:"pointer",
@@ -3293,12 +3334,12 @@ Return a JSON object with exactly these fields:
           </SignInButton>
         </div>
       </div>
-    </SignedOut>
-    <SignedIn>
-    <div style={{ width:"100%", minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
-    <div style={{ maxWidth:480, margin:"0 auto", minHeight:"100vh", background:C.bg, paddingBottom:90, position:"relative" }}>
+    </SignedOut>}
+    {/* <SignedIn> — temporarily bypassed for design work */}
+    <div style={{ width:"100%", minHeight:"100vh", fontFamily:"'Inter',sans-serif" }}>
+    <div style={{ maxWidth:390, margin:"0 auto", minHeight:"100vh", paddingBottom:90, position:"relative" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,700;1,700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Inter:wght@300;400;500;600;700&display=swap');
         * { box-sizing:border-box; margin:0; padding:0; }
         .city-row::-webkit-scrollbar { display:none; }
       `}</style>
@@ -3306,121 +3347,90 @@ Return a JSON object with exactly these fields:
       {/* Main content (header + tabs): explicit low stacking so detail overlay always wins */}
       <div style={{ position:"relative", zIndex:10, marginTop:0, paddingTop:0 }}>
       {/* Header */}
-      <div ref={headerRef} style={{ background:C.bg, position:"fixed", top:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, zIndex:50, borderBottom:`1px solid ${C.border2}`, paddingTop:6, marginBottom:0, paddingBottom:0, display: tab === "heat" ? "none" : "block" }}>
-        <PageHeader
-          onLogoClick={() => setTab("home")}
-          right={
-            <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
-              {(tab === "home" || tab === "discover" || tab === "map") && (
-                <div style={{ position:"relative" }}>
-                  <button onClick={() => setCityPickerOpen(v => !v)} style={{ display:"flex", alignItems:"center", gap:5, background:"none", border:"none", cursor:"pointer", padding:0, outline:"none" }}>
-                    <span style={{ fontFamily:"Cormorant Garamond,Georgia,serif", fontSize:15, fontWeight:700, color:C.terracotta, fontStyle:"italic" }}>{city === "All" ? "All Cities" : city === "Followed" ? "Followed Cities" : city}</span>
-                    <span style={{ fontSize:11, color:C.muted, marginTop:1 }}>{cityPickerOpen ? "▴" : "▾"}</span>
-                  </button>
-                  {cityPickerOpen && (
-                    <div style={{ position:"absolute", top:"calc(100% + 8px)", left:-12, zIndex:600, background:C.bg2, borderRadius:14, boxShadow:"0 12px 40px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.25)", border:`1px solid ${C.border}`, width:220, maxHeight:380, overflowY:"auto", scrollbarWidth:"none", padding:"6px 0 8px" }} onClick={e => e.stopPropagation()}>
-                      {/* Home City */}
-                      {homeCity && (
-                        <div style={{ padding:"0 0 4px" }}>
-                          <div style={{ padding:"6px 14px 4px", fontFamily:"'DM Mono',monospace", fontSize:8, color:C.dim, letterSpacing:"1.8px", textTransform:"uppercase" }}>🏠 Home</div>
-                          <button type="button" onClick={() => { setCity(homeCity); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
-                            style={{ width:"100%", padding:"8px 14px", textAlign:"left", background: city === homeCity ? `${C.terracotta}18` : "transparent", border:"none", color: city === homeCity ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", fontWeight: city === homeCity ? 600 : 400, cursor:"pointer" }}>
-                            {homeCity}
-                          </button>
-                        </div>
-                      )}
-                      {/* Followed Cities filter */}
-                      {user?.id && followedCities.length > 0 && (
-                        <div style={{ borderTop:`1px solid ${C.border2}`, padding:"0 0 4px" }}>
-                          <div style={{ padding:"8px 14px 4px", fontFamily:"'DM Mono',monospace", fontSize:8, color:C.dim, letterSpacing:"1.8px", textTransform:"uppercase" }}>Followed Cities</div>
-                          <button type="button" onClick={() => { setCity("Followed"); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
-                            style={{ width:"100%", padding:"8px 14px", textAlign:"left", background: city === "Followed" ? `${C.terracotta}18` : "transparent", border:"none", color: city === "Followed" ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", fontWeight: city === "Followed" ? 600 : 400, cursor:"pointer" }}>
-                            All Followed ({followedCities.length})
-                          </button>
-                          {followedCities.filter(fc => fc !== homeCity).map((fc) => (
-                            <button key={fc} type="button" onClick={() => { setCity(fc); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
-                              style={{ width:"100%", padding:"6px 14px 6px 24px", textAlign:"left", background: city === fc ? `${C.terracotta}18` : "transparent", border:"none", color: city === fc ? C.terracotta : C.text, fontSize:13, fontFamily:"'DM Sans',sans-serif", fontWeight: city === fc ? 600 : 400, cursor:"pointer" }}>
-                              {fc}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {/* All Cities */}
-                      <div style={{ borderTop:`1px solid ${C.border2}`, padding:"8px 0 0" }}>
-                        <div style={{ padding:"0 14px 4px", fontFamily:"'DM Mono',monospace", fontSize:8, color:C.dim, letterSpacing:"1.8px", textTransform:"uppercase" }}>All Cities</div>
-                        <button type="button" onClick={() => { setCity("All"); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }} style={{ width:"100%", padding:"8px 14px", textAlign:"left", background: city==="All" ? `${C.terracotta}18` : "transparent", border:"none", color: city==="All" ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", fontWeight: city==="All" ? 600 : 400, cursor:"pointer" }}>All Cities</button>
-                      </div>
-                      {getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults, dynamicCityRegions).map(({ region, cities: regionCities }) => (
-                        <div key={region}>
-                          <div style={{ padding:"10px 14px 4px", fontFamily:"'DM Mono',monospace", fontSize:8, color:C.terracotta, letterSpacing:"1.8px", textTransform:"uppercase", borderTop:`1px solid ${C.border}` }}>{region}</div>
-                          {/* Followed cities first, then alphabetical */}
-                          {[...regionCities].sort((a, b) => {
-                            const aFollowed = followedCities.includes(a) ? 0 : 1;
-                            const bFollowed = followedCities.includes(b) ? 0 : 1;
-                            if (aFollowed !== bFollowed) return aFollowed - bFollowed;
-                            return a.localeCompare(b);
-                          }).map((c) => (
-                            <div key={c} style={{ display: "flex", alignItems: "stretch", width: "100%" }}>
-                              <button type="button" onClick={() => { setCity(c); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
-                                style={{ flex: 1, minWidth: 0, padding: "8px 8px 8px 14px", textAlign: "left", background: city === c ? `${C.terracotta}18` : "transparent", border: "none", color: city === c ? C.terracotta : C.text, fontSize: 14, fontFamily: "'DM Sans', sans-serif", fontWeight: city === c || followedCities.includes(c) ? 600 : 400, cursor: "pointer", letterSpacing: "-0.1px", lineHeight: 1.3 }}
-                              >
-                                {followedCities.includes(c) ? `★ ${c}` : c}
-                              </button>
-                              {user?.id ? (
-                                <button
-                                  type="button"
-                                  aria-label={followedCities.includes(c) ? `Unfollow ${c}` : `Follow ${c}`}
-                                  onClick={(e) => { e.stopPropagation(); toggleCityFollow(c, e); }}
-                                  style={{ padding: "0 14px", background: "transparent", border: "none", cursor: "pointer", color: followedCities.includes(c) ? C.terracotta : C.muted, fontSize: 16, flexShrink: 0 }}
-                                >
-                                  {followedCities.includes(c) ? "★" : "☆"}
-                                </button>
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <button onClick={openDmInbox}
-                title="Messages"
-                style={{ position:"relative", width:40, height:40, borderRadius:"50%", border:"none", background:"transparent", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", padding:0, flexShrink:0 }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-                {dmUnread > 0 && <span style={{ position:"absolute", top:6, right:6, width:8, height:8, borderRadius:"50%", background:C.terracotta, pointerEvents:"none" }} />}
-              </button>
-              <button
-                type="button"
-                onClick={openNotificationsSheet}
-                aria-label="Notifications"
-                style={{ position:"relative", width:40, height:40, borderRadius:"50%", border:"none", background:"transparent", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", padding:0, flexShrink:0 }}
-              >
-                <NotificationBellIcon color={C.text} />
-                {notifUnreadCount > 0 ? (
-                  <span style={{ position:"absolute", top:6, right:6, width:8, height:8, borderRadius:"50%", background:C.terracotta, pointerEvents:"none" }} />
-                ) : null}
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab("profile")}
-                aria-label="Profile"
-                style={{ width:36, height:36, borderRadius:"50%", border:`1.5px solid ${C.border}`, overflow:"hidden", padding:0, cursor:"pointer", background:C.bg2, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}
-              >
-                {headerProfilePhoto || user?.imageUrl ? (
-                  <img
-                    src={headerProfilePhoto || user?.imageUrl || ""}
-                    alt=""
-                    style={{ width:"100%", height:"100%", objectFit:"cover" }}
-                    onError={(e) => { e.target.style.display = "none"; }}
-                  />
-                ) : (
-                  <div style={{ width:"100%", height:"100%", background:C.bg3 }} />
+      <div ref={headerRef} className="d-home-header" style={{ display: (tab === "heat" || tab === "profile") ? "none" : "flex" }}>
+        <div className="header-left">
+          <div className="d-logo" onClick={() => setTab("home")} style={{ cursor:"pointer" }}>cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span></div>
+        </div>
+        {(tab === "home" || tab === "discover" || tab === "map") && (
+          <div style={{ position:"relative" }}>
+            <button className="city-picker" onClick={() => setCityPickerOpen(v => !v)}>
+              {city === "All" ? "All Cities" : city === "Followed" ? "Followed Cities" : city} {cityPickerOpen ? "▴" : "▾"}
+            </button>
+            {cityPickerOpen && (
+              <div style={{ position:"absolute", top:"calc(100% + 8px)", right:-60, zIndex:600, background:"#12121a", borderRadius:14, boxShadow:"0 12px 40px rgba(0,0,0,0.45)", border:"1px solid rgba(255,255,255,0.06)", width:220, maxHeight:380, overflowY:"auto", scrollbarWidth:"none", padding:"6px 0 8px" }} onClick={e => e.stopPropagation()}>
+                {homeCity && (
+                  <div style={{ padding:"0 0 4px" }}>
+                    <div style={{ padding:"6px 14px 4px", fontFamily:"'Inter', sans-serif", fontSize:8, color:"rgba(245,240,235,0.15)", letterSpacing:"1.8px", textTransform:"uppercase" }}>🏠 Home</div>
+                    <button type="button" onClick={() => { setCity(homeCity); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
+                      style={{ width:"100%", padding:"8px 14px", textAlign:"left", background: city === homeCity ? "rgba(255,150,50,0.1)" : "transparent", border:"none", color: city === homeCity ? "#ff9632" : "#f5f0eb", fontSize:14, fontFamily:"'Inter', sans-serif", fontWeight: city === homeCity ? 600 : 400, cursor:"pointer" }}>
+                      {homeCity}
+                    </button>
+                  </div>
                 )}
-              </button>
-            </div>
-          }
-        />
+                {user?.id && followedCities.length > 0 && (
+                  <div style={{ borderTop:"1px solid rgba(255,255,255,0.04)", padding:"0 0 4px" }}>
+                    <div style={{ padding:"8px 14px 4px", fontFamily:"'Inter', sans-serif", fontSize:8, color:"rgba(245,240,235,0.15)", letterSpacing:"1.8px", textTransform:"uppercase" }}>Followed Cities</div>
+                    <button type="button" onClick={() => { setCity("Followed"); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
+                      style={{ width:"100%", padding:"8px 14px", textAlign:"left", background: city === "Followed" ? "rgba(255,150,50,0.1)" : "transparent", border:"none", color: city === "Followed" ? "#ff9632" : "#f5f0eb", fontSize:14, fontFamily:"'Inter', sans-serif", fontWeight: city === "Followed" ? 600 : 400, cursor:"pointer" }}>
+                      All Followed ({followedCities.length})
+                    </button>
+                    {followedCities.filter(fc => fc !== homeCity).map((fc) => (
+                      <button key={fc} type="button" onClick={() => { setCity(fc); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
+                        style={{ width:"100%", padding:"6px 14px 6px 24px", textAlign:"left", background: city === fc ? "rgba(255,150,50,0.1)" : "transparent", border:"none", color: city === fc ? "#ff9632" : "#f5f0eb", fontSize:13, fontFamily:"'Inter', sans-serif", fontWeight: city === fc ? 600 : 400, cursor:"pointer" }}>
+                        {fc}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div style={{ borderTop:"1px solid rgba(255,255,255,0.04)", padding:"8px 0 0" }}>
+                  <div style={{ padding:"0 14px 4px", fontFamily:"'Inter', sans-serif", fontSize:8, color:"rgba(245,240,235,0.15)", letterSpacing:"1.8px", textTransform:"uppercase" }}>All Cities</div>
+                  <button type="button" onClick={() => { setCity("All"); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }} style={{ width:"100%", padding:"8px 14px", textAlign:"left", background: city==="All" ? "rgba(255,150,50,0.1)" : "transparent", border:"none", color: city==="All" ? "#ff9632" : "#f5f0eb", fontSize:14, fontFamily:"'Inter', sans-serif", fontWeight: city==="All" ? 600 : 400, cursor:"pointer" }}>All Cities</button>
+                </div>
+                {getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults, dynamicCityRegions).map(({ region, cities: regionCities }) => (
+                  <div key={region}>
+                    <div style={{ padding:"10px 14px 4px", fontFamily:"'Inter', sans-serif", fontSize:8, color:"#ff9632", letterSpacing:"1.8px", textTransform:"uppercase", borderTop:"1px solid rgba(255,255,255,0.06)" }}>{region}</div>
+                    {[...regionCities].sort((a, b) => {
+                      const aFollowed = followedCities.includes(a) ? 0 : 1;
+                      const bFollowed = followedCities.includes(b) ? 0 : 1;
+                      if (aFollowed !== bFollowed) return aFollowed - bFollowed;
+                      return a.localeCompare(b);
+                    }).map((c) => (
+                      <div key={c} style={{ display: "flex", alignItems: "stretch", width: "100%" }}>
+                        <button type="button" onClick={() => { setCity(c); setSecondaryCuisine(null); setSearchQuery(""); setCityPickerOpen(false); }}
+                          style={{ flex: 1, minWidth: 0, padding: "8px 8px 8px 14px", textAlign: "left", background: city === c ? "rgba(255,150,50,0.1)" : "transparent", border: "none", color: city === c ? "#ff9632" : "#f5f0eb", fontSize: 14, fontFamily: "'Inter', sans-serif", fontWeight: city === c || followedCities.includes(c) ? 600 : 400, cursor: "pointer" }}>
+                          {followedCities.includes(c) ? `★ ${c}` : c}
+                        </button>
+                        {user?.id ? (
+                          <button type="button" onClick={(e) => { e.stopPropagation(); toggleCityFollow(c, e); }}
+                            style={{ padding: "0 14px", background: "transparent", border: "none", cursor: "pointer", color: followedCities.includes(c) ? "#ff9632" : "rgba(245,240,235,0.3)", fontSize: 16, flexShrink: 0 }}>
+                            {followedCities.includes(c) ? "★" : "☆"}
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        <div className="header-right">
+          <div className="d-icon-btn glass-icon" onClick={openDmInbox} style={{ cursor:"pointer", position:"relative" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            {dmUnread > 0 && <span style={{ position:"absolute", top:-2, right:-2, width:8, height:8, borderRadius:"50%", background:"#ff9632" }} />}
+          </div>
+          <div className="d-icon-btn glass-icon" onClick={openNotificationsSheet} style={{ cursor:"pointer", position:"relative" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            {notifUnreadCount > 0 && <span style={{ position:"absolute", top:-2, right:-2, width:8, height:8, borderRadius:"50%", background:"#ff9632" }} />}
+          </div>
+          <div className="header-avatar" onClick={() => setTab("profile")} style={{ cursor:"pointer" }}>
+            {headerProfilePhoto || user?.imageUrl ? (
+              <img src={headerProfilePhoto || user?.imageUrl || ""} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:"50%" }} onError={(e) => { e.target.style.display = "none"; }} />
+            ) : (
+              (safeLocalStorageGetItem("cooked_name") || "?")[0]?.toUpperCase()
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Spacer for fixed header */}
@@ -3439,14 +3449,12 @@ Return a JSON object with exactly these fields:
         const hotNow = cityFiltered.slice(0, 8).length >= 3 ? cityFiltered.slice(0, 8) : allSorted.slice(0, 8);
         const featuredRestaurant = youdLoveFiltered[0] || cityFiltered[0] || allSorted[0];
         return (
-        <div style={{ paddingTop: headerHeight, paddingLeft: 16, paddingRight: 16, paddingBottom: 90, color: C.text }}>
-          {/* Header already rendered above via PageHeader */}
-          <div style={{ height:"0.5px", background:"linear-gradient(90deg,transparent,#2e1f0e 20%,#2e1f0e 80%,transparent)", margin:0, padding:0 }} />
+        <div className="d-home" style={{ paddingTop: headerHeight + 28 }}>
+          <div className="glow-orb glow-amber glow-bg1" />
+          <div className="glow-orb glow-rose glow-bg2" />
 
-          {/* Inline chat (replaces hero card); key remounts on each Home visit to re-randomize chips */}
-          <div style={{ marginTop: 12 }}>
-            <ChatBot key={homeChatKey} inline allRestaurants={allRestaurants} initialInput={chatInput} initialMessages={restoredMessages} userId={user?.id} lovedRestaurants={lovedRestaurants} watchlist={watchlist} followedCities={followedCities} tasteProfile={chatTasteProfile} selectedCity={city} onOpenDetail={setDetailRestaurant} />
-          </div>
+          {/* Inline chat */}
+          <ChatBot key={homeChatKey} inline allRestaurants={allRestaurants} initialInput={chatInput} initialMessages={restoredMessages} userId={user?.id} lovedRestaurants={lovedRestaurants} watchlist={watchlist} followedCities={followedCities} tasteProfile={chatTasteProfile} selectedCity={city} onOpenDetail={setDetailRestaurant} />
 
           {(() => {
             let recentChats = [];
@@ -3478,215 +3486,164 @@ Return a JSON object with exactly these fields:
               } catch (e) {}
             };
 
+            if (!recentChats.length) return null;
             return (
-              <div style={{ marginTop: 16 }}>
-                <div style={{ fontSize: 11, letterSpacing: "0.12em", color: "#3d2a18", textTransform: "uppercase", padding: "0 16px", marginBottom: 8 }}>
-                  Recent Chats
-                </div>
-                <div style={{ maxHeight: 140, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6, padding: "0 16px" }}>
-                  {recentChats.length === 0 ? (
-                    <div style={{ fontSize: 13, color: "#3d2a18", fontStyle: "italic" }}>No chats yet</div>
-                  ) : (
-                    recentChats.slice(0, 10).map((entry, i) => (
-                      <div key={i} style={{ background: "#120e0a", border: "1px solid #1e1208", borderRadius: 10, padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden", flex: 1 }}>
-                          <FlameIcon size={12} filled={false} color="#3d2a18" />
-                          <span onClick={() => { setRestoredMessages(entry.messages || null); setChatInput(entry.query || entry); setHomeChatKey((k) => k + 1); }}
-                            style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 13, color: "#7a5535", cursor: "pointer", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                            {entry.query || entry}
-                          </span>
+              <>
+                <button type="button" className="home-section-label" onClick={() => setRecentChatsOpen(o => !o)} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
+                  RECENT CHATS <span style={{ fontSize:8, opacity:0.5, transition:"transform 0.2s", transform: recentChatsOpen ? "rotate(180deg)" : "rotate(0)" }}>▼</span>
+                </button>
+                {recentChatsOpen && (
+                  <div className="home-recent">
+                    {recentChats.slice(0, 3).map((entry, i) => (
+                      <div key={i} className="home-recent-card glass-subtle"
+                        onClick={() => { setRestoredMessages(entry.messages || null); setChatInput(entry.query || entry); setHomeChatKey((k) => k + 1); setRecentChatsOpen(false); }}>
+                        <div className="chat-icon"><span>🔥</span></div>
+                        <div className="chat-preview">
+                          <div className="chat-text">{entry.query || entry}</div>
+                          <div className="chat-date">{getRelativeTime(entry)}</div>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                          <span style={{ fontSize: 11, color: "#3d2a18" }}>{getRelativeTime(entry)}</span>
-                          <span onClick={() => deleteChat(i)}
-                            style={{ fontSize: 14, color: "#3d2a18", cursor: "pointer", lineHeight: 1, padding: "0 2px" }}>×</span>
-                        </div>
+                        <button className="chat-dismiss" onClick={(e) => { e.stopPropagation(); deleteChat(i); }}>&times;</button>
                       </div>
-                    ))
-                  )}
-                </div>
-              </div>
+                    ))}
+                  </div>
+                )}
+              </>
             );
           })()}
 
-          <div style={{ marginTop: 20 }}>
-            <div style={{ padding: "0 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", fontSize: 20, color: "#f0ebe2" }}>Cooked for you</span>
-              <button type="button" onClick={() => setTab("discover")} style={{ background: "none", border: "none", color: "#c4603a", fontSize: 13, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>see all</button>
+          <div className="home-section-header" style={{ marginTop: 20 }}>
+            <div style={{ display: "flex", alignItems: "baseline" }}>
+              <h3>Cooked for you</h3>
             </div>
-            {featuredRestaurant ? (
-              <HomePhotoCard
-                key={`${featuredRestaurant.id}-${photoCacheVersion}`}
-                r={{ ...featuredRestaurant, img: getAnyCachedPhotoForId(featuredRestaurant.id) || featuredRestaurant.img }}
-                onClick={() => setDetailRestaurant(featuredRestaurant)}
-                style={{ margin: "0 16px", borderRadius: 16, height: 200 }}
-              >
-                <div style={{ position: "absolute", inset: 0, padding: "16px 20px", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-                  <div style={{ fontSize: 11, letterSpacing: "0.12em", color: "#c4603a", textTransform: "uppercase", marginBottom: 6, fontFamily: "-apple-system,sans-serif" }}>Based on your taste</div>
-                  <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", fontSize: 26, color: "#f0ebe2", lineHeight: 1.1, marginBottom: 5 }}>{featuredRestaurant.name}</div>
-                  <div style={{ fontSize: 13, color: "rgba(240,235,226,0.55)" }}>
-                    {[featuredRestaurant.cuisine, featuredRestaurant.neighborhood, featuredRestaurant.price].filter(Boolean).join(" · ")}
-                  </div>
-                </div>
-                <div style={{ position: "absolute", top: 16, right: 18 }}>
-                  <FlameRating score={getFlameScore(featuredRestaurant)} size={14} />
-                </div>
-              </HomePhotoCard>
-            ) : null}
+            <button className="see-all" onClick={() => setTab("discover")}>see all</button>
           </div>
+          {featuredRestaurant ? (
+            <div className="home-hero-card" onClick={() => setDetailRestaurant(featuredRestaurant)}>
+              <img src={getAnyCachedPhotoForId(featuredRestaurant.id) || featuredRestaurant.img} alt={featuredRestaurant.name} />
+              <div className="shade" />
+              <div className="label-top glass-pill">✦ BASED ON YOUR TASTE</div>
+              <div className="flame-top"><span>{"🔥".repeat(Math.min(Math.round(getFlameScore(featuredRestaurant)), 5))}</span></div>
+              <div className="bottom-info">
+                <h3>{featuredRestaurant.name}</h3>
+                <div className="meta">{[featuredRestaurant.cuisine, featuredRestaurant.neighborhood, featuredRestaurant.price].filter(Boolean).join(" · ")}</div>
+              </div>
+            </div>
+          ) : null}
 
           {trendingFiltered.length > 0 ? (
-            <div style={{ padding: "0 16px", marginBottom: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <span style={{ fontFamily: "Cormorant Garamond", fontStyle: "italic", fontSize: 22, color: C.text }}>
-                  Trending in your cities
-                </span>
+            <>
+              <div className="home-section-header">
+                <div style={{ display: "flex", alignItems: "baseline" }}>
+                  <h3>Trending in your cities</h3>
+                </div>
               </div>
-              {trendingFiltered.map((r, i) => (
-                <HomePhotoCard
-                  key={`${r.id}-${photoCacheVersion}`}
-                  r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }}
-                  onClick={() => setDetailRestaurant(r)}
-                  style={{
-                    width: "100%",
-                    height: 200,
-                    borderRadius: 14,
-                    marginBottom: i < trendingFiltered.length - 1 ? 12 : 0,
-                  }}
-                >
-                  <div style={{ position: "absolute", top: 10, right: 10 }}>
-                    <FlameRating score={getFlameScore(r)} size={10} />
+              <div className="home-rising-scroll">
+                {trendingFiltered.map(r => (
+                  <div key={`${r.id}-${photoCacheVersion}`} className="home-rising-card" onClick={() => setDetailRestaurant(r)}>
+                    <img src={getAnyCachedPhotoForId(r.id) || r.img} alt={r.name} />
+                    <div className="shade" />
+                    <div className="flame-badge"><span>{"🔥".repeat(Math.min(Math.round(getFlameScore(r)), 5))}</span></div>
+                    <div className="card-info">
+                      <h4>{r.name}</h4>
+                      <div className="sub">{r.cuisine || ""}</div>
+                    </div>
                   </div>
-                  <div style={{ position: "absolute", bottom: 28, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
-                    {r.name}
-                  </div>
-                  <div style={{ position: "absolute", bottom: 10, left: 10, fontSize: 11, color: "rgba(240,235,226,0.6)" }}>
-                    {r.cuisine || ""}
-                  </div>
-                </HomePhotoCard>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           ) : null}
 
           {/* You'd Love This — collaborative filtering */}
           {youdLoveFiltered.length > 0 && (
-            <div style={{ marginTop: 20 }}>
-              <div style={{ padding: "0 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontFamily: "Cormorant Garamond", fontStyle: "italic", fontSize: 22, color: C.text }}>You'd love this</span>
+            <>
+              <div className="home-section-header">
+                <div style={{ display: "flex", alignItems: "baseline" }}>
+                  <h3>You'd love this</h3>
+                </div>
               </div>
-              <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingLeft: 16, paddingRight: 16, paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
+              <div className="home-rising-scroll">
                 {youdLoveFiltered.map(r => (
-                  <HomePhotoCard
-                    key={`rec-${r.id}-${photoCacheVersion}`}
-                    r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }}
-                    onClick={() => setDetailRestaurant(r)}
-                    style={{ minWidth: 170, maxWidth: 170, height: 220, borderRadius: 14, flexShrink: 0 }}
-                  >
-                    <div style={{ position: "absolute", top: 10, right: 10 }}>
-                      <FlameRating score={getFlameScore(r)} size={10} />
+                  <div key={`rec-${r.id}-${photoCacheVersion}`} className="home-rising-card" onClick={() => setDetailRestaurant(r)}>
+                    <img src={getAnyCachedPhotoForId(r.id) || r.img} alt={r.name} />
+                    <div className="shade" />
+                    <div className="flame-badge"><span>{"🔥".repeat(Math.min(Math.round(getFlameScore(r)), 5))}</span></div>
+                    <div className="card-info">
+                      <h4>{r.name}</h4>
+                      <div className="sub">{r._weight} {r._weight === 1 ? "match" : "matches"}</div>
                     </div>
-                    <div style={{ position: "absolute", bottom: 40, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
-                      {r.name}
-                    </div>
-                    <div style={{ position: "absolute", bottom: 24, left: 10, fontSize: 11, color: "rgba(240,235,226,0.6)" }}>
-                      {r.cuisine || ""}
-                    </div>
-                    <div style={{ position: "absolute", bottom: 8, left: 10, fontSize: 10, color: "#c4603a", fontFamily: "'DM Mono', monospace" }}>
-                      {r._weight} {r._weight === 1 ? "match" : "matches"}
-                    </div>
-                  </HomePhotoCard>
+                  </div>
                 ))}
               </div>
-            </div>
+            </>
           )}
 
           {/* Rising — trending last 30 days */}
           {risingFiltered.length > 0 && (
-            <div style={{ marginTop: 20 }}>
-              <div style={{ padding: "0 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontFamily: "Cormorant Garamond", fontStyle: "italic", fontSize: 22, color: C.text }}>Rising</span>
-                <span style={{ fontSize: 11, color: "#5a3a20", fontFamily: "'DM Mono', monospace" }}>last 30 days</span>
+            <>
+              <div className="home-section-header">
+                <div style={{ display: "flex", alignItems: "baseline" }}>
+                  <h3>Rising</h3>
+                  <span className="section-sub">last 30 days</span>
+                </div>
+                <button className="see-all" onClick={() => setTab("discover")}>see all</button>
               </div>
-              <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingLeft: 16, paddingRight: 16, paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
+              <div className="home-rising-scroll">
                 {risingFiltered.map(r => (
-                  <HomePhotoCard
-                    key={`rise-${r.id}-${photoCacheVersion}`}
-                    r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }}
-                    onClick={() => setDetailRestaurant(r)}
-                    style={{ minWidth: 150, maxWidth: 150, height: 200, borderRadius: 14, flexShrink: 0 }}
-                  >
-                    <div style={{ position: "absolute", top: 10, right: 10 }}>
-                      <FlameRating score={getFlameScore(r)} size={10} />
+                  <div key={`rise-${r.id}-${photoCacheVersion}`} className="home-rising-card" onClick={() => setDetailRestaurant(r)}>
+                    <img src={getAnyCachedPhotoForId(r.id) || r.img} alt={r.name} />
+                    <div className="shade" />
+                    <div className="flame-badge"><span>{"🔥".repeat(Math.min(Math.round(getFlameScore(r)), 5))}</span></div>
+                    <div className="card-info">
+                      <h4>{r.name}</h4>
+                      <div className="sub">{r._recentLoves} recent {r._recentLoves === 1 ? "love" : "loves"}</div>
                     </div>
-                    <div style={{ position: "absolute", bottom: 28, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
-                      {r.name}
-                    </div>
-                    <div style={{ position: "absolute", bottom: 10, left: 10, fontSize: 10, color: "rgba(240,235,226,0.6)" }}>
-                      {r._recentLoves} recent {r._recentLoves === 1 ? "love" : "loves"}
-                    </div>
-                  </HomePhotoCard>
+                  </div>
                 ))}
               </div>
-            </div>
+            </>
           )}
 
           {/* Hidden Gems — high rated, few loves */}
           {hiddenGemsFiltered.length > 0 && (
-            <div style={{ marginTop: 20 }}>
-              <div style={{ padding: "0 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontFamily: "Cormorant Garamond", fontStyle: "italic", fontSize: 22, color: C.text }}>Hidden gems</span>
+            <>
+              <div className="home-section-header">
+                <div style={{ display: "flex", alignItems: "baseline" }}>
+                  <h3>Hidden Gems</h3>
+                </div>
+                <button className="see-all" onClick={() => setTab("discover")}>see all</button>
               </div>
-              <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingLeft: 16, paddingRight: 16, paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
-                {hiddenGemsFiltered.map(r => (
-                  <HomePhotoCard
-                    key={`gem-${r.id}-${photoCacheVersion}`}
-                    r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }}
-                    onClick={() => setDetailRestaurant(r)}
-                    style={{ minWidth: 170, maxWidth: 170, height: 220, borderRadius: 14, flexShrink: 0 }}
-                  >
-                    <div style={{ position: "absolute", top: 10, right: 10 }}>
-                      <FlameRating score={getFlameScore(r)} size={10} />
-                    </div>
-                    <div style={{ position: "absolute", bottom: 40, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
-                      {r.name}
-                    </div>
-                    <div style={{ position: "absolute", bottom: 24, left: 10, fontSize: 11, color: "rgba(240,235,226,0.6)" }}>
-                      {r.cuisine || ""}
-                    </div>
-                    <div style={{ position: "absolute", bottom: 8, left: 10, fontSize: 10, color: "#c4603a", fontFamily: "'DM Mono', monospace" }}>
-                      {r.city}
-                    </div>
-                  </HomePhotoCard>
-                ))}
-              </div>
-            </div>
+              {hiddenGemsFiltered.slice(0, 3).map(r => (
+                <div key={`gem-${r.id}-${photoCacheVersion}`} className="d-gem-card" onClick={() => setDetailRestaurant(r)}>
+                  <img src={getAnyCachedPhotoForId(r.id) || r.img} alt={r.name} />
+                  <div className="shade" />
+                  <div className="gem-badge glass-pill">💎 Hidden Gem</div>
+                  <div className="bottom-info">
+                    <h3>{r.name}</h3>
+                    <div className="meta">{[r.cuisine, r.neighborhood || r.city].filter(Boolean).join(" · ")}</div>
+                  </div>
+                </div>
+              ))}
+            </>
           )}
 
-          <div style={{ marginTop: 20 }}>
-            <div style={{ padding: "0 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", fontSize: 20, color: "#f0ebe2" }}>Hot right now</span>
-              <button type="button" onClick={() => setTab("discover")} style={{ background: "none", border: "none", color: "#c4603a", fontSize: 13, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>see all</button>
+          <div className="home-section-header">
+            <div style={{ display: "flex", alignItems: "baseline" }}>
+              <h3>Hot right now</h3>
             </div>
-            <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingLeft: 16, paddingRight: 16, paddingBottom: 8 }}>
-              {hotNow.map(r => (
-                <HomePhotoCard
-                  key={`${r.id}-${photoCacheVersion}`}
-                  r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }}
-                  onClick={() => setDetailRestaurant(r)}
-                  style={{ minWidth: 150, maxWidth: 150, height: 200, borderRadius: 14, flexShrink: 0 }}
-                >
-                  <div style={{ position: "absolute", top: 10, right: 10 }}>
-                    <FlameRating score={getFlameScore(r)} size={10} />
-                  </div>
-                  <div style={{ position: "absolute", bottom: 28, left: 10, right: 10, fontFamily: "Georgia,serif", fontWeight: "bold", fontSize: 14, color: "#f0ebe2", lineHeight: 1.2 }}>
-                    {r.name}
-                  </div>
-                  <div style={{ position: "absolute", bottom: 10, left: 10, fontSize: 11, color: "rgba(240,235,226,0.6)" }}>
-                    {r.cuisine || ""}
-                  </div>
-                </HomePhotoCard>
-              ))}
-            </div>
+            <button className="see-all" onClick={() => setTab("discover")}>see all</button>
+          </div>
+          <div className="home-rising-scroll">
+            {hotNow.map(r => (
+              <div key={`${r.id}-${photoCacheVersion}`} className="home-rising-card" onClick={() => setDetailRestaurant(r)}>
+                <img src={getAnyCachedPhotoForId(r.id) || r.img} alt={r.name} />
+                <div className="shade" />
+                <div className="flame-badge"><span>{"🔥".repeat(Math.min(Math.round(getFlameScore(r)), 5))}</span></div>
+                <div className="card-info">
+                  <h4>{r.name}</h4>
+                  <div className="sub">{r.cuisine || ""}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
         );
@@ -3695,48 +3652,44 @@ Return a JSON object with exactly these fields:
       {/* Discover Tab */}
       {tab === "discover" && (
         discoverSearchMode === "restaurants" ? (
-        <div style={{ paddingTop: headerHeight }}>
+        <div className="d-discover" style={{ paddingTop: headerHeight }}>
+          <div className="glow-orb glow-amber glow-bg1" />
+          <div className="glow-orb glow-rose glow-bg2" />
+
           {/* Tabs row */}
-          <div style={{ display:"flex", alignItems:"center", borderBottom:`1px solid ${C.border}`, padding:"10px 16px 0", position:"relative" }}>
-            <div style={{ flex:1, display:"flex", justifyContent:"center" }}>
-            {["Places","People"].map((t) => (
-              <button key={t} type="button"
-                onClick={() => setDiscoverSearchMode(t === "People" ? "people" : "restaurants")}
-                style={{ padding:"12px 24px 11px", borderRadius:0, fontSize:10, fontFamily:"'DM Mono',monospace", letterSpacing:"1.2px", textTransform:"uppercase", background:"none", border:"none", borderBottom: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? `2px solid ${C.terracotta}` : `2px solid transparent`, color: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? C.terracotta : C.muted, cursor:"pointer", marginBottom:"-1px", flexShrink:0, transition:"color 0.15s" }}>
-                {t}
-              </button>
-            ))}
+          <div className="disc-tabs">
+            <div className="disc-tabs-inner">
+              {["Places","People"].map((t) => (
+                <button key={t} type="button"
+                  className={`disc-tab-btn ${(t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? "active" : ""}`}
+                  onClick={() => setDiscoverSearchMode(t === "People" ? "people" : "restaurants")}>
+                  {t.toUpperCase()}
+                </button>
+              ))}
             </div>
-            <div style={{ position:"absolute", bottom:0, left:"10%", right:"10%", height:"1px", background:`linear-gradient(to right, transparent, ${C.border} 20%, ${C.border} 80%, transparent)` }} />
             {discoverSearchMode !== "people" && (
-              <button type="button" onClick={() => setShowFilterSheet(true)}
-                style={{ flexShrink:0, display:"flex", alignItems:"center", gap:5, padding:"6px 12px", border:`1px solid ${venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.border}`, borderRadius:10, background:"transparent", color: venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.muted, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
-                Filter {(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0) > 0 ? `(${(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0)})` : ""}
+              <button type="button" className="disc-filter-btn" onClick={() => setShowFilterSheet(true)}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+                {" "}Filter{(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0) > 0 ? ` (${(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0)})` : ""}
               </button>
             )}
           </div>
 
-          {/* Search + Filter + chips */}
-          <div style={{ padding:"10px 16px 8px" }}>
-            <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
-              <div style={{ flex:1, position:"relative" }}>
-                <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:12, color:C.muted, pointerEvents:"none" }}>🔍</span>
-                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                  placeholder={discoverSearchMode === "people" ? "Search by username or name..." : "Search by name, neighborhood, vibe..."}
-                  style={{ width:"100%", boxSizing:"border-box", padding:"11px 32px 11px 34px", borderRadius:14, border:`1.5px solid ${C.border}`, background:C.bg2, fontSize:14, color:C.text, fontFamily:"Cormorant Garamond,Georgia,serif", fontStyle:"italic", outline:"none" }}
-                />
-                {searchQuery && <button onClick={() => setSearchQuery("")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, lineHeight:1, padding:2 }}>×</button>}
-              </div>
-              {discoverSearchMode !== "people" && (venueType !== "all" || secondaryCuisine || filterMood) && (
-                <div style={{ display:"flex", flexDirection:"column", gap:4, alignItems:"flex-start", flexShrink:0 }}>
-                  {venueType !== "all" && <button type="button" onClick={() => setVenueType("all")} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{venueType === "restaurants" ? "Restaurants" : venueType === "bars" ? "Bars" : venueType === "hotels" ? "Hotels" : "Coffee"} ×</button>}
-                  {secondaryCuisine && <button type="button" onClick={() => setSecondaryCuisine(null)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{secondaryCuisine} ×</button>}
-                  {filterMood && <button type="button" onClick={() => setFilterMood(null)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:`1px solid ${C.terracotta}`, background:"transparent", color:C.terracotta, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>{filterMood} ×</button>}
-                </div>
-              )}
-            </div>
+          {/* Search */}
+          <div className="disc-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(245,240,235,0.25)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              placeholder={discoverSearchMode === "people" ? "Search by username or name..." : "Search by name, neighborhood, vibe..."}
+            />
+            {searchQuery && <button onClick={() => setSearchQuery("")} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(245,240,235,0.3)", fontSize:16, lineHeight:1, padding:2 }}>×</button>}
           </div>
+          {discoverSearchMode !== "people" && (venueType !== "all" || secondaryCuisine || filterMood) && (
+            <div style={{ display:"flex", gap:4, padding:"0 16px 8px", flexWrap:"wrap" }}>
+              {venueType !== "all" && <button type="button" onClick={() => setVenueType("all")} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:"1px solid rgba(255,150,50,0.3)", background:"transparent", color:"#ff9632", fontSize:10, fontFamily:"'Inter', sans-serif", cursor:"pointer" }}>{venueType === "restaurants" ? "Restaurants" : venueType === "bars" ? "Bars" : venueType === "hotels" ? "Hotels" : "Coffee"} ×</button>}
+              {secondaryCuisine && <button type="button" onClick={() => setSecondaryCuisine(null)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:"1px solid rgba(255,150,50,0.3)", background:"transparent", color:"#ff9632", fontSize:10, fontFamily:"'Inter', sans-serif", cursor:"pointer" }}>{secondaryCuisine} ×</button>}
+              {filterMood && <button type="button" onClick={() => setFilterMood(null)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:10, border:"1px solid rgba(255,150,50,0.3)", background:"transparent", color:"#ff9632", fontSize:10, fontFamily:"'Inter', sans-serif", cursor:"pointer" }}>{filterMood} ×</button>}
+            </div>
+          )}
 
           {(() => {
             const lovedIds = heatResults.loved || [];
@@ -3768,36 +3721,26 @@ Return a JSON object with exactly these fields:
             const place = recommendation.neighborhood || recommendation.city || "";
             const bannerImg = recommendation.img && !String(recommendation.img).includes("picsum") ? recommendation.img : `https://picsum.photos/seed/${encodeURIComponent(recommendation.name)}/800/600`;
             return (
-              <div>
-              <button
-                type="button"
-                onClick={() => setDetailRestaurant(recommendation)}
-                style={{ margin:"12px 16px 0", borderRadius:18, overflow:"hidden", position:"relative", minHeight:90, display:"block", width:"calc(100% - 32px)", border:"none", padding:0, background:"none", textAlign:"left", cursor:"pointer" }}
-              >
-                <img src={bannerImg} style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", filter:"brightness(0.3)" }} alt="" />
-                <div style={{ position:"relative", zIndex:1, padding:"18px" }}>
-                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, color:"rgba(255,255,255,0.5)", letterSpacing:"2px", marginBottom:7 }}>⚡ COOKED FOR YOU</div>
-                  <div style={{ fontSize:14, color:"#fff", lineHeight:1.55 }}>
-                    Based on your taste profile, try <span style={{ fontFamily:"Cormorant Garamond,Georgia,serif", fontSize:18, fontStyle:"italic", color:C.terracotta }}>{recommendation.name}</span>
+              <div className="disc-banner" onClick={() => setDetailRestaurant(recommendation)} style={{ cursor:"pointer" }}>
+                <img src={bannerImg} alt="" />
+                <div className="disc-banner-text">
+                  <div className="disc-banner-label">⚡ COOKED FOR YOU</div>
+                  <div className="disc-banner-msg">
+                    Based on your taste profile, try <em>{recommendation.name}</em>
                     {place ? ` in ${place}` : ""} tonight.
                   </div>
                 </div>
-              </button>
               </div>
             );
           })()}
-          <div style={{ padding:"16px 20px 10px", display:"flex", alignItems:"baseline", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
-            <div style={{ fontFamily:"Cormorant Garamond,Georgia,serif", fontSize:24, fontWeight:700, fontStyle:"italic", color:C.text }}>
+          <div className="disc-section-header">
+            <div className="disc-section-title">
               {searchQuery ? `"${searchQuery}"` : secondaryCuisine ? `${secondaryCuisine} in ${city}` : venueType !== "all" ? (venueType === "restaurants" ? "Restaurants" : venueType === "bars" ? "Bars & Nightlife" : venueType === "hotels" ? "Hotels" : venueType === "coffee" ? "Coffee & Cafes" : "Hot") + ` in ${city}` : `Hot in ${city}`}
             </div>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <div style={{ fontFamily:"'DM Mono',monospace", fontSize:11, color:C.muted }}>{filteredSorted.length} spots</div>
-              <button
-                type="button"
-                onClick={()=>setTab("map")}
-                style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 10px", borderRadius:18, border:`1px solid ${C.border}`, background:C.bg2, color:C.text, fontSize:11, fontFamily:"'DM Mono',monospace", cursor:"pointer", letterSpacing:"0.5px" }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="1.5" strokeLinecap="round">
+            <div className="disc-section-meta">
+              <span className="disc-spot-count">{filteredSorted.length} spots</span>
+              <button className="disc-map-btn" type="button" onClick={()=>setTab("map")}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                   <path d="M12 2C8 2 5 5.5 5 9c0 5 7 13 7 13s7-8 7-13c0-3.5-3-7-7-7z" />
                   <circle cx="12" cy="9" r="2.5" />
                 </svg>
@@ -3822,46 +3765,40 @@ Return a JSON object with exactly these fields:
               flameScore={getFlameScore(r)}
             />
           ))}
-          {filteredSorted.length === 0 && <div style={{ textAlign:"center", padding:"48px 20px", color:C.muted }}><div style={{ fontSize:40, marginBottom:10 }}>🍽️</div><div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:20, fontStyle:"italic" }}>No spots yet for this city.</div></div>}
+          {filteredSorted.length === 0 && <div style={{ textAlign:"center", padding:"48px 20px", color:C.muted }}><div style={{ fontSize:40, marginBottom:10 }}>🍽️</div><div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:20, fontStyle:"italic" }}>No spots yet for this city.</div></div>}
         </div>
         ) : (
           <div style={{ paddingTop: headerHeight }}>
-            {/* Tabs row */}
-            <div style={{ display:"flex", alignItems:"center", borderBottom:`1px solid ${C.border}`, padding:"10px 16px 0", position:"relative" }}>
-              <div style={{ flex:1, display:"flex", justifyContent:"center" }}>
-              {["Places","People"].map((t) => (
-                <button key={t} type="button"
-                  onClick={() => setDiscoverSearchMode(t === "People" ? "people" : "restaurants")}
-                  style={{ padding:"12px 24px 11px", borderRadius:0, fontSize:10, fontFamily:"'DM Mono',monospace", letterSpacing:"1.2px", textTransform:"uppercase", background:"none", border:"none", borderBottom: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? `2px solid ${C.terracotta}` : `2px solid transparent`, color: (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people") ? C.terracotta : C.muted, cursor:"pointer", marginBottom:"-1px", flexShrink:0, transition:"color 0.15s" }}>
-                  {t}
-                </button>
-              ))}
+            <div className="disc-tabs">
+              <div className="disc-tabs-inner">
+              {["Places","People"].map((t) => {
+                const active = (t==="People" ? discoverSearchMode==="people" : discoverSearchMode!=="people");
+                return (
+                  <button key={t} type="button" className={`disc-tab-btn ${active ? "active" : ""}`}
+                    onClick={() => setDiscoverSearchMode(t === "People" ? "people" : "restaurants")}>
+                    {t.toUpperCase()}
+                  </button>
+                );
+              })}
               </div>
-              <div style={{ position:"absolute", bottom:0, left:"10%", right:"10%", height:"1px", background:`linear-gradient(to right, transparent, ${C.border} 20%, ${C.border} 80%, transparent)` }} />
               {discoverSearchMode !== "people" && (
-                <button type="button" onClick={() => setShowFilterSheet(true)}
-                  style={{ flexShrink:0, display:"flex", alignItems:"center", gap:5, padding:"6px 12px", border:`1px solid ${venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.border}`, borderRadius:10, background:"transparent", color: venueType !== "all" || secondaryCuisine || filterMood ? C.terracotta : C.muted, fontSize:10, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                <button className={`disc-filter-btn ${venueType !== "all" || secondaryCuisine || filterMood ? "active" : ""}`} type="button" onClick={() => setShowFilterSheet(true)}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
                   Filter {(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0) > 0 ? `(${(venueType !== "all" ? 1 : 0) + (secondaryCuisine ? 1 : 0) + (filterMood ? 1 : 0)})` : ""}
                 </button>
               )}
             </div>
-            <div style={{ padding:"10px 16px 8px" }}>
-              <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
-                <div style={{ flex:1, position:"relative" }}>
-                  <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:12, color:C.muted, pointerEvents:"none" }}>🔍</span>
-                  <input
-                    type="text"
-                    value={peopleSearchInput}
-                    onChange={(e) => setPeopleSearchInput(e.target.value)}
-                    placeholder="Search by username or name..."
-                    style={{ width:"100%", boxSizing:"border-box", padding:"11px 32px 11px 34px", borderRadius:14, border:`1.5px solid ${C.border}`, background:C.bg2, fontSize:14, color:C.text, fontFamily:"Cormorant Garamond,Georgia,serif", fontStyle:"italic", outline:"none" }}
-                  />
-                  {peopleSearchInput ? (
-                    <button type="button" onClick={() => setPeopleSearchInput("")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, lineHeight:1, padding:2 }}>×</button>
-                  ) : null}
-                </div>
-              </div>
+            <div className="disc-search">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <input
+                type="text"
+                value={peopleSearchInput}
+                onChange={(e) => setPeopleSearchInput(e.target.value)}
+                placeholder="Search by username or name..."
+              />
+              {peopleSearchInput ? (
+                <button type="button" onClick={() => setPeopleSearchInput("")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"rgba(245,240,235,0.3)", fontSize:16, lineHeight:1, padding:2 }}>×</button>
+              ) : null}
             </div>
 
               {!peopleSearchInput.trim() ? (
@@ -3869,15 +3806,15 @@ Return a JSON object with exactly these fields:
                   {/* Suggested for You — friend of friend with taste overlap */}
                   {suggestedFriends.length > 0 && (
                     <div style={{ padding: "8px 16px 0" }}>
-                      <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, marginBottom: 10 }}>SUGGESTED FOR YOU</div>
+                      <div style={{ fontSize: 9, fontFamily: "'Inter', -apple-system, sans-serif", letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, marginBottom: 10 }}>SUGGESTED FOR YOU</div>
                       {suggestedFriends.map(person => (
                         <div key={person.id} onClick={() => person.id && setViewingUserId(person.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
                           <div style={{ width: 44, height: 44, borderRadius: "50%", border: `2px solid ${C.terracotta}`, background: C.bg3, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
-                            <span style={{ fontSize: 16, color: C.terracotta, fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold" }}>{(person.name || "?")[0].toUpperCase()}</span>
+                            <span style={{ fontSize: 16, color: C.terracotta, fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: "bold" }}>{(person.name || "?")[0].toUpperCase()}</span>
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: "Georgia,serif", fontWeight: 700, fontStyle: "italic", fontSize: 15, color: C.text }}>{person.name || "User"}</div>
-                            <div style={{ fontSize: 11, color: C.terracotta, marginTop: 2, fontFamily: "'DM Mono',monospace" }}>{person.sharedCount} restaurant{person.sharedCount !== 1 ? "s" : ""} in common</div>
+                            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontStyle: "italic", fontSize: 15, color: C.text }}>{person.name || "User"}</div>
+                            <div style={{ fontSize: 11, color: C.terracotta, marginTop: 2, fontFamily: "'Inter', -apple-system, sans-serif" }}>{person.sharedCount} restaurant{person.sharedCount !== 1 ? "s" : ""} in common</div>
                             <div style={{ fontSize: 10, color: C.dim, marginTop: 1 }}>friend of a friend</div>
                           </div>
                           <button type="button" disabled={!user?.id} onClick={async (e) => {
@@ -3887,7 +3824,7 @@ Return a JSON object with exactly these fields:
                             syncFollow(user.id, person.id);
                             supabase.from("notifications").insert({ user_id: person.id, type: "followed_you", from_user_id: user.id, read: false });
                             setSuggestedFriends(prev => prev.filter(p => p.id !== person.id));
-                          }} style={{ flexShrink: 0, padding: "6px 14px", borderRadius: 20, border: "none", background: C.terracotta, color: "#fff", fontSize: 12, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", fontWeight: 500 }}>
+                          }} style={{ flexShrink: 0, padding: "6px 14px", borderRadius: 20, border: "none", background: C.terracotta, color: "#fff", fontSize: 12, fontFamily: "'Inter', sans-serif", cursor: "pointer", fontWeight: 500 }}>
                             Follow
                           </button>
                         </div>
@@ -3898,15 +3835,15 @@ Return a JSON object with exactly these fields:
                   {/* People Like You — shared taste */}
                   {peopleLikeYou.length > 0 && (
                     <div style={{ padding: "16px 16px 0" }}>
-                      <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, marginBottom: 10 }}>PEOPLE LIKE YOU</div>
+                      <div style={{ fontSize: 9, fontFamily: "'Inter', -apple-system, sans-serif", letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, marginBottom: 10 }}>PEOPLE LIKE YOU</div>
                       {peopleLikeYou.map(person => (
                         <div key={person.id} onClick={() => person.id && setViewingUserId(person.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
                           <div style={{ width: 44, height: 44, borderRadius: "50%", border: `2px solid ${C.border}`, background: C.bg3, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
-                            <span style={{ fontSize: 16, color: C.muted, fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold" }}>{(person.name || "?")[0].toUpperCase()}</span>
+                            <span style={{ fontSize: 16, color: C.muted, fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: "bold" }}>{(person.name || "?")[0].toUpperCase()}</span>
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: "Georgia,serif", fontWeight: 700, fontStyle: "italic", fontSize: 15, color: C.text }}>{person.name || "User"}</div>
-                            <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: "'DM Mono',monospace" }}>{person.sharedCount} restaurant{person.sharedCount !== 1 ? "s" : ""} in common</div>
+                            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontStyle: "italic", fontSize: 15, color: C.text }}>{person.name || "User"}</div>
+                            <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: "'Inter', -apple-system, sans-serif" }}>{person.sharedCount} restaurant{person.sharedCount !== 1 ? "s" : ""} in common</div>
                           </div>
                           <button type="button" disabled={!user?.id} onClick={async (e) => {
                             e.stopPropagation();
@@ -3915,7 +3852,7 @@ Return a JSON object with exactly these fields:
                             syncFollow(user.id, person.id);
                             supabase.from("notifications").insert({ user_id: person.id, type: "followed_you", from_user_id: user.id, read: false });
                             setPeopleLikeYou(prev => prev.filter(p => p.id !== person.id));
-                          }} style={{ flexShrink: 0, padding: "6px 14px", borderRadius: 20, border: `1px solid ${C.terracotta}`, background: "transparent", color: C.terracotta, fontSize: 12, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", fontWeight: 500 }}>
+                          }} style={{ flexShrink: 0, padding: "6px 14px", borderRadius: 20, border: `1px solid ${C.terracotta}`, background: "transparent", color: C.terracotta, fontSize: 12, fontFamily: "'Inter', sans-serif", cursor: "pointer", fontWeight: 500 }}>
                             Follow
                           </button>
                         </div>
@@ -3925,7 +3862,7 @@ Return a JSON object with exactly these fields:
 
                   {/* Invite Friends */}
                   <div style={{ padding: "16px 16px 0" }}>
-                    <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, marginBottom: 10 }}>INVITE FRIENDS</div>
+                    <div style={{ fontSize: 9, fontFamily: "'Inter', -apple-system, sans-serif", letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, marginBottom: 10 }}>INVITE FRIENDS</div>
                     <button type="button" onClick={() => {
                       const url = window.location.origin;
                       if (navigator.share) {
@@ -3933,7 +3870,7 @@ Return a JSON object with exactly these fields:
                       } else {
                         navigator.clipboard?.writeText(url);
                       }
-                    }} style={{ width: "100%", padding: "14px 16px", borderRadius: 14, border: `1px solid ${C.border}`, background: C.bg2, color: C.text, fontSize: 14, fontFamily: "-apple-system,sans-serif", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
+                    }} style={{ width: "100%", padding: "14px 16px", borderRadius: 14, border: `1px solid ${C.border}`, background: C.bg2, color: C.text, fontSize: 14, fontFamily: "'Inter', -apple-system, sans-serif", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
                       <span style={{ fontSize: 18 }}>📨</span>
                       <div>
                         <div style={{ fontWeight: 600 }}>Share Cooked with a friend</div>
@@ -3945,7 +3882,7 @@ Return a JSON object with exactly these fields:
                   {/* Following's Picks — existing feature, moved below */}
                   {!followingPicksLoading && !followingPicksNoFollows && followingPicksRestaurants.length > 0 && (
                     <div style={{ padding: "16px 0 0" }}>
-                      <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted, padding: "4px 16px 10px" }}>FROM PEOPLE YOU FOLLOW</div>
+                      <div style={{ fontSize: 9, fontFamily: "'Inter', -apple-system, sans-serif", letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted, padding: "4px 16px 10px" }}>FROM PEOPLE YOU FOLLOW</div>
                       {followingPicksRestaurants.map((r, index) => (
                         <RestCard
                           key={`follow-pick-${r.id}-${photoCacheVersion}-${index}`}
@@ -3968,15 +3905,15 @@ Return a JSON object with exactly these fields:
 
                   {/* Empty state when no suggestions and no following picks */}
                   {suggestedFriends.length === 0 && peopleLikeYou.length === 0 && followingPicksRestaurants.length === 0 && !followingPicksLoading && (
-                    <div style={{ textAlign: "center", padding: "32px 24px", color: C.muted, fontSize: 14, fontFamily: "-apple-system,sans-serif" }}>
+                    <div style={{ textAlign: "center", padding: "32px 24px", color: C.muted, fontSize: 14, fontFamily: "'Inter', -apple-system, sans-serif" }}>
                       Search for friends above or invite them to join Cooked
                     </div>
                   )}
                 </div>
               ) : peopleSearchLoading || peopleSearchInput.trim() !== peopleDebouncedQuery.trim() ? (
-                <div style={{ textAlign: "center", padding: "32px 20px", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Searching…</div>
+                <div style={{ textAlign: "center", padding: "32px 20px", color: C.muted, fontSize: 13, fontFamily: "'Inter', -apple-system, sans-serif" }}>Searching…</div>
               ) : peopleSearchResults.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "48px 24px", color: C.muted, fontSize: 14, fontFamily: "-apple-system,sans-serif" }}>No people found</div>
+                <div style={{ textAlign: "center", padding: "48px 24px", color: C.muted, fontSize: 14, fontFamily: "'Inter', -apple-system, sans-serif" }}>No people found</div>
               ) : (
                 <div style={{ padding: "0 0 24px" }}>
                   {peopleSearchResults.map((row) => {
@@ -4023,9 +3960,9 @@ Return a JSON object with exactly these fields:
                           ) : null}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontFamily: "Georgia,serif", fontWeight: 700, fontStyle: "italic", fontSize: 14, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{displayName}</div>
-                          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.muted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{uname}</div>
-                          <div style={{ fontSize: 11, color: C.dim, fontFamily: "'DM Mono',monospace", marginTop: 3 }}>
+                          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontStyle: "italic", fontSize: 14, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{displayName}</div>
+                          <div style={{ fontFamily: "'Inter', -apple-system, sans-serif", fontSize: 12, color: C.muted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{uname}</div>
+                          <div style={{ fontSize: 11, color: C.dim, fontFamily: "'Inter', -apple-system, sans-serif", marginTop: 3 }}>
                             {cityCount} {cityCount === 1 ? "city" : "cities"} visited
                           </div>
                         </div>
@@ -4060,7 +3997,7 @@ Return a JSON object with exactly these fields:
                             background: "transparent",
                             color: following ? C.muted : C.terracotta,
                             fontSize: 11,
-                            fontFamily: "'DM Mono',monospace",
+                            fontFamily: "'Inter', -apple-system, sans-serif",
                             letterSpacing: "0.2px",
                             textTransform: "uppercase",
                             cursor: !user?.id || !uid || uid === user?.id ? "default" : "pointer",
@@ -4082,19 +4019,19 @@ Return a JSON object with exactly these fields:
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:99999, display:"flex", alignItems:"flex-end" }} onClick={() => setShowFilterSheet(false)}>
           <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:480, margin:"0 auto", background:C.bg2, borderRadius:"20px 20px 0 0", maxHeight:"80vh", overflowY:"auto", paddingBottom:32 }}>
             <div style={{ padding:"16px 18px 12px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:18, color:C.text }}>Filter</div>
+              <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontStyle:"italic", fontSize:18, color:C.text }}>Filter</div>
               <div style={{ display:"flex", gap:12, alignItems:"center" }}>
-                <button type="button" onClick={() => { setVenueType("all"); setSecondaryCuisine(null); setFilterMood(null); }} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Clear all</button>
+                <button type="button" onClick={() => { setVenueType("all"); setSecondaryCuisine(null); setFilterMood(null); }} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", fontFamily:"'Inter', sans-serif" }}>Clear all</button>
                 <button type="button" onClick={() => setShowFilterSheet(false)} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:22, lineHeight:1, padding:0 }}>×</button>
               </div>
             </div>
 
             <div style={{ padding:"16px 18px 8px" }}>
-              <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Type</div>
+              <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'Inter', -apple-system, sans-serif" }}>Type</div>
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                 {[{id:"all",label:"All"},{id:"restaurants",label:"Restaurant"},{id:"bars",label:"Bar"},{id:"hotels",label:"Hotel"},{id:"coffee",label:"Coffee"}].map(({id,label}) => (
                   <button key={id} type="button" onClick={() => setVenueType(id)}
-                    style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${venueType===id ? C.terracotta : C.border}`, background: venueType===id ? C.terracotta : "transparent", color: venueType===id ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                    style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${venueType===id ? C.terracotta : C.border}`, background: venueType===id ? C.terracotta : "transparent", color: venueType===id ? "#fff" : C.muted, fontSize:12, fontFamily:"'Inter', sans-serif", cursor:"pointer" }}>
                     {label}
                   </button>
                 ))}
@@ -4102,14 +4039,14 @@ Return a JSON object with exactly these fields:
             </div>
 
             <div style={{ padding:"16px 18px 8px", borderTop:`1px solid ${C.border}` }}>
-              <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Cuisine</div>
+              <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'Inter', -apple-system, sans-serif" }}>Cuisine</div>
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                 {(venueType === "bars" ? ["Cocktail Bar","Wine Bar","Dive Bar","Sports Bar","Rooftop Bar","Jazz Bar","Speakeasy","Craft Beer","Sake Bar","Whiskey Bar"] :
                   venueType === "coffee" ? ["Espresso Bar","Third Wave","Bakery Cafe","Specialty Coffee","Cold Brew","Matcha","Tea House"] :
                   venueType === "hotels" ? ["Luxury","Boutique","Resort","Design Hotel","Historic","Budget"] :
                   ["Italian","Japanese","Mexican","American","French","Chinese","Korean","Thai","Indian","Mediterranean","Seafood","Steakhouse","Pizza","Vegan","Middle Eastern","Spanish","Greek","Vietnamese","Turkish"]).map(c => (
                   <button key={c} type="button" onClick={() => setSecondaryCuisine(secondaryCuisine===c ? null : c)}
-                    style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${secondaryCuisine===c ? C.terracotta : C.border}`, background: secondaryCuisine===c ? C.terracotta : "transparent", color: secondaryCuisine===c ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                    style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${secondaryCuisine===c ? C.terracotta : C.border}`, background: secondaryCuisine===c ? C.terracotta : "transparent", color: secondaryCuisine===c ? "#fff" : C.muted, fontSize:12, fontFamily:"'Inter', sans-serif", cursor:"pointer" }}>
                     {c}
                   </button>
                 ))}
@@ -4117,11 +4054,11 @@ Return a JSON object with exactly these fields:
             </div>
 
             <div style={{ padding:"16px 18px 8px", borderTop:`1px solid ${C.border}` }}>
-              <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'DM Mono',monospace" }}>Mood</div>
+              <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:C.muted, marginBottom:10, fontFamily:"'Inter', -apple-system, sans-serif" }}>Mood</div>
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                 {["Date Night","Business Dinner","Lunch","Brunch","Late Night","Group Friendly","Casual","Special Occasion","Outdoor","Bar Hopping"].map(m => (
                   <button key={m} type="button" onClick={() => setFilterMood(filterMood===m ? null : m)}
-                    style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${filterMood===m ? C.terracotta : C.border}`, background: filterMood===m ? C.terracotta : "transparent", color: filterMood===m ? "#fff" : C.muted, fontSize:12, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                    style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${filterMood===m ? C.terracotta : C.border}`, background: filterMood===m ? C.terracotta : "transparent", color: filterMood===m ? "#fff" : C.muted, fontSize:12, fontFamily:"'Inter', sans-serif", cursor:"pointer" }}>
                     {m}
                   </button>
                 ))}
@@ -4129,7 +4066,7 @@ Return a JSON object with exactly these fields:
             </div>
 
             <div style={{ padding:"16px 18px 0" }}>
-              <button type="button" onClick={() => setShowFilterSheet(false)} style={{ width:"100%", padding:"14px", background:C.terracotta, border:"none", borderRadius:14, color:"#fff", fontSize:14, fontFamily:"Georgia,serif", fontStyle:"italic", cursor:"pointer" }}>
+              <button type="button" onClick={() => setShowFilterSheet(false)} style={{ width:"100%", padding:"14px", background:C.terracotta, border:"none", borderRadius:14, color:"#fff", fontSize:14, fontFamily:"'Playfair Display', Georgia, serif", fontStyle:"italic", cursor:"pointer" }}>
                 Show results
               </button>
             </div>
@@ -4151,48 +4088,48 @@ Return a JSON object with exactly these fields:
           const r = heatDeck[0];
           if (!r) return;
           heatSwipeHandledRef.current = true;
-          setSwipeDir(dir);
+          // Fly the current card off-screen
+          setHeatFlyDir(dir);
+          setSwipeDelta({ x: 0, y: 0 });
+          setIsDragging(false);
+          dragStart.current = null;
+          // After animation completes, advance the deck
           setTimeout(() => {
-            try {
-              if (dir === 'up') {
-                setHeatResults(prev => ({
-                  ...prev,
-                  skipped: [...prev.skipped.filter(id => id !== r.id), r.id],
-                }));
-              } else {
-                // Log swipe interaction for flame score
-                if (user?.id) {
-                  if (dir === 'right') logInteraction(user.id, r.id, 'heat');
-                  else if (dir === 'left') logInteraction(user.id, r.id, 'pass');
-                }
-                setHeatResults(prev => {
-                  const next = {
-                    ...prev,
-                    loved: dir === 'right' ? [...prev.loved, r.id] : prev.loved.filter(id => id !== r.id),
-                    noped: dir === 'left' ? [...prev.noped, r.id] : prev.noped.filter(id => id !== r.id),
-                    skipped: prev.skipped.filter(id => id !== r.id),
-                  };
-                  const prevVotes = next.votes || {};
-                  const cur = prevVotes[r.id] || { up: 0, down: 0 };
-                  return {
-                    ...next,
-                    votes: {
-                      ...prevVotes,
-                      [r.id]: {
-                        up: cur.up + (dir === 'right' ? 1 : 0),
-                        down: cur.down + (dir === 'left' ? 1 : 0),
-                      },
-                    },
-                  };
-                });
+            setHeatFlyDir(null);
+            setSwipeDir(null);
+            if (dir === 'up') {
+              setHeatResults(prev => ({
+                ...prev,
+                skipped: [...prev.skipped.filter(id => id !== r.id), r.id],
+              }));
+            } else {
+              if (user?.id) {
+                if (dir === 'right') logInteraction(user.id, r.id, 'heat');
+                else if (dir === 'left') logInteraction(user.id, r.id, 'pass');
               }
-            } finally {
-              setSwipeDelta({ x: 0, y: 0 });
-              setSwipeDir(null);
-              setIsDragging(false);
-              heatSwipeHandledRef.current = false;
+              setHeatResults(prev => {
+                const next = {
+                  ...prev,
+                  loved: dir === 'right' ? [...prev.loved, r.id] : prev.loved.filter(id => id !== r.id),
+                  noped: dir === 'left' ? [...prev.noped, r.id] : prev.noped.filter(id => id !== r.id),
+                  skipped: prev.skipped.filter(id => id !== r.id),
+                };
+                const prevVotes = next.votes || {};
+                const cur = prevVotes[r.id] || { up: 0, down: 0 };
+                return {
+                  ...next,
+                  votes: {
+                    ...prevVotes,
+                    [r.id]: {
+                      up: cur.up + (dir === 'right' ? 1 : 0),
+                      down: cur.down + (dir === 'left' ? 1 : 0),
+                    },
+                  },
+                };
+              });
             }
-          }, 260);
+            heatSwipeHandledRef.current = false;
+          }, 400);
         };
 
         const endGesture = () => {
@@ -4240,177 +4177,177 @@ Return a JSON object with exactly these fields:
         const handlePointerUp = endGesture;
         const handlePointerCancel = endGesture;
 
-        const exitX = swipeDir === 'right' ? 600 : swipeDir === 'left' ? -600 : swipeDelta.x;
-        const exitY = swipeDir === 'up' ? -700 : 0;
-        const cardTransform = swipeDir
-          ? `translateX(${exitX}px) translateY(${exitY}px) rotate(${exitX / 12}deg)`
-          : `translateX(${swipeDelta.x}px) translateY(${swipeDelta.y * 0.3}px) rotate(${rotation}deg)`;
+        // Card transform: consistent function list (translateX/translateY/rotate) all in px
+        const cardTransform = heatFlyDir === 'right'
+          ? "translateX(500px) translateY(0px) rotate(18deg)"
+          : heatFlyDir === 'left'
+            ? "translateX(-500px) translateY(0px) rotate(-18deg)"
+            : heatFlyDir === 'up'
+              ? "translateX(0px) translateY(-700px) rotate(0deg)"
+              : isDragging
+                ? `translateX(${swipeDelta.x}px) translateY(${swipeDelta.y * 0.3}px) rotate(${rotation}deg)`
+                : "translateX(0px) translateY(0px) rotate(0deg)";
 
         return (
-          <div style={{ position:"fixed", top:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, bottom:70, display:"flex", flexDirection:"column", background:C.bg, zIndex:55, userSelect:"none" }}>
+          <div className="d-heat">
+            <div className="glow-orb glow-orange glow-bg1" />
+
             {/* Header */}
-            <div style={{ padding:"14px 20px 4px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <div style={{ fontFamily:"Georgia,serif", fontSize:22, fontWeight:"bold", fontStyle:"italic", color:C.text }}>
-                <span style={{ color:C.text }}>cook</span><span style={{ color:C.terracotta }}>ed</span>
+            <div className="d-heat-header">
+              <div className="header-left">
+                <div className="d-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span></div>
               </div>
-              <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <FlameIcon size={18} filled={true} />
-                  <span style={{ fontFamily:"Georgia,serif", fontSize:18, fontWeight:"bold", fontStyle:"italic", color:C.text }}>Heat</span>
-                  <span style={{ fontFamily:"-apple-system,sans-serif", fontSize:12, color:C.muted, marginLeft:2 }}>{heatActive.length}</span>
+              <div className="header-right">
+                <div className="heat-label">
+                  <span className="fire">🔥</span>
+                  <span className="heat-counter">{heatActive.length}</span>
                 </div>
                 {(heatResults.loved.length > 0 || heatResults.noped.length > 0 || heatResults.skipped.length > 0) && (
-                  <button onClick={() => { setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} })); setSwipeDir(null); setSwipeDelta({ x: 0, y: 0 }); setIsDragging(false); }} style={{ fontFamily:"-apple-system,sans-serif", fontSize:10, color:C.muted, background:"none", border:`1px solid ${C.border}`, borderRadius:12, padding:"4px 10px", cursor:"pointer" }}>Reset</button>
+                  <button className="heat-reset glass-pill" onClick={() => { setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} })); setSwipeDir(null); setSwipeDelta({ x: 0, y: 0 }); setIsDragging(false); }}>Reset</button>
                 )}
+                <button className="heat-city" onClick={() => setHeatCityPickerOpen(o => !o)}>{heatCity === "All" ? "All Cities" : heatCity} ▾</button>
               </div>
             </div>
-            {/* City filter — compact dropdown */}
-            <div style={{ padding:"4px 16px 8px" }}>
-              <button
-                type="button"
-                onClick={() => setHeatCityPickerOpen(o => !o)}
-                style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:20, border:`1.5px solid ${C.border}`, background:"transparent", color:C.text, fontSize:13, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}
-              >
-                <span>{heatCity === "All" ? "All Cities" : heatCity}</span>
-                <span style={{ fontSize:10, color:C.muted }}>▾</span>
-              </button>
-              {heatCityPickerOpen && (
-                <div style={{ position:"absolute", top:90, left:16, right:16, background:C.bg2, border:`1px solid ${C.border}`, borderRadius:14, zIndex:200, maxHeight:320, overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.4)" }}>
-                  <button type="button" onClick={() => { setHeatCity("All"); setHeatCityPickerOpen(false); }}
-                    style={{ display:"block", width:"100%", padding:"10px 16px", textAlign:"left", background: heatCity==="All" ? `${C.terracotta}18` : "transparent", border:"none", borderBottom:`1px solid ${C.border}`, color: heatCity==="All" ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
-                    All Cities
-                  </button>
-                  {getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults, dynamicCityRegions).map(({ region, cities }) => (
-                    <div key={region}>
-                      <div style={{ padding:"8px 16px 4px", fontSize:8, fontFamily:"'DM Mono',monospace", color:C.terracotta, letterSpacing:"1.8px", textTransform:"uppercase", borderTop:`1px solid ${C.border}` }}>{region}</div>
-                      {cities.map(c => (
-                        <button key={c} type="button" onClick={() => { setHeatCity(c); setHeatCityPickerOpen(false); }}
-                          style={{ display:"block", width:"100%", padding:"8px 16px", textAlign:"left", background: heatCity===c ? `${C.terracotta}18` : "transparent", border:"none", color: heatCity===c ? C.terracotta : C.text, fontSize:14, fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
-                          {c}
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            {heatCityPickerOpen && (
+              <div style={{ position:"absolute", top:60, left:16, right:16, background:"#12121a", border:"1px solid rgba(255,255,255,0.06)", borderRadius:14, zIndex:200, maxHeight:320, overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.4)" }}>
+                <button type="button" onClick={() => { setHeatCity("All"); setHeatCityPickerOpen(false); }}
+                  style={{ display:"block", width:"100%", padding:"10px 16px", textAlign:"left", background: heatCity==="All" ? "rgba(255,150,50,0.1)" : "transparent", border:"none", borderBottom:"1px solid rgba(255,255,255,0.06)", color: heatCity==="All" ? "#ff9632" : "#f5f0eb", fontSize:14, fontFamily:"'Inter', sans-serif", cursor:"pointer" }}>
+                  All Cities
+                </button>
+                {getPersonalizedCityRegions(lovedRestaurants, followedCities, heatResults, dynamicCityRegions).map(({ region, cities }) => (
+                  <div key={region}>
+                    <div style={{ padding:"8px 16px 4px", fontSize:8, fontFamily:"'Inter', -apple-system, sans-serif", color:"#ff9632", letterSpacing:"1.8px", textTransform:"uppercase", borderTop:"1px solid rgba(255,255,255,0.06)" }}>{region}</div>
+                    {cities.map(c => (
+                      <button key={c} type="button" onClick={() => { setHeatCity(c); setHeatCityPickerOpen(false); }}
+                        style={{ display:"block", width:"100%", padding:"8px 16px", textAlign:"left", background: heatCity===c ? "rgba(255,150,50,0.1)" : "transparent", border:"none", color: heatCity===c ? "#ff9632" : "#f5f0eb", fontSize:14, fontFamily:"'Inter', sans-serif", cursor:"pointer" }}>
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
 
 
-            {/* Card stack area */}
-            <div style={{ flex:1, position:"relative", margin:"0 16px", overflow:"hidden" }}>
+            <div className="heat-content">
               {/* Empty state */}
               {heatDeck.length === 0 && (
-                <div style={{ height:"100%", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16, color:C.text }}>
+                <div style={{ height:480, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16, color:"#f5f0eb", margin:"0 20px" }}>
                   <div style={{ fontSize:48 }}>🎉</div>
-                  <div style={{ fontFamily:"Cormorant Garamond,Georgia,serif", fontSize:24, fontStyle:"italic", color:C.text }}>You've been through it all</div>
-                  <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:14, color:C.muted }}>
+                  <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:24, fontStyle:"italic" }}>You've been through it all</div>
+                  <div style={{ fontFamily:"'Inter', sans-serif", fontSize:14, color:"rgba(245,240,235,0.3)" }}>
                     {heatResults.loved.length} loved · {heatResults.noped.length} passed
                   </div>
-                  <button onClick={() => { setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} })); setSwipeDir(null); setSwipeDelta({ x: 0, y: 0 }); setIsDragging(false); }} style={{ marginTop:8, padding:"12px 28px", borderRadius:12, background:C.terracotta, color:"#fff", border:"none", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Start over</button>
+                  <button onClick={() => { setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} })); setSwipeDir(null); setSwipeDelta({ x: 0, y: 0 }); setIsDragging(false); }} style={{ marginTop:8, padding:"12px 28px", borderRadius:12, background:"#ff9632", color:"#fff", border:"none", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"'Inter', sans-serif" }}>Start over</button>
                 </div>
               )}
 
-              {/* Next card (behind) */}
-              {nextCard && (
-                <div style={{ position:"absolute", inset:0, borderRadius:20, overflow:"hidden", transform:"scale(0.95) translateY(8px)", transition:"transform 0.2s", boxShadow:"0 4px 20px rgba(30,18,8,0.12)" }}>
-                  <img src={getAnyCachedPhotoForId(nextCard.id) || nextCard.img} alt={nextCard.name} style={{ width:"100%", height:"100%", objectFit:"cover", objectPosition:"top" }} />
-                  <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, transparent 35%, rgba(30,18,8,0.85) 100%)" }} />
-                </div>
-              )}
-
-              {/* Current card */}
+              {/* Card stack */}
               {card && (
-                <div
-                  onPointerDown={handlePointerDown}
-                  onPointerMove={handlePointerMove}
-                  onPointerUp={handlePointerUp}
-                  onPointerCancel={handlePointerCancel}
-                  style={{
-                    position:"absolute", inset:0, borderRadius:20, overflow:"hidden", cursor:isDragging ? "grabbing" : "grab",
-                    transform: cardTransform,
-                    transition: swipeDir ? "transform 0.26s ease-out" : isDragging ? "none" : "transform 0.3s ease",
-                    boxShadow:"0 8px 40px rgba(30,18,8,0.2)",
-                    touchAction:"none",
-                  }}
-                  onClick={() => {
-                    if (heatSwipeHandledRef.current) {
-                      heatSwipeHandledRef.current = false;
-                      return;
-                    }
-                    if (Math.abs(swipeDelta.x) < 5 && Math.abs(swipeDelta.y) < 5) setDetailRestaurant(card);
-                  }}
-                >
-                  <img src={getAnyCachedPhotoForId(card.id) || card.img} alt={card.name} style={{ width:"100%", height:"100%", objectFit:"cover", objectPosition:"top", pointerEvents:"none" }} />
-                  <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, transparent 35%, rgba(30,18,8,0.88) 100%)", pointerEvents:"none" }} />
+                <div style={{ position:"relative", height:480, margin:"0 20px" }}>
+                  {/* Next card — static, full size, sits behind ready to be revealed */}
+                  {nextCard && (
+                    <div
+                      className="heat-swipe-area"
+                      style={{
+                        position:"absolute", inset:0, margin:0,
+                        zIndex: 0,
+                        pointerEvents:"none",
+                      }}
+                    >
+                      <img src={getAnyCachedPhotoForId(nextCard.id) || nextCard.img} alt={nextCard.name} style={{ pointerEvents:"none" }} />
+                      <div className="shade" />
+                      <div className="heat-card-info">
+                        <h2>{nextCard.name}</h2>
+                        <div className="cuisine-line">{[nextCard.cuisine, nextCard.neighborhood, nextCard.price].filter(Boolean).join(" · ")}</div>
+                        <div className="desc-line">{nextCard.desc}</div>
+                        <div className="tag-pills">
+                          {(nextCard.tags || []).slice(0,3).map(t => (
+                            <span key={t} className="tag-pill">{t}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-                  {/* LOVE stamp */}
-                  <div style={{ position:"absolute", top:32, left:24, padding:"8px 18px", borderRadius:8, border:`3px solid ${C.terracotta}`, color:C.terracotta, fontFamily:"'DM Mono',monospace", fontSize:22, fontWeight:700, letterSpacing:"3px", transform:"rotate(-18deg)", opacity: Math.min(1, Math.max(0, swipeDelta.x - 20) / 60), transition:"opacity 0.05s", pointerEvents:"none" }}>HEAT</div>
+                  {/* Current/top card — draggable, flies out on swipe */}
+                  <div
+                    className="heat-swipe-area"
+                    onPointerDown={handlePointerDown}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerCancel={handlePointerCancel}
+                    style={{
+                      position:"absolute", inset:0, margin:0,
+                      cursor:isDragging ? "grabbing" : "grab",
+                      transform: cardTransform,
+                      transition: heatFlyDir ? "transform 0.4s cubic-bezier(0.32, 0, 0.67, 0)" : isDragging ? "none" : "transform 0.3s ease",
+                      touchAction:"none",
+                      zIndex: 2,
+                      willChange: "transform",
+                      backfaceVisibility: "hidden",
+                    }}
+                    onClick={() => {
+                      if (heatSwipeHandledRef.current) {
+                        heatSwipeHandledRef.current = false;
+                        return;
+                      }
+                      if (Math.abs(swipeDelta.x) < 5 && Math.abs(swipeDelta.y) < 5) setDetailRestaurant(card);
+                    }}
+                  >
+                    <img src={getAnyCachedPhotoForId(card.id) || card.img} alt={card.name} style={{ pointerEvents:"none" }} />
+                    <div className="shade" />
 
-                  {/* NOPE stamp */}
-                  <div style={{ position:"absolute", top:32, right:24, padding:"8px 18px", borderRadius:8, border:"3px solid #f87171", color:"#f87171", fontFamily:"'DM Mono',monospace", fontSize:22, fontWeight:700, letterSpacing:"3px", transform:"rotate(18deg)", opacity: Math.min(1, Math.max(0, -swipeDelta.x - 20) / 60), transition:"opacity 0.05s", pointerEvents:"none" }}>PASS</div>
-                  {/* HAVEN'T BEEN stamp */}
-                  <div style={{ position:"absolute", top:"40%", left:"50%", transform:"translateX(-50%) rotate(-5deg)", padding:"8px 18px", borderRadius:8, border:"3px solid #facc15", color:"#facc15", fontFamily:"'DM Mono',monospace", fontSize:22, fontWeight:700, letterSpacing:"3px", opacity: Math.min(1, Math.max(0, -swipeDelta.y - 40) / 60), transition:"opacity 0.05s", pointerEvents:"none" }}>HAVEN'T BEEN</div>
+                    {/* HEAT stamp */}
+                    <div style={{ position:"absolute", top:32, left:24, padding:"8px 18px", borderRadius:8, border:"3px solid #ff9632", color:"#ff9632", fontFamily:"'Inter', sans-serif", fontSize:22, fontWeight:700, letterSpacing:"3px", transform:"rotate(-18deg)", opacity: heatFlyDir === 'right' ? 1 : Math.min(1, Math.max(0, swipeDelta.x - 20) / 60), transition:"opacity 0.05s", pointerEvents:"none", zIndex:8 }}>HEAT</div>
 
-                  {/* Card info */}
-                  <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"20px 20px 28px", pointerEvents:"none", background:"linear-gradient(to bottom, transparent, rgba(15,12,9,0.85) 30%, rgba(15,12,9,0.98) 100%)" }}>
-                    <div style={{ fontFamily:"Georgia,serif", fontSize:30, fontWeight:"bold", fontStyle:"italic", color:"#f0ebe2", marginBottom:3, lineHeight:1.1 }}>{card.name}</div>
-                    <div style={{ fontFamily:"-apple-system,sans-serif", fontSize:10, color:"rgba(240,235,226,0.55)", marginBottom:10, letterSpacing:"0.12em", textTransform:"uppercase" }}>{[card.cuisine, card.neighborhood].filter(Boolean).join(" · ")}</div>
-                    <div style={{ fontFamily:"Georgia,serif", fontSize:15, fontStyle:"italic", color:"rgba(240,235,226,0.85)", lineHeight:1.5, marginBottom:12 }}>{card.desc}</div>
-                    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                      {(card.tags || []).slice(0,3).map(t => (
-                        <span key={t} style={{ padding:"4px 11px", borderRadius:20, border:"1px solid rgba(240,235,226,0.2)", background:"rgba(15,12,9,0.5)", color:"rgba(240,235,226,0.8)", fontSize:11, fontFamily:"-apple-system,sans-serif", isolation:"isolate" }}>{t}</span>
-                      ))}
+                    {/* PASS stamp */}
+                    <div style={{ position:"absolute", top:32, right:24, padding:"8px 18px", borderRadius:8, border:"3px solid #f87171", color:"#f87171", fontFamily:"'Inter', sans-serif", fontSize:22, fontWeight:700, letterSpacing:"3px", transform:"rotate(18deg)", opacity: heatFlyDir === 'left' ? 1 : Math.min(1, Math.max(0, -swipeDelta.x - 20) / 60), transition:"opacity 0.05s", pointerEvents:"none", zIndex:8 }}>PASS</div>
+                    {/* HAVEN'T BEEN stamp */}
+                    <div style={{ position:"absolute", top:"40%", left:"50%", transform:"translateX(-50%) rotate(-5deg)", padding:"8px 18px", borderRadius:8, border:"3px solid #facc15", color:"#facc15", fontFamily:"'Inter', sans-serif", fontSize:22, fontWeight:700, letterSpacing:"3px", opacity: heatFlyDir === 'up' ? 1 : Math.min(1, Math.max(0, -swipeDelta.y - 40) / 60), transition:"opacity 0.05s", pointerEvents:"none", zIndex:8 }}>HAVEN'T BEEN</div>
+
+                    {/* Card info */}
+                    <div className="heat-card-info">
+                      <h2>{card.name}</h2>
+                      <div className="cuisine-line">{[card.cuisine, card.neighborhood, card.price].filter(Boolean).join(" · ")}</div>
+                      <div className="desc-line">{card.desc}</div>
+                      <div className="tag-pills">
+                        {(card.tags || []).slice(0,3).map(t => (
+                          <span key={t} className="tag-pill">{t}</span>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
-            </div>
 
-            {/* Action buttons */}
-            {card && (
-              <div style={{ background:C.bg, paddingBottom:4 }}>
-                <div style={{ textAlign:"center", padding:"10px 0 6px", fontFamily:"-apple-system,sans-serif", fontSize:10, color:C.dim, letterSpacing:"0.12em", textTransform:"uppercase" }}>↑ &nbsp; HAVEN'T BEEN</div>
-                <div style={{ display:"flex", justifyContent:"center", alignItems:"center", gap:20, padding:"0 20px 16px" }}>
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
-                    <button onClick={() => doSwipe('left')} style={{ width:54, height:54, borderRadius:"50%", border:"1px solid #3d1a1a", background:"#160808", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
-                      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                        <line x1="5" y1="5" x2="17" y2="17" stroke="#e05555" strokeWidth="2.5" strokeLinecap="round"/>
-                        <line x1="17" y1="5" x2="5" y2="17" stroke="#e05555" strokeWidth="2.5" strokeLinecap="round"/>
-                      </svg>
-                    </button>
-                    <span style={{ fontSize:9, letterSpacing:"0.12em", color:"#3d2a18", fontFamily:"-apple-system,sans-serif", textTransform:"uppercase" }}>PASS</span>
+              {/* Haven't Been label */}
+              {card && <div className="heat-havent-been">↑ HAVEN'T BEEN</div>}
+
+              {/* Action buttons */}
+              {card && (
+                <div className="heat-actions">
+                  <div className="heat-action-wrap">
+                    <button className="heat-action-btn pass" onClick={() => doSwipe('left')}>&times;</button>
+                    <span className="heat-action-label">Pass</span>
                   </div>
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+                  <div className="heat-action-wrap">
                     <button
+                      className="heat-action-btn watch"
                       type="button"
                       onPointerDown={e => { e.stopPropagation(); e.preventDefault(); }}
-                      onPointerUp={e => { e.stopPropagation(); if (!isInWatchlist(card.id)) toggleWatch(card.id); doSwipe('up'); }}
-                      style={{ width:42, height:42, borderRadius:"50%", border:`1px solid ${isInWatchlist(card.id) ? "#4a90d9" : "#1a2a3d"}`, background: isInWatchlist(card.id) ? "#0a1a2e" : "#080f16", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
-                      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                        <circle cx="9" cy="9" r="7" stroke={isInWatchlist(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5"/>
-                        <circle cx="9" cy="9" r="3" stroke={isInWatchlist(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5"/>
-                        <line x1="9" y1="2" x2="9" y2="0" stroke={isInWatchlist(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5" strokeLinecap="round"/>
-                        <line x1="9" y1="18" x2="9" y2="16" stroke={isInWatchlist(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5" strokeLinecap="round"/>
-                        <line x1="2" y1="9" x2="0" y2="9" stroke={isInWatchlist(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5" strokeLinecap="round"/>
-                        <line x1="18" y1="9" x2="16" y2="9" stroke={isInWatchlist(card.id) ? "#4a90d9" : "#3a5a7a"} strokeWidth="1.5" strokeLinecap="round"/>
-                      </svg>
+                      onPointerUp={e => { e.stopPropagation(); if (!isInWatchlist(card.id)) toggleWatch(card.id); doSwipe('up'); }}>
+                      +
                     </button>
-                    <span style={{ fontSize:9, letterSpacing:"0.12em", color: isInWatchlist(card.id) ? "#4a90d9" : "#3d2a18", fontFamily:"-apple-system,sans-serif", textTransform:"uppercase" }}>WATCH</span>
+                    <span className="heat-action-label">Watch</span>
                   </div>
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
-                    <button onClick={() => doSwipe('right')} style={{ width:54, height:54, borderRadius:"50%", border:"1px solid #2e1f0e", background:"#1a1208", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
-                      <FlameIcon size={28} filled={true} />
-                    </button>
-                    <span style={{ fontSize:9, letterSpacing:"0.12em", color:"#c4603a", fontFamily:"-apple-system,sans-serif", textTransform:"uppercase" }}>HEAT</span>
+                  <div className="heat-action-wrap">
+                    <button className="heat-action-btn heat" onClick={() => doSwipe('right')}>🔥</button>
+                    <span className="heat-action-label">Heat</span>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {/* Swipe hint */}
-            {heatDeck.length > 0 && heatResults.loved.length === 0 && heatResults.noped.length === 0 && (
-              <div style={{ textAlign:"center", paddingBottom:8, fontFamily:"'DM Mono',monospace", fontSize:10, color:C.dim, letterSpacing:"1px" }}>↑ HAVEN'T BEEN · swipe up</div>
-            )}
+              )}
+            </div>{/* /heat-content */}
           </div>
         );
       })()}
@@ -4419,25 +4356,24 @@ Return a JSON object with exactly these fields:
       {tab === "map" && (
         <>
           <div style={{ position:"fixed", top:0, left:0, right:0, bottom:60, zIndex:1, background:C.bg }} />
-          <div style={{ position:"fixed", top:0, bottom:60, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, zIndex:2 }}>
+          <div style={{ position:"fixed", top:0, bottom:60, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:390, zIndex:2 }}>
             <div ref={mapRef} style={{ width:"100%", height:"100%" }} />
           {selectedRest && (
-            <div style={{ position:"absolute", bottom:16, left:16, right:16, background:"#fff9f2", borderRadius:20, overflow:"hidden", boxShadow:"0 8px 40px rgba(30,18,8,0.25)", border:"1px solid #ddd0bc", cursor:"pointer" }} onClick={() => { setDetailRestaurant(selectedRest); setSelectedRest(null); }}>
-              <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedRest(null); }} style={{ position:"absolute", top:10, right:10, zIndex:10, width:32, height:32, borderRadius:"50%", border:"none", background:"rgba(30,18,8,0.5)", backdropFilter:"blur(4px)", color:"#fff", fontSize:16, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, isolation:"isolate" }}>✕</button>
+            <div style={{ position:"absolute", bottom:16, left:16, right:16, background:"rgba(18,18,26,0.4)", backdropFilter:"blur(32px) saturate(1.4)", WebkitBackdropFilter:"blur(32px) saturate(1.4)", borderRadius:20, overflow:"hidden", boxShadow:"0 8px 40px rgba(0,0,0,0.35), inset 0 0.5px 0 rgba(255,255,255,0.08)", border:"0.5px solid rgba(255,255,255,0.1)", cursor:"pointer" }} onClick={() => { setDetailRestaurant(selectedRest); setSelectedRest(null); }}>
+              <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedRest(null); }} style={{ position:"absolute", top:10, right:10, zIndex:10, width:32, height:32, borderRadius:"50%", border:"0.5px solid rgba(255,255,255,0.1)", background:"rgba(10,10,15,0.5)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", color:"#fff", fontSize:16, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}>✕</button>
               <div style={{ position:"relative", height:140, overflow:"hidden" }}>
                 <img src={getAnyCachedPhotoForId(selectedRest.id) || selectedRest.img} alt={selectedRest.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-                <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, transparent 40%, rgba(30,18,8,0.7) 100%)" }} />
+                <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, transparent 30%, rgba(10,10,15,0.8) 100%)" }} />
                 <div style={{ position:"absolute", bottom:10, left:14, right:14, display:"flex", justifyContent:"space-between", alignItems:"flex-end" }}>
-                  <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:22, fontWeight:700, color:"#fff" }}>{selectedRest.name}</div>
-                  <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:20, fontWeight:700, fontStyle:"italic", color:"#fff" }}>{selectedRest.rating}</div>
+                  <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:20, fontWeight:700, color:"#fff", flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{selectedRest.name}</div>
+                  <div style={{ flexShrink:0, marginLeft:8 }}><FlameRating score={getFlameScore(selectedRest)} size={14} /></div>
                 </div>
               </div>
               <div style={{ padding:"12px 16px" }}>
-                <div style={{ fontSize:11, color:"#8a7060", fontFamily:"'DM Mono',monospace", marginBottom:10 }}>{selectedRest.cuisine} · {selectedRest.neighborhood} · {selectedRest.price}</div>
-                <p style={{ fontSize:12, color:"#4a3320", lineHeight:1.5, marginBottom:12 }}>{selectedRest.desc}</p>
+                <div style={{ fontSize:11, color:"rgba(245,240,235,0.35)", fontFamily:"'Inter', -apple-system, sans-serif", letterSpacing:"0.02em", marginBottom:10 }}>{selectedRest.cuisine} · {selectedRest.neighborhood} · {selectedRest.price}</div>
                 <div style={{ display:"flex", gap:8 }} onClick={e => e.stopPropagation()}>
-                  <button type="button" onClick={() => toggleLove(selectedRest.id)} style={{ flex:1, padding:"9px 4px", borderRadius:10, border:`1.5px solid ${isLovedCheck(selectedRest.id) ? "#c4603a" : "#ddd0bc"}`, background: isLovedCheck(selectedRest.id) ? "#c4603a18" : "transparent", color: isLovedCheck(selectedRest.id) ? "#c4603a" : "#8a7060", cursor:"pointer", fontSize:12, fontFamily:"'DM Sans',sans-serif" }}>{isLovedCheck(selectedRest.id) ? "Loved It ♥" : "Love It ♡"}</button>
-                  <button type="button" onClick={() => toggleWatch(selectedRest.id)} style={{ flex:1, padding:"9px 4px", borderRadius:10, border:`1.5px solid ${isInWatchlist(selectedRest.id) ? "#6b9fff" : "#ddd0bc"}`, background: isInWatchlist(selectedRest.id) ? "#6b9fff18" : "transparent", color: isInWatchlist(selectedRest.id) ? "#6b9fff" : "#8a7060", cursor:"pointer", fontSize:12, fontFamily:"'DM Sans',sans-serif" }}>{isInWatchlist(selectedRest.id) ? "On Watchlist" : "Watchlist"}</button>
+                  <button type="button" onClick={() => toggleLove(selectedRest.id)} style={{ flex:1, padding:"10px 4px", borderRadius:12, border:`0.5px solid ${isLovedCheck(selectedRest.id) ? "rgba(255,150,50,0.3)" : "rgba(255,255,255,0.06)"}`, background: isLovedCheck(selectedRest.id) ? "rgba(255,150,50,0.1)" : "rgba(255,255,255,0.03)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", color: isLovedCheck(selectedRest.id) ? "#ff9632" : "rgba(245,240,235,0.35)", cursor:"pointer", fontSize:12, fontFamily:"'Inter', sans-serif", fontWeight:500 }}>{isLovedCheck(selectedRest.id) ? "Loved ♥" : "Love It ♡"}</button>
+                  <button type="button" onClick={() => toggleWatch(selectedRest.id)} style={{ flex:1, padding:"10px 4px", borderRadius:12, border:`0.5px solid ${isInWatchlist(selectedRest.id) ? "rgba(107,159,255,0.3)" : "rgba(255,255,255,0.06)"}`, background: isInWatchlist(selectedRest.id) ? "rgba(107,159,255,0.08)" : "rgba(255,255,255,0.03)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", color: isInWatchlist(selectedRest.id) ? "#6b9fff" : "rgba(245,240,235,0.35)", cursor:"pointer", fontSize:12, fontFamily:"'Inter', sans-serif", fontWeight:500 }}>{isInWatchlist(selectedRest.id) ? "On Watchlist" : "Watchlist"}</button>
                 </div>
               </div>
             </div>
@@ -4448,7 +4384,7 @@ Return a JSON object with exactly these fields:
 
       {/* Profile Tab */}
       {tab === "profile" && (
-        <div style={{ paddingTop: headerHeight }}>
+        <div>
           <Profile
             onOpenTasteProfile={() => setShowTasteProfile(true)}
             allRestaurants={allRestaurants}
@@ -4474,220 +4410,82 @@ Return a JSON object with exactly these fields:
       )}
 
       {/* Bottom Nav */}
-      <div
-        style={{
-          position: "fixed",
-          bottom: 0,
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: "100%",
-          maxWidth: 480,
-          background: C.bg,
-          borderTop: `0.5px solid ${C.border2}`,
-          padding: "8px 0 22px",
-          display: "flex",
-          zIndex: 100,
-        }}
-      >
+      <div className="bottom-nav">
         {/* Home */}
         <div
+          className={`nav-tab${tab === "home" ? " active" : ""}`}
           onClick={() => setTab("home")}
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 3,
-            cursor: "pointer",
-          }}
         >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke={tab === "home" ? C.terracotta : C.dim}
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-            <polyline points="9 22 9 12 15 12 15 22" />
-          </svg>
-          <span
-            style={{
-              fontSize: 8,
-              letterSpacing: "0.8px",
-              color: tab === "home" ? C.terracotta : C.dim,
-            }}
-          >
-            HOME
-          </span>
+          <span className="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></span>
+          <span>Home</span>
         </div>
 
         {/* Heat */}
         <div
+          className={`nav-tab${tab === "heat" ? " active" : ""}`}
           onClick={() => setTab("heat")}
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 3,
-            cursor: "pointer",
-          }}
         >
-          <FlameIcon
-            size={16}
-            color={tab === "heat" ? C.terracotta : C.dim}
-            filled={false}
-          />
-          <span
-            style={{
-              fontSize: 8,
-              letterSpacing: "0.8px",
-              color: tab === "heat" ? C.terracotta : C.dim,
-            }}
-          >
-            HEAT
-          </span>
+          <span className="nav-icon"><svg viewBox="0 0 167 200" style={{ width:18, height:22, strokeWidth:12 }}><path d="M91.583336,1 C94.858902,4.038088 94.189636,6.998662 92.316727,10.376994 C86.895416,20.155888 85.394997,30.387159 91.844238,40.137669 C94.758018,44.542976 99.042587,48.235645 103.260361,51.543896 C111.956841,58.365055 117.641266,67.217140 120.816948,77.480293 C122.970314,84.439537 123.615982,91.865288 124.990936,99.383125 C125.884773,97.697456 127.039993,95.775894 127.944977,93.742935 C128.933945,91.521332 129.326263,88.947304 130.661072,86.992996 C131.803146,85.320847 133.925720,83.260689 135.585968,83.285553 C137.393021,83.312607 140.050140,85.157921 140.808014,86.882332 C144.849472,96.078102 149.743393,104.919754 151.119156,115.202736 C152.871628,128.301437 152.701294,141.175125 147.925400,153.556519 C139.636047,175.046417 124.719681,190.729568 102.956436,198.024307 C93.917976,201.053894 83.325455,199.328156 73.460648,200.051529 C66.457748,200.565033 60.038956,198.566650 54.104954,195.470612 C35.696693,185.866180 23.564285,170.592270 20.351917,150.306000 C17.271206,130.851151 16.262779,110.901123 26.722290,92.532166 C29.376348,87.871117 31.035656,82.643089 33.696789,77.986916 C34.711685,76.211151 37.195370,74.463982 39.125217,74.326584 C40.279823,74.244370 42.065300,77.132980 42.850647,78.989388 C44.449970,82.769890 45.564117,86.755646 47.322094,90.502388 C43.896488,53.348236 54.672562,22.806646 86.900139,1.333229 Z"/></svg></span>
+          <span>Heat</span>
         </div>
 
         {/* Discover */}
         <div
+          className={`nav-tab${tab === "discover" ? " active" : ""}`}
           onClick={() => setTab("discover")}
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 3,
-            cursor: "pointer",
-          }}
         >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke={tab === "discover" ? C.terracotta : C.dim}
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <line x1="16.5" y1="16.5" x2="21" y2="21" />
-          </svg>
-          <span
-            style={{
-              fontSize: 8,
-              letterSpacing: "0.8px",
-              color: tab === "discover" ? C.terracotta : C.dim,
-            }}
-          >
-            DISCOVER
-          </span>
+          <span className="nav-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
+          <span>Discover</span>
         </div>
 
         {/* Map */}
         <div
+          className={`nav-tab${tab === "map" ? " active" : ""}`}
           onClick={() => setTab("map")}
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 3,
-            cursor: "pointer",
-          }}
         >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke={tab === "map" ? C.terracotta : C.dim}
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          >
-            <path d="M12 2C8 2 5 5.5 5 9c0 5 7 13 7 13s7-8 7-13c0-3.5-3-7-7-7z" />
-            <circle cx="12" cy="9" r="2.5" />
-          </svg>
-          <span
-            style={{
-              fontSize: 8,
-              letterSpacing: "0.8px",
-              color: tab === "map" ? C.terracotta : C.dim,
-            }}
-          >
-            MAP
-          </span>
+          <span className="nav-icon"><svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
+          <span>Map</span>
         </div>
 
         {/* Profile */}
         <div
+          className={`nav-tab${tab === "profile" ? " active" : ""}`}
           onClick={() => setTab("profile")}
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 3,
-            cursor: "pointer",
-          }}
         >
-          <div
-            style={{
-              width: 20,
-              height: 20,
-              borderRadius: "50%",
-              overflow: "hidden",
-              border:
-                tab === "profile"
-                  ? `1.5px solid ${C.terracotta}`
-                  : `1.5px solid ${C.dim}`,
-            }}
-          >
-            {safeLocalStorageGetItem("cooked_profile_photo") ? (
-              <img
-                src={safeLocalStorageGetItem("cooked_profile_photo") || ""}
-                alt=""
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                onError={(e) => {
-                  e.target.style.display = "none";
-                }}
-              />
-            ) : (
-              <div style={{ width: "100%", height: "100%", background: C.bg2 }} />
-            )}
+          <div className="nav-icon">
+            <div className="nav-avatar">
+              {safeLocalStorageGetItem("cooked_profile_photo") ? (
+                <img
+                  src={safeLocalStorageGetItem("cooked_profile_photo") || ""}
+                  alt=""
+                  style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius:"50%" }}
+                  onError={(e) => { e.target.style.display = "none"; }}
+                />
+              ) : (
+                (safeLocalStorageGetItem("cooked_name") || "?")[0]?.toUpperCase()
+              )}
+            </div>
           </div>
-          <span
-            style={{
-              fontSize: 8,
-              letterSpacing: "0.8px",
-              color: tab === "profile" ? C.terracotta : C.dim,
-            }}
-          >
-            PROFILE
-          </span>
+          <span>Profile</span>
         </div>
       </div>
 
       {/* IG Modal */}
       {igModal && createPortal(
-        <div style={{ position:"fixed", inset:0, background:"rgba(30,18,8,0.7)", zIndex:999999, display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={closeIgModal}>
+        <div style={{ position:"fixed", inset:0, background:"rgba(10,10,15,0.7)", zIndex:999999, display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={closeIgModal}>
           <div style={{ width:"100%", maxWidth:480, background:C.bg, borderRadius:"24px 24px 0 0", borderTop:`1px solid ${C.border}`, padding:"28px 24px 44px", maxHeight:"85vh", overflowY:"auto", zIndex:1000000 }} onClick={e=>e.stopPropagation()}>
             {pickerMode === "fix-photos" ? (
               <div style={{ padding:"8px 0" }}>
-                <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:22, fontWeight:700, marginBottom:16, color:C.text }}>Fix photos</div>
+                <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:22, fontWeight:700, marginBottom:16, color:C.text }}>Fix photos</div>
                 <div style={{ display:"flex", gap:0, borderBottom:`1px solid ${C.border}`, marginBottom:16 }}>
-                  <button type="button" onClick={() => setPickerTab("unresolved")} style={{ flex:1, padding:"10px 12px", fontSize:12, fontFamily:"'DM Mono',monospace", border:"none", borderBottom:`2px solid ${pickerTab === "unresolved" ? C.terracotta : "transparent"}`, background:"transparent", color: pickerTab === "unresolved" ? C.terracotta : C.muted, cursor:"pointer" }}>Unresolved ({unresolvedRestaurants.length})</button>
-                  <button type="button" onClick={() => setPickerTab("resolved")} style={{ flex:1, padding:"10px 12px", fontSize:12, fontFamily:"'DM Mono',monospace", border:"none", borderBottom:`2px solid ${pickerTab === "resolved" ? C.terracotta : "transparent"}`, background:"transparent", color: pickerTab === "resolved" ? C.terracotta : C.muted, cursor:"pointer" }}>Resolved ({resolvedRestaurants.length})</button>
+                  <button type="button" onClick={() => setPickerTab("unresolved")} style={{ flex:1, padding:"10px 12px", fontSize:12, fontFamily:"'Inter', -apple-system, sans-serif", border:"none", borderBottom:`2px solid ${pickerTab === "unresolved" ? C.terracotta : "transparent"}`, background:"transparent", color: pickerTab === "unresolved" ? C.terracotta : C.muted, cursor:"pointer" }}>Unresolved ({unresolvedRestaurants.length})</button>
+                  <button type="button" onClick={() => setPickerTab("resolved")} style={{ flex:1, padding:"10px 12px", fontSize:12, fontFamily:"'Inter', -apple-system, sans-serif", border:"none", borderBottom:`2px solid ${pickerTab === "resolved" ? C.terracotta : "transparent"}`, background:"transparent", color: pickerTab === "resolved" ? C.terracotta : C.muted, cursor:"pointer" }}>Resolved ({resolvedRestaurants.length})</button>
                 </div>
                 {pickerTab === "unresolved" ? (
                   unresolvedRestaurants.length === 0 ? (
                     <div style={{ textAlign:"center", padding:"40px 20px" }}>
                       <div style={{ fontSize:48, marginBottom:12 }}>🎉</div>
-                      <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:20, fontWeight:700, color:C.terracotta }}>All photos resolved!</div>
+                      <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:20, fontWeight:700, color:C.terracotta }}>All photos resolved!</div>
                       <div style={{ fontSize:13, color:C.muted, marginTop:6 }}>Every restaurant has a photo selected.</div>
                     </div>
                   ) : (
@@ -4711,7 +4509,7 @@ Return a JSON object with exactly these fields:
                           );
                         })}
                       </div>
-                      <button type="button" onClick={confirmAddFromPicker} disabled={igPhotoPicker.filter(item => item.userSelected).length === 0} style={{ width:"100%", padding:14, border:"none", borderRadius:12, background:C.terracotta, color:"#fff", fontSize:15, fontWeight:600, fontFamily:"'DM Sans',sans-serif", opacity: igPhotoPicker.filter(item => item.userSelected).length === 0 ? 0.4 : 1, cursor: igPhotoPicker.filter(item => item.userSelected).length === 0 ? "not-allowed" : "pointer" }}>Confirm {igPhotoPicker.filter(item => item.userSelected).length} photo{igPhotoPicker.filter(item => item.userSelected).length !== 1 ? "s" : ""}</button>
+                      <button type="button" onClick={confirmAddFromPicker} disabled={igPhotoPicker.filter(item => item.userSelected).length === 0} style={{ width:"100%", padding:14, border:"none", borderRadius:12, background:C.terracotta, color:"#fff", fontSize:15, fontWeight:600, fontFamily:"'Inter', sans-serif", opacity: igPhotoPicker.filter(item => item.userSelected).length === 0 ? 0.4 : 1, cursor: igPhotoPicker.filter(item => item.userSelected).length === 0 ? "not-allowed" : "pointer" }}>Confirm {igPhotoPicker.filter(item => item.userSelected).length} photo{igPhotoPicker.filter(item => item.userSelected).length !== 1 ? "s" : ""}</button>
                     </>
                   )
                 ) : (
@@ -4726,30 +4524,30 @@ Return a JSON object with exactly these fields:
                             <span style={{ position:"absolute", bottom:-4, right:-4, width:20, height:20, borderRadius:50, background:C.sage, color:"#fff", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center" }}>✓</span>
                           </div>
                           <div style={{ flex:1 }}>
-                            <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:16, fontWeight:700, color:C.text }}>{r.name}</div>
+                            <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:16, fontWeight:700, color:C.text }}>{r.name}</div>
                             <div style={{ fontSize:11, color:C.muted }}>{r.cuisine} · {r.city}</div>
                           </div>
-                          <button type="button" onClick={() => setPhotoResolved(prev => prev.filter(id => id !== r.id))} style={{ fontSize:11, borderRadius:10, border:`1px solid ${C.border}`, padding:"6px 12px", background:C.card, color:C.muted, cursor:"pointer", fontFamily:"'DM Mono',monospace" }}>Re-pick</button>
+                          <button type="button" onClick={() => setPhotoResolved(prev => prev.filter(id => id !== r.id))} style={{ fontSize:11, borderRadius:10, border:`1px solid ${C.border}`, padding:"6px 12px", background:C.card, color:C.muted, cursor:"pointer", fontFamily:"'Inter', -apple-system, sans-serif" }}>Re-pick</button>
                         </div>
                       ))
                     )}
                   </div>
                 )}
-                <button onClick={closeIgModal} style={{ width:"100%", padding:12, background:"transparent", border:`1.5px solid ${C.border}`, borderRadius:12, color:C.muted, marginTop:16, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontSize:14 }}>Close</button>
+                <button onClick={closeIgModal} style={{ width:"100%", padding:12, background:"transparent", border:`1.5px solid ${C.border}`, borderRadius:12, color:C.muted, marginTop:16, cursor:"pointer", fontFamily:"'Inter', sans-serif", fontSize:14 }}>Close</button>
               </div>
             ) : igPhotoPicker.length > 0 ? (
               <div style={{ padding:"8px 0" }}>
-                <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:22, fontWeight:700, marginBottom:6, color:C.text }}>Choose a photo for each</div>
+                <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:22, fontWeight:700, marginBottom:6, color:C.text }}>Choose a photo for each</div>
                 <div style={{ fontSize:13, color:C.muted, marginBottom:20, lineHeight:1.5 }}>Tap a photo to select it, then add all.</div>
                 <div style={{ display:"flex", flexDirection:"column", gap:20, marginBottom:24, maxHeight:"50vh", overflowY:"auto" }}>
                   {igPhotoPicker.map((item, pickerIndex) => (
                     <div key={`picker-${pickerIndex}`}>
                       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10, gap:8 }}>
-                        <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:17, fontWeight:700, color:C.text }}>{item.restaurant.name}</div>
+                        <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:17, fontWeight:700, color:C.text }}>{item.restaurant.name}</div>
                         <button
                           type="button"
                           onClick={() => refreshPickerPhotosForOne(pickerIndex)}
-                          style={{ fontSize:11, borderRadius:14, border:`1px solid ${C.border}`, padding:"4px 8px", background:C.card, color:C.muted, cursor:"pointer", fontFamily:"'DM Mono',monospace" }}
+                          style={{ fontSize:11, borderRadius:14, border:`1px solid ${C.border}`, padding:"4px 8px", background:C.card, color:C.muted, cursor:"pointer", fontFamily:"'Inter', -apple-system, sans-serif" }}
                         >
                           Refresh
                         </button>
@@ -4780,16 +4578,16 @@ Return a JSON object with exactly these fields:
                     </div>
                   ))}
                 </div>
-                <button onClick={confirmAddFromPicker} style={{ width:"100%", padding:14, border:"none", borderRadius:12, background:C.terracotta, color:"#fff", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                <button onClick={confirmAddFromPicker} style={{ width:"100%", padding:14, border:"none", borderRadius:12, background:C.terracotta, color:"#fff", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"'Inter', sans-serif" }}>
                   Add {igPhotoPicker.length} restaurant{igPhotoPicker.length !== 1 ? "s" : ""}
                 </button>
-                <button onClick={closeIgModal} style={{ width:"100%", padding:12, background:"transparent", border:`1.5px solid ${C.border}`, borderRadius:12, color:C.muted, marginTop:10, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontSize:14 }}>Cancel</button>
+                <button onClick={closeIgModal} style={{ width:"100%", padding:12, background:"transparent", border:`1.5px solid ${C.border}`, borderRadius:12, color:C.muted, marginTop:10, cursor:"pointer", fontFamily:"'Inter', sans-serif", fontSize:14 }}>Cancel</button>
               </div>
             ) : igDone ? (
               <div style={{ padding:"12px 0" }}>
                 <div style={{ textAlign:"center", marginBottom:20 }}>
                   <div style={{ fontSize:52, marginBottom:10 }}>🍝</div>
-                  <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:24, fontWeight:700, fontStyle:"italic", color:C.terracotta }}>Added to your list!</div>
+                  <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:24, fontWeight:700, fontStyle:"italic", color:C.terracotta }}>Added to your list!</div>
                   <div style={{ fontSize:13, color:C.muted, marginTop:6 }}>{igAddedRestaurants.length} restaurant{igAddedRestaurants.length !== 1 ? "s" : ""} added</div>
                 </div>
                 <div style={{ marginBottom:20, maxHeight:240, overflowY:"auto" }}>
@@ -4797,21 +4595,21 @@ Return a JSON object with exactly these fields:
                     <div key={r.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
                       <img src={r.img} alt="" style={{ width:48, height:48, borderRadius:8, objectFit:"cover" }} />
                       <div style={{ flex:1 }}>
-                        <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:16, fontWeight:700, color:C.text }}>{r.name}</div>
-                        <div style={{ fontSize:11, color:C.muted, fontFamily:"'DM Mono',monospace" }}>{r.cuisine} · {r.city}</div>
+                        <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:16, fontWeight:700, color:C.text }}>{r.name}</div>
+                        <div style={{ fontSize:11, color:C.muted, fontFamily:"'Inter', -apple-system, sans-serif" }}>{r.cuisine} · {r.city}</div>
                       </div>
                     </div>
                   ))}
                 </div>
-                <button onClick={closeIgModal} style={{ width:"100%", padding:14, border:"none", borderRadius:12, background:C.terracotta, color:"#fff", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Done</button>
+                <button onClick={closeIgModal} style={{ width:"100%", padding:14, border:"none", borderRadius:12, background:C.terracotta, color:"#fff", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"'Inter', sans-serif" }}>Done</button>
               </div>
             ) : (
               <>
-                <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:26, fontWeight:700, marginBottom:6 }}>Add from Instagram</div>
+                <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:26, fontWeight:700, marginBottom:6 }}>Add from Instagram</div>
                 <div style={{ fontSize:13, color:C.muted, marginBottom:16, lineHeight:1.5 }}>Paste a post URL or upload a screenshot. We'll extract the restaurants.</div>
                 <div style={{ display:"flex", gap:8, marginBottom:16 }}>
-                  <input value={igUrl} onChange={e=>setIgUrl(e.target.value)} placeholder="https://instagram.com/p/..." style={{ flex:1, background:C.warm, border:`1.5px solid ${C.border}`, borderRadius:12, padding:"12px 14px", color:C.text, fontFamily:"'DM Mono',monospace", fontSize:12, outline:"none" }} />
-                  <button onClick={()=>{ if (igUrl.trim()) window.open(igUrl.trim(), "_blank", "noopener"); }} disabled={!igUrl.trim()} style={{ flexShrink:0, padding:"12px 16px", border:"none", borderRadius:12, background:"linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)", color:"#fff", fontSize:13, fontWeight:600, cursor: igUrl.trim() ? "pointer" : "not-allowed", fontFamily:"'DM Sans',sans-serif", opacity: igUrl.trim() ? 1 : 0.6 }}>Open in Instagram</button>
+                  <input value={igUrl} onChange={e=>setIgUrl(e.target.value)} placeholder="https://instagram.com/p/..." style={{ flex:1, background:C.warm, border:`1.5px solid ${C.border}`, borderRadius:12, padding:"12px 14px", color:C.text, fontFamily:"'Inter', -apple-system, sans-serif", fontSize:12, outline:"none" }} />
+                  <button onClick={()=>{ if (igUrl.trim()) window.open(igUrl.trim(), "_blank", "noopener"); }} disabled={!igUrl.trim()} style={{ flexShrink:0, padding:"12px 16px", border:"none", borderRadius:12, background:"linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)", color:"#fff", fontSize:13, fontWeight:600, cursor: igUrl.trim() ? "pointer" : "not-allowed", fontFamily:"'Inter', sans-serif", opacity: igUrl.trim() ? 1 : 0.6 }}>Open in Instagram</button>
                 </div>
                 <div
                   role="button"
@@ -4830,12 +4628,12 @@ Return a JSON object with exactly these fields:
                     ) : (
                       <div style={{ fontSize:32, marginBottom:8 }}>📷</div>
                     )}
-                    <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:18, fontWeight:700, color:C.text, marginBottom:4 }}>{igImporting ? "Processing screenshot…" : "Drop screenshot or tap to upload"}</div>
+                    <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:18, fontWeight:700, color:C.text, marginBottom:4 }}>{igImporting ? "Processing screenshot…" : "Drop screenshot or tap to upload"}</div>
                     <div style={{ fontSize:12, color:C.muted }}>PNG, JPG, or WebP</div>
                   </label>
                 </div>
                 {igError && <div style={{ padding:"10px 14px", background:"rgba(196,96,58,0.12)", borderRadius:10, border:`1px solid ${C.terracotta}`, fontSize:12, color:C.terracotta, marginBottom:16 }}>{igError}</div>}
-                <button onClick={closeIgModal} style={{ width:"100%", padding:12, background:"transparent", border:`1.5px solid ${C.border}`, borderRadius:12, color:C.muted, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontSize:14 }}>Cancel</button>
+                <button onClick={closeIgModal} style={{ width:"100%", padding:12, background:"transparent", border:`1.5px solid ${C.border}`, borderRadius:12, color:C.muted, cursor:"pointer", fontFamily:"'Inter', sans-serif", fontSize:14 }}>Cancel</button>
               </>
             )}
           </div>
@@ -4869,7 +4667,7 @@ Return a JSON object with exactly these fields:
             >
               ×
             </button>
-            <div style={{ paddingRight: 18, fontFamily: "'DM Sans', -apple-system, sans-serif", fontSize: 13, lineHeight: 1.5 }}>
+            <div style={{ paddingRight: 18, fontFamily: "'Inter', -apple-system, sans-serif", fontSize: 13, lineHeight: 1.5 }}>
               <div>🔥 Heat - you've been or want to go</div>
               <div>👁 Watch - on your radar</div>
               <div>✕ Pass - not your thing</div>
@@ -4917,152 +4715,96 @@ Return a JSON object with exactly these fields:
         const openTableDirectUrl = `https://www.opentable.com/${openTableSlug}`;
         return createPortal(
         <>
-        <div style={{ position:"fixed", top:0, left:"50%", transform:"translateX(-50%)", width:"min(100vw, 480px)", bottom:0, zIndex:99999, height:"100%", background:"#0e0804", overflow:"hidden" }}>
-          <div style={{ height:"100%", overflowY:"auto", paddingBottom:60 }}>
+        <div className="det-overlay">
+          <div className="det-scroll">
 
             {/* SECTION 1 — HERO */}
-            <div style={{ position:"relative", height:300, flexShrink:0 }}>
-              <img src={detailPhoto || detail.img} alt={detail.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={(e) => { e.target.onerror = null; e.target.src = detail.img2 || detail.img; }} />
-              <div style={{ position:"absolute", inset:0, background:"linear-gradient(to bottom, rgba(5,3,1,0.08) 0%, rgba(5,3,1,0.15) 25%, rgba(5,3,1,0.72) 60%, rgba(5,3,1,0.97) 100%)" }} />
+            <div className="det-hero">
+              <img src={detailPhoto || detail.img} alt={detail.name} onError={(e) => { e.target.onerror = null; e.target.src = detail.img2 || detail.img; }} />
+              <div className="det-hero-grad" />
               {/* top bar */}
-              <div style={{ position:"absolute", top:16, left:16, right:16, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                <button type="button" onClick={() => { setDetailRestaurant(null); setSixDegreesResult(null); setSixDegreesTarget(null); setSixDegreesLoading(false); }} style={{ width:30, height:30, minWidth:30, minHeight:30, maxWidth:30, maxHeight:30, borderRadius:"50%", background:"rgba(0,0,0,0.4)", border:"1px solid rgba(255,255,255,0.22)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#ffffff", fontSize:16, lineHeight:1, padding:0, boxSizing:"border-box", flexShrink:0, textAlign:"center" }}>‹</button>
-                {/* Cooked logo top right */}
-                <div style={{ background:"rgba(5,3,1,0.65)", border:"1px solid rgba(240,235,226,0.15)", borderRadius:20, padding:"5px 12px", display:"flex", alignItems:"center" }}>
-                  <span style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontWeight:"bold", fontSize:13, color:"#f0ebe2", letterSpacing:"-0.5px" }}>cook</span><span style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontWeight:"bold", fontSize:13, color:"#c4603a", letterSpacing:"-0.5px" }}>ed</span>
-                </div>
+              <div className="det-hero-top">
+                <button type="button" className="det-back-btn" onClick={() => { setDetailRestaurant(null); setSixDegreesResult(null); setSixDegreesTarget(null); setSixDegreesLoading(false); }}>‹</button>
+                <div className="det-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span></div>
               </div>
               {/* bottom overlay */}
-              <div style={{ position:"absolute", left:18, right:18, bottom:20, display:"flex", justifyContent:"space-between", alignItems:"flex-end" }}>
-                <div style={{ maxWidth:"72%", paddingRight:8 }}>
-                  <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontWeight:"bold", fontSize:34, color:"#ffffff", lineHeight:1.05, marginBottom:5 }}>{detail.name}</div>
-                  <div style={{ fontSize:13, color:"rgba(240,235,226,0.7)", letterSpacing:"0.01em" }}>{[detail.cuisine, detail.neighborhood, detail.price].filter(Boolean).join(" · ")}</div>
+              <div className="det-hero-bottom">
+                <div className="det-hero-info">
+                  <div className="det-hero-name">{detail.name}</div>
+                  <div className="det-hero-meta">{[detail.cuisine, detail.neighborhood, detail.price].filter(Boolean).join(" · ")}</div>
                 </div>
-                <div style={{ flexShrink:0 }}><FlameRating score={getFlameScore(detail)} size={20} /></div>
+                <div className="det-hero-flame"><FlameRating score={getFlameScore(detail)} size={20} /></div>
               </div>
             </div>
             {/* thin divider between hero and tags */}
-            <div style={{ height:1, background:"rgba(46,31,14,0.8)" }} />
+            <div className="det-divider" />
 
-            {/* SECTION 2 — TAGS + FLAME */}
-            <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+            {/* SECTION 2 — TAGS */}
+            <div className="det-tags-bar">
+              <div className="tags-wrap">
                 {detailTags.map(tag => (
-                  <span key={tag} style={{ background:"#c4603a", color:"#fff", borderRadius:20, padding:"5px 13px", fontSize:12, fontFamily:"-apple-system,sans-serif", border:"1px solid rgba(255,255,255,0.12)" }}>{tag}</span>
+                  <span key={tag} className="det-tag-pill">{tag}</span>
                 ))}
               </div>
-              <div style={{ flexShrink:0 }}><FlameRating score={getFlameScore(detail)} size={16} /></div>
             </div>
 
-            {/* SECTION 3 — 4 ACTION BUTTONS */}
-            <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"12px 14px" }}>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
+            {/* SECTION 3 — 5 ACTION BUTTONS */}
+            <div className="det-actions">
+              <div className="det-actions-grid">
                 {/* LOVED */}
-                <button type="button" onClick={() => toggleLove(detail.id)} style={{ background: isLovedCheck(detail.id) ? "#1e0f06" : "#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:`1px solid ${isLovedCheck(detail.id) ? "rgba(196,96,58,0.5)" : "rgba(46,31,14,0.9)"}`, cursor:"pointer" }}>
-                  <FlameIcon size={28} filled={isLovedCheck(detail.id)} color={isLovedCheck(detail.id) ? "#c4603a" : "#4a2e18"} />
-                  <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:isLovedCheck(detail.id) ? "#c4603a" : "#4a2e18", fontFamily:"-apple-system,sans-serif" }}>LOVED</span>
+                <button type="button" className={`det-action-btn${isLovedCheck(detail.id) ? " active-love" : ""}`} onClick={() => toggleLove(detail.id)}>
+                  <FlameIcon size={28} filled={isLovedCheck(detail.id)} color={isLovedCheck(detail.id) ? "#ff9632" : "rgba(245,240,235,0.18)"} />
+                  <span className={`det-action-label${isLovedCheck(detail.id) ? " loved" : ""}`}>LOVED</span>
                 </button>
                 {/* WATCH */}
-                <button type="button" onClick={() => toggleWatch(detail.id)} style={{ background: isInWatchlist(detail.id) ? "#060f1a" : "#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:`1px solid ${isInWatchlist(detail.id) ? "rgba(74,144,217,0.5)" : "rgba(46,31,14,0.9)"}`, cursor:"pointer" }}>
+                <button type="button" className={`det-action-btn${isInWatchlist(detail.id) ? " active-watch" : ""}`} onClick={() => toggleWatch(detail.id)}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke={isInWatchlist(detail.id) ? "#4a90d9" : "#4a2e18"} strokeWidth="1.5"/>
-                    <circle cx="12" cy="12" r="3" stroke={isInWatchlist(detail.id) ? "#4a90d9" : "#4a2e18"} strokeWidth="1.5"/>
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke={isInWatchlist(detail.id) ? "#4a90d9" : "rgba(245,240,235,0.18)"} strokeWidth="1.5"/>
+                    <circle cx="12" cy="12" r="3" stroke={isInWatchlist(detail.id) ? "#4a90d9" : "rgba(245,240,235,0.18)"} strokeWidth="1.5"/>
                   </svg>
-                  <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:isInWatchlist(detail.id) ? "#4a90d9" : "#4a2e18", fontFamily:"-apple-system,sans-serif" }}>WATCH</span>
+                  <span className={`det-action-label${isInWatchlist(detail.id) ? " watched" : ""}`}>WATCH</span>
                 </button>
                 {/* MAPS */}
-                <button type="button" onClick={() => window.open(detail.googleMapsUrl || `https://maps.google.com/?q=${encodeURIComponent(detail.address||detail.name)}`, "_blank")} style={{ background:"#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:"1px solid rgba(46,31,14,0.9)", cursor:"pointer" }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4a2e18" strokeWidth="1.5" strokeLinecap="round">
+                <button type="button" className="det-action-btn" onClick={() => window.open(detail.googleMapsUrl || `https://maps.google.com/?q=${encodeURIComponent(detail.address||detail.name)}`, "_blank")}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(245,240,235,0.18)" strokeWidth="1.5" strokeLinecap="round">
                     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
                     <circle cx="12" cy="9" r="2.5"/>
                   </svg>
-                  <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:"#4a2e18", fontFamily:"-apple-system,sans-serif" }}>MAPS</span>
+                  <span className="det-action-label">MAPS</span>
                 </button>
                 {/* SEND (DM) */}
-                <button type="button" onClick={() => { setDmSharePicker(detail); setDmShareSearch(""); }} style={{ background:"#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:"1px solid rgba(46,31,14,0.9)", cursor:"pointer" }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4a2e18" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <button type="button" className="det-action-btn" onClick={() => { setDmSharePicker(detail); setDmShareSearch(""); }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(245,240,235,0.18)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
                   </svg>
-                  <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:"#4a2e18", fontFamily:"-apple-system,sans-serif" }}>SEND</span>
+                  <span className="det-action-label">SEND</span>
                 </button>
                 {/* SHARE (external) */}
-                <button type="button" onClick={async () => { if (user?.id) logInteraction(user.id, detail.id, 'share'); const shareText = `Check out ${detail.name} — ${detail.cuisine} in ${detail.city}. Found on Cooked.`; try { if (navigator.share) { await navigator.share({ title: detail.name, text: shareText, url: window.location.href }); } else { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } } catch { try { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } catch {} } }} style={{ background:"#170d05", borderRadius:14, padding:"16px 6px 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:6, border:"1px solid rgba(46,31,14,0.9)", cursor:"pointer" }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4a2e18" strokeWidth="1.5" strokeLinecap="round">
+                <button type="button" className="det-action-btn" onClick={async () => { if (user?.id) logInteraction(user.id, detail.id, 'share'); const shareText = `Check out ${detail.name} — ${detail.cuisine} in ${detail.city}. Found on Cooked.`; try { if (navigator.share) { await navigator.share({ title: detail.name, text: shareText, url: window.location.href }); } else { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } } catch { try { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } catch {} } }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(245,240,235,0.18)" strokeWidth="1.5" strokeLinecap="round">
                     <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
                     <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
                   </svg>
-                  <span style={{ fontSize:9, letterSpacing:"0.14em", textTransform:"uppercase", color:"#4a2e18", fontFamily:"-apple-system,sans-serif" }}>{detailShareCopied ? "COPIED!" : "SHARE"}</span>
+                  <span className="det-action-label">{detailShareCopied ? "COPIED!" : "SHARE"}</span>
                 </button>
               </div>
             </div>
 
             {/* Friends have been here — between actions and description */}
             {!friendsBeenHere.loading && friendsBeenHere.list.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setFriendsBeenHereSheetOpen(true)}
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 14,
-                  background: "#130d06",
-                  padding: "12px 18px",
-                  border: "none",
-                  borderBottom: "1px solid #2e1f0e",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  WebkitTapHighlightColor: "transparent",
-                }}
-              >
-                <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+              <button type="button" className="det-friends-btn" onClick={() => setFriendsBeenHereSheetOpen(true)}>
+                <div className="det-friends-avatars">
                   {friendsBeenHere.list.slice(0, 3).map((f, i) => (
-                    <div
-                      key={f.clerkUserId}
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: "50%",
-                        border: "1.5px solid #c4603a",
-                        marginLeft: i === 0 ? 0 : -8,
-                        overflow: "hidden",
-                        background: "#c4603a",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                        zIndex: 3 - i,
-                        position: "relative",
-                      }}
-                    >
+                    <div key={f.clerkUserId} className="det-friend-av" style={{ marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i }}>
                       {f.profilePhoto ? (
-                        <img src={f.profilePhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <img src={f.profilePhoto} alt="" />
                       ) : (
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            color: "#f0ebe2",
-                            fontFamily: "-apple-system,sans-serif",
-                            lineHeight: 1,
-                          }}
-                        >
-                          {(f.profileName || "?").charAt(0).toUpperCase()}
-                        </span>
+                        <span className="initial">{(f.profileName || "?").charAt(0).toUpperCase()}</span>
                       )}
                     </div>
                   ))}
                 </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: C.muted,
-                    fontFamily: "-apple-system,sans-serif",
-                    flex: 1,
-                    textAlign: "right",
-                  }}
-                >
+                <div className="det-friends-text">
                   {friendsBeenHere.list.length === 1
                     ? "1 friend has been here"
                     : `${friendsBeenHere.list.length} friends have been here`}
@@ -5071,118 +4813,65 @@ Return a JSON object with exactly these fields:
             )}
 
             {/* 6 DEGREES — find connection to another restaurant */}
-            <div style={{ background: "#130d06", borderBottom: "1px solid #2e1f0e", padding: "12px 18px" }}>
+            <div className="det-degrees">
               {!sixDegreesResult && !sixDegreesLoading && !sixDegreesTarget && (
-                <button
-                  type="button"
-                  onClick={() => setSixDegreesTarget(detail)}
-                  style={{
-                    width: "100%", background: "transparent", border: "1px solid #2e1f0e",
-                    borderRadius: 10, padding: "10px 14px", color: "#c4603a", fontSize: 13,
-                    fontFamily: "'DM Mono', monospace", cursor: "pointer", textAlign: "left",
-                    display: "flex", alignItems: "center", gap: 8,
-                  }}
-                >
+                <button type="button" className="det-degrees-trigger" onClick={() => setSixDegreesTarget(detail)}>
                   <span style={{ fontSize: 16 }}>&#x1f517;</span>
                   <span>Find a connection to another restaurant</span>
                 </button>
               )}
               {sixDegreesTarget && !sixDegreesResult && !sixDegreesLoading && (
                 <div>
-                  <div style={{ fontSize: 10, color: "#5a3a20", fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
-                    6 DEGREES — pick a restaurant
-                  </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <div className="det-degrees-label">6 DEGREES — pick a restaurant</div>
+                  <div className="det-degrees-chips">
                     {allRestaurants
                       .filter(r => String(r.id) !== String(detail.id))
                       .slice(0, 12)
                       .map(r => (
-                        <button
-                          key={r.id}
-                          type="button"
-                          onClick={() => {
-                            setSixDegreesLoading(true);
-                            getSixDegrees(detail.id, r.id).then(result => {
-                              setSixDegreesResult(result);
-                              setSixDegreesLoading(false);
-                            });
-                          }}
-                          style={{
-                            background: "#1a1208", border: "1px solid #2e1f0e", borderRadius: 8,
-                            padding: "6px 10px", color: "#f0ebe2", fontSize: 12, cursor: "pointer",
-                            fontFamily: "'DM Sans', sans-serif",
-                          }}
-                        >
-                          {r.name}
-                        </button>
+                        <button key={r.id} type="button" className="det-degree-chip" onClick={() => {
+                          setSixDegreesLoading(true);
+                          getSixDegrees(detail.id, r.id).then(result => { setSixDegreesResult(result); setSixDegreesLoading(false); });
+                        }}>{r.name}</button>
                       ))}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setSixDegreesTarget(null)}
-                    style={{ background: "none", border: "none", color: "#5a3a20", fontSize: 11, marginTop: 8, cursor: "pointer" }}
-                  >
-                    cancel
-                  </button>
+                  <button type="button" className="det-degrees-cancel" onClick={() => setSixDegreesTarget(null)}>cancel</button>
                 </div>
               )}
               {sixDegreesLoading && (
-                <div style={{ color: "#5a3a20", fontSize: 13, fontFamily: "'DM Mono', monospace", padding: "8px 0" }}>
-                  Finding connection...
-                </div>
+                <div className="det-degrees-loading">Finding connection...</div>
               )}
               {sixDegreesResult && (
                 <div>
-                  <div style={{ fontSize: 10, color: "#5a3a20", fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>
-                    THE CHAIN
-                  </div>
+                  <div className="det-degrees-label" style={{ marginBottom: 10 }}>THE CHAIN</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                     {sixDegreesResult.chain.map((node, i) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{
-                          width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
-                          background: node.type === "restaurant" ? "#c4603a" : "#2e1f0e",
-                          color: "#f0ebe2", fontSize: 12, fontWeight: "bold", flexShrink: 0,
-                        }}>
+                      <div key={i} className="det-chain-node">
+                        <div className={`det-chain-icon ${node.type === "restaurant" ? "restaurant" : "user"}`}>
                           {node.type === "restaurant" ? "R" : "U"}
                         </div>
                         <div>
-                          <div style={{ fontSize: 13, color: "#f0ebe2", fontFamily: "'DM Sans', sans-serif", fontWeight: node.type === "restaurant" ? "bold" : "normal" }}>
-                            {node.name || "Unknown"}
-                          </div>
-                          <div style={{ fontSize: 10, color: "#5a3a20" }}>
-                            {node.type === "restaurant" ? (node.city || "") : "loved both"}
-                          </div>
+                          <div className={`det-chain-name${node.type === "restaurant" ? " bold" : ""}`}>{node.name || "Unknown"}</div>
+                          <div className="det-chain-sub">{node.type === "restaurant" ? (node.city || "") : "loved both"}</div>
                         </div>
-                        {i < sixDegreesResult.chain.length - 1 && (
-                          <div style={{ position: "absolute", left: 31, marginTop: 36, width: 1, height: 12, background: "#2e1f0e" }} />
-                        )}
+                        {i < sixDegreesResult.chain.length - 1 && <div className="det-chain-sep" />}
                       </div>
                     ))}
                   </div>
-                  <div style={{ marginTop: 8, fontSize: 11, color: "#c4603a", fontFamily: "'DM Mono', monospace" }}>
+                  <div className="det-chain-result">
                     {Math.floor(sixDegreesResult.pathLength / 2)} degree{Math.floor(sixDegreesResult.pathLength / 2) !== 1 ? "s" : ""} of separation
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => { setSixDegreesResult(null); setSixDegreesTarget(null); }}
-                    style={{ background: "none", border: "none", color: "#5a3a20", fontSize: 11, marginTop: 6, cursor: "pointer" }}
-                  >
-                    try another
-                  </button>
+                  <button type="button" className="det-chain-retry" onClick={() => { setSixDegreesResult(null); setSixDegreesTarget(null); }}>try another</button>
                 </div>
               )}
               {sixDegreesResult === null && sixDegreesLoading === false && sixDegreesTarget && (
-                <div style={{ color: "#5a3a20", fontSize: 12, fontStyle: "italic", marginTop: 4 }}>
-                  No connection found yet
-                </div>
+                <div className="det-chain-nope">No connection found yet</div>
               )}
             </div>
 
             {/* SECTION 4 — DESCRIPTION */}
             {detail.desc && (
-              <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"16px 18px" }}>
-                <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:16, color:"#e8e0d4", lineHeight:1.65 }}>{detail.desc}</div>
+              <div className="det-desc">
+                <div className="det-desc-text">{detail.desc}</div>
               </div>
             )}
 
@@ -5217,22 +4906,22 @@ Return a JSON object with exactly these fields:
                 }
               })();
               const infoRows = [
-                hoursVal && { svgPath:<><circle cx="12" cy="12" r="9" stroke="#5a3a20" strokeWidth="1.5" fill="none"/><polyline points="12 7 12 12 15 15" stroke="#5a3a20" strokeWidth="1.5" strokeLinecap="round"/></>, label:"HOURS TODAY", value:hoursVal },
-                shortAddr && { svgPath:<><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#5a3a20" strokeWidth="1.5" fill="none"/><circle cx="12" cy="9" r="2.5" stroke="#5a3a20" strokeWidth="1.5" fill="none"/></>, label:"ADDRESS", value:shortAddr },
-                detail.phone && { svgPath:<><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6.1 6.1l1.09-1.09a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" stroke="#5a3a20" strokeWidth="1.5" fill="none"/></>, label:"PHONE", value:detail.phone, href:`tel:${detail.phone}` },
-                hasNonOpenTableWebsite && { svgPath:<><circle cx="12" cy="12" r="9" stroke="#5a3a20" strokeWidth="1.5" fill="none"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" stroke="#5a3a20" strokeWidth="1.5" fill="none" strokeLinecap="round"/></>, label:"WEBSITE", value:websiteDisplay, href:websiteHref, newTab:true },
+                hoursVal && { svgPath:<><circle cx="12" cy="12" r="9" stroke="rgba(245,240,235,0.3)" strokeWidth="1.5" fill="none"/><polyline points="12 7 12 12 15 15" stroke="rgba(245,240,235,0.3)" strokeWidth="1.5" strokeLinecap="round"/></>, label:"HOURS TODAY", value:hoursVal },
+                shortAddr && { svgPath:<><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="rgba(245,240,235,0.3)" strokeWidth="1.5" fill="none"/><circle cx="12" cy="9" r="2.5" stroke="rgba(245,240,235,0.3)" strokeWidth="1.5" fill="none"/></>, label:"ADDRESS", value:shortAddr },
+                detail.phone && { svgPath:<><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6.1 6.1l1.09-1.09a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" stroke="rgba(245,240,235,0.3)" strokeWidth="1.5" fill="none"/></>, label:"PHONE", value:detail.phone, href:`tel:${detail.phone}` },
+                hasNonOpenTableWebsite && { svgPath:<><circle cx="12" cy="12" r="9" stroke="rgba(245,240,235,0.3)" strokeWidth="1.5" fill="none"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" stroke="rgba(245,240,235,0.3)" strokeWidth="1.5" fill="none" strokeLinecap="round"/></>, label:"WEBSITE", value:websiteDisplay, href:websiteHref, newTab:true },
               ].filter(Boolean);
               if (!infoRows.length) return null;
               return (
-                <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+                <div className="det-info">
                   {infoRows.map((row,i) => (
-                    <div key={i} style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" style={{ flexShrink:0, marginTop:3 }}>{row.svgPath}</svg>
+                    <div key={i} className="det-info-row">
+                      <svg width="16" height="16" viewBox="0 0 24 24">{row.svgPath}</svg>
                       <div>
-                        <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:2, fontFamily:"-apple-system,sans-serif" }}>{row.label}</div>
+                        <div className="det-info-label">{row.label}</div>
                         {row.href
-                          ? <a href={row.href} target={row.newTab ? "_blank" : undefined} rel={row.newTab ? "noopener noreferrer" : undefined} style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:15, color:"#e8e0d4", textDecoration:"none" }}>{row.value}</a>
-                          : <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:15, color:"#e8e0d4" }}>{row.value}</div>
+                          ? <a href={row.href} target={row.newTab ? "_blank" : undefined} rel={row.newTab ? "noopener noreferrer" : undefined} className="det-info-val">{row.value}</a>
+                          : <div className="det-info-val">{row.value}</div>
                         }
                       </div>
                     </div>
@@ -5258,53 +4947,47 @@ Return a JSON object with exactly these fields:
               let badge = null;
               let label = "";
               if (wl.includes("opentable.com")) {
-                badge = <span style={{ background:"#e8333c", color:"#fff", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:12, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>OT</span>;
+                badge = <span className="det-reserve-badge ot">OT</span>;
                 label = "Book on OpenTable";
               } else if (wl.includes("resy.com")) {
                 btnBg = "#E93C51";
                 btnBorder = "rgba(0,0,0,0.15)";
-                badge = <span style={{ background:"rgba(255,255,255,0.2)", color:"#fff", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:12, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>Resy</span>;
+                badge = <span className="det-reserve-badge resy">Resy</span>;
                 label = "Reserve on Resy";
               } else if (wl.includes("tock.com")) {
                 btnBg = "#000000";
                 btnBorder = "#333";
-                badge = <span style={{ background:"#fff", color:"#000", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:11, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>Tock</span>;
+                badge = <span className="det-reserve-badge tock">Tock</span>;
                 label = "Reserve on Tock";
                 labelColor = "#e8e0d4";
               } else if (wl.includes("sevenrooms.com")) {
                 btnBg = "#1a1a1a";
                 btnBorder = "#3a3a3a";
-                badge = <span style={{ background:"#c9a227", color:"#111", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:11, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>7R</span>;
+                badge = <span className="det-reserve-badge sr">7R</span>;
                 label = "Reserve on SevenRooms";
               } else {
                 const otSearchUrl = `https://www.opentable.com/s/?term=${encodeURIComponent((detail.name || '') + ' ' + (detail.neighborhood || detail.city || ''))}&covers=2`;
-                badge = <span style={{ background:"#e8333c", color:"#fff", borderRadius:8, padding:"5px 9px", fontWeight:"bold", fontSize:12, fontFamily:"-apple-system,sans-serif", letterSpacing:"0.05em" }}>OT</span>;
+                badge = <span className="det-reserve-badge ot">OT</span>;
                 label = "Find on OpenTable";
                 btnBg = "#1a0f07";
                 btnBorder = "#3a2010";
                 labelColor = "#e8e0d4";
                 return (
-                  <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"14px 18px" }}>
-                    <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:10, fontFamily:"-apple-system,sans-serif" }}>RESERVATIONS</div>
-                    <button type="button" onClick={() => { if (user?.id) logInteraction(user.id, detail.id, 'reservation'); window.open(otSearchUrl, "_blank", "noopener,noreferrer"); }} style={{ width:"100%", background:btnBg, border:`1px solid ${btnBorder}`, borderRadius:14, padding:"16px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                        {badge}
-                        <span style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:15, color:labelColor }}>{label}</span>
-                      </div>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a3a20" strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  <div className="det-reservations">
+                    <div className="det-section-label">RESERVATIONS</div>
+                    <button type="button" className="det-reserve-btn" style={{ background: btnBg, border: `1px solid ${btnBorder}` }} onClick={() => { if (user?.id) logInteraction(user.id, detail.id, 'reservation'); window.open(otSearchUrl, "_blank", "noopener,noreferrer"); }}>
+                      <div className="det-reserve-inner">{badge}<span className="det-reserve-label">{label}</span></div>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(245,240,235,0.3)" strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
                     </button>
                   </div>
                 );
               }
-              const chevronStroke = wl.includes("resy.com") || wl.includes("tock.com") ? "rgba(255,255,255,0.6)" : "#5a3a20";
+              const chevronStroke = wl.includes("resy.com") || wl.includes("tock.com") ? "rgba(255,255,255,0.6)" : "rgba(245,240,235,0.3)";
               return (
-                <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"14px 18px" }}>
-                  <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:10, fontFamily:"-apple-system,sans-serif" }}>RESERVATIONS</div>
-                  <button type="button" onClick={() => { if (user?.id) logInteraction(user.id, detail.id, 'reservation'); window.open(href, "_blank", "noopener,noreferrer"); }} style={{ width:"100%", background:btnBg, border:`1px solid ${btnBorder}`, borderRadius:14, padding:"16px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                      {badge}
-                      <span style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:15, color:labelColor }}>{label}</span>
-                    </div>
+                <div className="det-reservations">
+                  <div className="det-section-label">RESERVATIONS</div>
+                  <button type="button" className="det-reserve-btn" style={{ background: btnBg, border: `1px solid ${btnBorder}` }} onClick={() => { if (user?.id) logInteraction(user.id, detail.id, 'reservation'); window.open(href, "_blank", "noopener,noreferrer"); }}>
+                    <div className="det-reserve-inner">{badge}<span className="det-reserve-label" style={{ color: labelColor }}>{label}</span></div>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={chevronStroke} strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
                   </button>
                 </div>
@@ -5312,27 +4995,27 @@ Return a JSON object with exactly these fields:
             })()}
 
             {/* SECTION 8 — YOUR RATING */}
-            <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"14px 18px" }}>
-              <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:12, fontFamily:"-apple-system,sans-serif" }}>YOUR RATING</div>
-              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <div className="det-section">
+              <div className="det-section-label">YOUR RATING</div>
+              <div className="det-rating-row">
                 {[1,2,3,4,5].map(n => (
-                  <button key={n} type="button" onClick={() => { const next = {...(userRatings||{})}; next[detail.id] = n; setUserRatings(next); if (user?.id) logInteraction(user.id, detail.id, 'rating', n); }} style={{ background:"none", border:"none", cursor:"pointer", padding:0 }}>
-                    <FlameIcon size={34} filled={(userRatings[detail.id]||0) >= n} color={(userRatings[detail.id]||0) >= n ? "#c4603a" : "#2a1a0a"} />
+                  <button key={n} type="button" className="det-rating-btn" onClick={() => { const next = {...(userRatings||{})}; next[detail.id] = n; setUserRatings(next); if (user?.id) logInteraction(user.id, detail.id, 'rating', n); }}>
+                    <FlameIcon size={34} filled={(userRatings[detail.id]||0) >= n} color={(userRatings[detail.id]||0) >= n ? "#ff9632" : "#2a1a0a"} />
                   </button>
                 ))}
               </div>
-              {userRatings[detail.id] && <div style={{ marginTop:8, fontSize:12, color:"#5a3a20", fontFamily:"-apple-system,sans-serif" }}>Your rating: {userRatings[detail.id]} / 5</div>}
+              {userRatings[detail.id] && <div className="det-rating-text">Your rating: {userRatings[detail.id]} / 5</div>}
             </div>
 
             {/* SECTION 9 — CUISINE / MEAL TYPE */}
-            <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"14px 18px" }}>
-              <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:12, fontFamily:"-apple-system,sans-serif" }}>CUISINE / MEAL TYPE</div>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+            <div className="det-section">
+              <div className="det-section-label">CUISINE / MEAL TYPE</div>
+              <div className="det-meal-pills">
                 {[["Breakfast","🍳"],["Brunch","🥐"],["Lunch","🥗"],["Dinner","🍷"],["Bar","🍸"],["Coffee","☕"]].map(([listName, emoji]) => {
                   const isIn = (userLists[listName]||[]).includes(detail.id) || (listName==="Breakfast" && (userLists["Breakfast/Brunch"]||[]).includes(detail.id));
                   return (
-                    <button key={listName} type="button" onClick={() => toggleList(listName==="Breakfast" ? "Breakfast/Brunch" : listName, detail.id)} style={{ borderRadius:20, padding:"7px 14px", cursor:"pointer", fontSize:13, fontFamily:"-apple-system,sans-serif", background: isIn ? "#c4603a" : "#0f0804", color: isIn ? "#fff" : "#5a3a20", border: isIn ? "1px solid rgba(255,255,255,0.12)" : "1px solid #2a1608", display:"flex", alignItems:"center", gap:5 }}>
-                      <span style={{ fontSize:13, lineHeight:1 }}>{emoji}</span>
+                    <button key={listName} type="button" className={`det-meal-pill${isIn ? " active" : ""}`} onClick={() => toggleList(listName==="Breakfast" ? "Breakfast/Brunch" : listName, detail.id)}>
+                      <span className="emoji">{emoji}</span>
                       <span>{listName}</span>
                     </button>
                   );
@@ -5341,36 +5024,36 @@ Return a JSON object with exactly these fields:
             </div>
 
             {/* SECTION 10 — TAGS */}
-            <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"14px 18px" }}>
-              <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:12, fontFamily:"-apple-system,sans-serif" }}>TAGS</div>
-              <div style={{ display:"flex", gap:7, flexWrap:"wrap", alignItems:"center" }}>
+            <div className="det-section">
+              <div className="det-section-label">TAGS</div>
+              <div className="det-tags-wrap">
                 {detailTags.map(tag => (
-                  <button key={tag} type="button" onClick={() => { setActiveFilter(tag); setDetailRestaurant(null); }} style={{ padding:"6px 12px", borderRadius:20, border:"1px solid rgba(196,96,58,0.5)", background:"#c4603a", color:"#fff", fontSize:12, cursor:"pointer", fontFamily:"-apple-system,sans-serif" }}>{tag}</button>
+                  <button key={tag} type="button" className="det-tag-active" onClick={() => { setActiveFilter(tag); setDetailRestaurant(null); }}>{tag}</button>
                 ))}
-                <button type="button" onClick={() => setShowTagPicker(p => !p)} style={{ padding:"6px 12px", borderRadius:20, border:"1.5px dashed #2e1f0e", background:"transparent", color:"#5a3a20", fontSize:12, cursor:"pointer", fontFamily:"-apple-system,sans-serif" }}>+ Add tag</button>
+                <button type="button" className="det-tag-add" onClick={() => setShowTagPicker(p => !p)}>+ Add tag</button>
               </div>
               {showTagPicker && (
-                <div style={{ marginTop:12, maxHeight:200, overflowY:"auto", display:"flex", flexWrap:"wrap", gap:6 }}>
+                <div className="det-tag-picker">
                   {ALL_TAGS.map(tag => {
                     const selected = detailTags.includes(tag);
-                    return <button key={tag} type="button" onClick={() => addOrRemoveTag(tag)} style={{ padding:"5px 10px", borderRadius:12, border:`1px solid ${selected ? "#c4603a" : "#2e1f0e"}`, background: selected ? "#c4603a" : "#0a0602", color: selected ? "#fff" : "#5a3a20", fontSize:11, cursor:"pointer", fontFamily:"-apple-system,sans-serif" }}>{tag}</button>;
+                    return <button key={tag} type="button" className={`det-tag-option ${selected ? "on" : "off"}`} onClick={() => addOrRemoveTag(tag)}>{tag}</button>;
                   })}
                 </div>
               )}
             </div>
 
             {/* SECTION 11 — NOTES */}
-            <div style={{ background:"#130d06", borderBottom:"1px solid #2e1f0e", padding:"14px 18px" }}>
-              <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", marginBottom:12, fontFamily:"-apple-system,sans-serif" }}>NOTES</div>
+            <div className="det-section">
+              <div className="det-section-label">NOTES</div>
               {(userNotes[detail.id]||[]).map((note, i) => (
-                <div key={i} style={{ borderLeft:"2px solid #c4603a", padding:"9px 13px", background:"#080502", borderRadius:8, marginBottom:8 }}>
-                  <div style={{ fontSize:13, color:"#e8e0d4", lineHeight:1.5, fontFamily:"-apple-system,sans-serif" }}>{typeof note === "object" && note.text != null ? note.text : note}</div>
-                  <div style={{ fontSize:10, color:"#4a2e18", marginTop:5, fontFamily:"-apple-system,sans-serif" }}>{typeof note === "object" && note.time ? note.time : ""}</div>
+                <div key={i} className="det-note-card">
+                  <div className="det-note-text">{typeof note === "object" && note.text != null ? note.text : note}</div>
+                  <div className="det-note-time">{typeof note === "object" && note.time ? note.time : ""}</div>
                 </div>
               ))}
-              <div style={{ display:"flex", gap:8 }}>
-                <input value={noteInput} onChange={e => setNoteInput(e.target.value)} onKeyDown={e => e.key === "Enter" && (() => { if (!noteInput.trim()) return; setUserNotes(prev => ({ ...prev, [detail.id]: [...(prev[detail.id]||[]), { text: noteInput.trim(), time: new Date().toLocaleString() }] })); setNoteInput(""); })()} placeholder="Add a note..." style={{ flex:1, background:"#080502", border:"1px solid #2a1608", borderRadius:10, padding:"11px 14px", color:"#e8e0d4", fontSize:13, outline:"none", fontFamily:"-apple-system,sans-serif" }} />
-                <button type="button" onClick={() => { if (!noteInput.trim()) return; setUserNotes(prev => ({ ...prev, [detail.id]: [...(prev[detail.id]||[]), { text: noteInput.trim(), time: new Date().toLocaleString() }] })); setNoteInput(""); }} style={{ padding:"11px 20px", borderRadius:10, background:"#c4603a", color:"#fff", border:"none", fontSize:13, cursor:"pointer", fontFamily:"Georgia,serif", fontStyle:"italic" }}>Add</button>
+              <div className="det-note-row">
+                <input className="det-note-input" value={noteInput} onChange={e => setNoteInput(e.target.value)} onKeyDown={e => e.key === "Enter" && (() => { if (!noteInput.trim()) return; setUserNotes(prev => ({ ...prev, [detail.id]: [...(prev[detail.id]||[]), { text: noteInput.trim(), time: new Date().toLocaleString() }] })); setNoteInput(""); })()} placeholder="Add a note..." />
+                <button type="button" className="det-note-add" onClick={() => { if (!noteInput.trim()) return; setUserNotes(prev => ({ ...prev, [detail.id]: [...(prev[detail.id]||[]), { text: noteInput.trim(), time: new Date().toLocaleString() }] })); setNoteInput(""); }}>Add</button>
               </div>
             </div>
 
@@ -5387,14 +5070,14 @@ Return a JSON object with exactly these fields:
               ).sort((a,b) => (b.rating||0)-(a.rating||0)).slice(0,8);
               if (!nearby.length) return null;
               return (
-                <div style={{ paddingTop:18, paddingBottom:24 }}>
-                  <div style={{ fontSize:9, letterSpacing:"0.16em", textTransform:"uppercase", color:"#5a3a20", padding:"0 18px", marginBottom:12, fontFamily:"-apple-system,sans-serif" }}>NEARBY</div>
-                  <div style={{ display:"flex", gap:12, overflowX:"auto", padding:"0 18px 4px" }}>
+                <div className="det-nearby">
+                  <div className="det-section-label">NEARBY</div>
+                  <div className="det-nearby-scroll">
                     {nearby.map(r => (
-                      <HomePhotoCard key={`${r.id}-${photoCacheVersion}`} r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }} onClick={() => setDetailRestaurant(r)} style={{ minWidth:150, maxWidth:150, height:160, borderRadius:14, flexShrink:0 }}>
-                        <div style={{ position:"absolute", top:10, right:10 }}><FlameRating score={getFlameScore(r)} size={9} /></div>
-                        <div style={{ position:"absolute", bottom:24, left:10, right:10, fontFamily:"Georgia,serif", fontWeight:"bold", fontSize:13, color:"#f0ebe2", lineHeight:1.2 }}>{r.name}</div>
-                        <div style={{ position:"absolute", bottom:8, left:10, fontSize:11, color:"rgba(240,235,226,0.6)" }}>{r.cuisine}</div>
+                      <HomePhotoCard key={`${r.id}-${photoCacheVersion}`} r={{ ...r, img: getAnyCachedPhotoForId(r.id) || r.img }} onClick={() => setDetailRestaurant(r)} className="det-nearby-card" style={{ minWidth:160, maxWidth:160, height:200, borderRadius:16, flexShrink:0 }}>
+                        <div className="card-flame"><FlameRating score={getFlameScore(r)} size={9} /></div>
+                        <div className="card-name">{r.name}</div>
+                        <div className="card-cuisine">{r.cuisine}</div>
                       </HomePhotoCard>
                     ))}
                   </div>
@@ -5405,111 +5088,21 @@ Return a JSON object with exactly these fields:
           </div>
         </div>
         {friendsBeenHereSheetOpen && friendsBeenHere.list.length > 0 && (
-          <div
-            role="presentation"
-            onClick={() => setFriendsBeenHereSheetOpen(false)}
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 100000,
-              background: "rgba(0,0,0,0.45)",
-              display: "flex",
-              alignItems: "flex-end",
-              justifyContent: "center",
-            }}
-          >
-            <div
-              role="dialog"
-              aria-label="Friends who have been here"
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                width: "min(100vw, 480px)",
-                maxHeight: "50vh",
-                overflowY: "auto",
-                background: "#0e0804",
-                borderTopLeftRadius: 18,
-                borderTopRightRadius: 18,
-                borderTop: "1px solid #2e1f0e",
-                borderLeft: "1px solid #2e1f0e",
-                borderRight: "1px solid #2e1f0e",
-                padding: "18px 18px max(20px, env(safe-area-inset-bottom))",
-                boxSizing: "border-box",
-              }}
-            >
-              <div
-                style={{
-                  width: 36,
-                  height: 4,
-                  borderRadius: 2,
-                  background: "#3d2a18",
-                  margin: "0 auto 14px",
-                }}
-              />
-              <div
-                style={{
-                  fontSize: 11,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  color: "#5a3a20",
-                  marginBottom: 10,
-                  fontFamily: "-apple-system,sans-serif",
-                }}
-              >
-                Friends here
-              </div>
-              {friendsBeenHere.list.map((f, idx) => (
-                <div
-                  key={f.clerkUserId}
-                  onClick={() => { setFriendsBeenHereSheetOpen(false); setDetailRestaurant(null); setViewingUserId(f.clerkUserId); }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "12px 0",
-                    borderBottom: idx === friendsBeenHere.list.length - 1 ? "none" : "1px solid #2e1f0e",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: "50%",
-                      border: "1.5px solid #c4603a",
-                      overflow: "hidden",
-                      background: "#c4603a",
-                      flexShrink: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
+          <div role="presentation" className="det-sheet-backdrop" onClick={() => setFriendsBeenHereSheetOpen(false)}>
+            <div role="dialog" aria-label="Friends who have been here" className="det-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="det-sheet-handle" />
+              <div className="det-sheet-title">Friends here</div>
+              {friendsBeenHere.list.map((f) => (
+                <div key={f.clerkUserId} className="det-sheet-row" onClick={() => { setFriendsBeenHereSheetOpen(false); setDetailRestaurant(null); setViewingUserId(f.clerkUserId); }}>
+                  <div className="det-sheet-av">
                     {f.profilePhoto ? (
-                      <img src={f.profilePhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <img src={f.profilePhoto} alt="" />
                     ) : (
-                      <span
-                        style={{
-                          fontSize: 15,
-                          fontWeight: 700,
-                          color: "#f0ebe2",
-                          fontFamily: "-apple-system,sans-serif",
-                        }}
-                      >
-                        {(f.profileName || "?").charAt(0).toUpperCase()}
-                      </span>
+                      <span className="initial">{(f.profileName || "?").charAt(0).toUpperCase()}</span>
                     )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 15,
-                        color: "#e8e0d4",
-                        fontFamily: "-apple-system,sans-serif",
-                        marginBottom: f.flameRating != null ? 6 : 0,
-                      }}
-                    >
-                      {f.profileName}
-                    </div>
+                    <div className="det-sheet-name" style={{ marginBottom: f.flameRating != null ? 6 : 0 }}>{f.profileName}</div>
                     {f.flameRating != null && <FlameRating score={f.flameRating} size={10} />}
                   </div>
                 </div>
@@ -5525,7 +5118,7 @@ Return a JSON object with exactly these fields:
 
 
       {/* Toast */}
-      {toast && <div style={{ position:"fixed", top:76, left:"50%", transform:"translateX(-50%)", background:C.terracotta, color:"#fff", borderRadius:20, padding:"10px 20px", fontSize:13, fontWeight:600, zIndex:300, fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap", boxShadow:"0 4px 20px rgba(196,96,58,0.4)" }}>Link copied — {toast} 📋</div>}
+      {toast && <div style={{ position:"fixed", top:76, left:"50%", transform:"translateX(-50%)", background:C.terracotta, color:"#fff", borderRadius:20, padding:"10px 20px", fontSize:13, fontWeight:600, zIndex:300, fontFamily:"'Inter', -apple-system, sans-serif", whiteSpace:"nowrap", boxShadow:"0 4px 20px rgba(196,96,58,0.4)" }}>Link copied — {toast} 📋</div>}
       {showTasteProfile && (
         <TasteProfile
           onBack={() => setShowTasteProfile(false)}
@@ -5552,73 +5145,69 @@ Return a JSON object with exactly these fields:
 
       {/* ── DM INBOX MODAL ── */}
       {dmOpen && createPortal(
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:9999, display:"flex", flexDirection:"column" }} onClick={() => { if (!dmConvo) { setDmOpen(false); } }}>
-          <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:480, margin:"0 auto", background:C.bg, display:"flex", flexDirection:"column", height:"100%", maxHeight:"100dvh" }}>
+        <div className="modal-backdrop fullscreen" style={{ background:"rgba(0,0,0,0.7)", zIndex:9999 }} onClick={() => { if (!dmConvo) { setDmOpen(false); } }}>
+          <div className="sheet full" onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div style={{ padding:"16px 18px 12px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
+            <div className="sheet-header">
               {dmConvo ? (
                 <>
-                  <button type="button" onClick={() => { setDmConvo(null); loadDmInbox(); }} style={{ background:"none", border:"none", color:C.terracotta, fontSize:18, cursor:"pointer", padding:0 }}>‹</button>
-                  {dmConvo.partnerPhoto ? <img src={dmConvo.partnerPhoto} alt="" style={{ width:32, height:32, borderRadius:"50%", objectFit:"cover" }} /> : <div style={{ width:32, height:32, borderRadius:"50%", background:C.bg3 }} />}
-                  <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:18, color:C.text, flex:1 }}>{dmConvo.partnerName}</div>
+                  <button type="button" className="sheet-back" style={{ fontSize:18 }} onClick={() => { setDmConvo(null); loadDmInbox(); }}>‹</button>
+                  <div className="av-circle" style={{ width:32, height:32 }}>
+                    {dmConvo.partnerPhoto ? <img src={dmConvo.partnerPhoto} alt="" /> : null}
+                  </div>
+                  <div className="sheet-header-title" style={{ flex:1 }}>{dmConvo.partnerName}</div>
                 </>
               ) : (
-                <>
-                  <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:20, color:C.text, flex:1 }}>Messages</div>
-                </>
+                <div className="sheet-header-title large" style={{ flex:1 }}>Messages</div>
               )}
-              <button type="button" onClick={() => { setDmOpen(false); setDmConvo(null); }} style={{ background:"none", border:"none", color:C.muted, fontSize:20, cursor:"pointer" }}>✕</button>
+              <button type="button" className="sheet-close" style={{ fontSize:20 }} onClick={() => { setDmOpen(false); setDmConvo(null); }}>✕</button>
             </div>
             {/* Content */}
             {!dmConvo ? (
               /* INBOX */
-              <div style={{ flex:1, overflowY:"auto", padding:"8px 0" }}>
+              <div className="sheet-body" style={{ padding:"8px 0" }}>
                 {dmInbox.length === 0 ? (
-                  <div style={{ textAlign:"center", padding:"60px 20px", color:C.muted, fontFamily:"-apple-system,sans-serif", fontSize:14 }}>
-                    <div style={{ fontSize:36, marginBottom:12 }}>💬</div>
-                    <div>No messages yet</div>
-                    <div style={{ fontSize:12, marginTop:6 }}>Share a restaurant or message a friend to start a conversation.</div>
+                  <div className="empty-state" style={{ padding:"60px 20px" }}>
+                    <div className="empty-icon">💬</div>
+                    <div className="empty-text">No messages yet</div>
+                    <div className="empty-sub">Share a restaurant or message a friend to start a conversation.</div>
                   </div>
                 ) : dmInbox.map(convo => (
-                  <button key={convo.partnerId} type="button" onClick={() => openDmConvo(convo.partnerId, convo.partnerName, convo.partnerPhoto)}
-                    style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:"12px 18px", border:"none", background: convo.unread > 0 ? `${C.terracotta}0a` : "transparent", cursor:"pointer", textAlign:"left", borderBottom:`1px solid ${C.border}08` }}>
-                    {convo.partnerPhoto ? <img src={convo.partnerPhoto} alt="" style={{ width:44, height:44, borderRadius:"50%", objectFit:"cover", flexShrink:0 }} /> : <div style={{ width:44, height:44, borderRadius:"50%", background:C.bg3, flexShrink:0 }} />}
+                  <button key={convo.partnerId} type="button" className={`sheet-row${convo.unread > 0 ? " unread" : ""}`} onClick={() => openDmConvo(convo.partnerId, convo.partnerName, convo.partnerPhoto)}>
+                    <div className="av-circle" style={{ width:44, height:44 }}>
+                      {convo.partnerPhoto ? <img src={convo.partnerPhoto} alt="" /> : null}
+                    </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                        <span style={{ fontFamily:"-apple-system,sans-serif", fontSize:14, fontWeight: convo.unread > 0 ? 700 : 400, color:C.text }}>{convo.partnerName}</span>
-                        <span style={{ fontSize:11, color:C.muted, fontFamily:"-apple-system,sans-serif", flexShrink:0 }}>{(() => { const d = Math.floor((Date.now()-new Date(convo.created_at))/60000); return d < 1 ? "now" : d < 60 ? `${d}m` : d < 1440 ? `${Math.floor(d/60)}h` : `${Math.floor(d/1440)}d`; })()}</span>
+                        <span style={{ fontFamily:"'Inter', -apple-system, sans-serif", fontSize:14, fontWeight: convo.unread > 0 ? 700 : 400, color:C.text }}>{convo.partnerName}</span>
+                        <span style={{ fontSize:11, color:C.muted, fontFamily:"'Inter', -apple-system, sans-serif", flexShrink:0 }}>{(() => { const d = Math.floor((Date.now()-new Date(convo.created_at))/60000); return d < 1 ? "now" : d < 60 ? `${d}m` : d < 1440 ? `${Math.floor(d/60)}h` : `${Math.floor(d/1440)}d`; })()}</span>
                       </div>
-                      <div style={{ fontSize:12, color: convo.unread > 0 ? C.text : C.muted, fontFamily:"-apple-system,sans-serif", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", marginTop:2 }}>
+                      <div style={{ fontSize:12, color: convo.unread > 0 ? C.text : C.muted, fontFamily:"'Inter', -apple-system, sans-serif", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", marginTop:2 }}>
                         {convo.restaurant_name ? `🍽 ${convo.restaurant_name}` : (convo.content || "...")}
                       </div>
                     </div>
-                    {convo.unread > 0 && <span style={{ width:8, height:8, borderRadius:"50%", background:C.terracotta, flexShrink:0 }} />}
+                    {convo.unread > 0 && <span className="unread-dot" />}
                   </button>
                 ))}
               </div>
             ) : (
               /* CONVERSATION */
               <>
-                <div style={{ flex:1, overflowY:"auto", padding:"12px 18px", display:"flex", flexDirection:"column", gap:6 }}>
+                <div className="sheet-body" style={{ padding:"12px 18px", display:"flex", flexDirection:"column", gap:6 }}>
                   {dmMessages.map((msg, i) => {
                     const isMine = msg.sender_id === user?.id;
                     return (
                       <div key={msg.id || i} style={{ display:"flex", justifyContent: isMine ? "flex-end" : "flex-start" }}>
-                        <div style={{
-                          maxWidth:"75%", padding: msg.restaurant_name ? "8px 10px" : "8px 14px",
-                          borderRadius: isMine ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                          background: isMine ? C.terracotta : C.bg2, color: isMine ? "#fff" : C.text,
-                          fontFamily:"-apple-system,sans-serif", fontSize:14, lineHeight:"1.4",
-                        }}>
+                        <div className={`dm-bubble ${isMine ? "mine" : "theirs"}`} style={ msg.restaurant_name ? { padding:"8px 10px" } : undefined}>
                           {msg.restaurant_name ? (
-                            <button type="button" onClick={() => {
+                            <button type="button" className="dm-rest-card" onClick={() => {
                               const rid = parseInt(msg.restaurant_id);
                               const r = allRestaurants.find(r => r.id === rid);
                               if (r) { setDmOpen(false); setDmConvo(null); setDetailRestaurant(r); }
-                            }} style={{ background: `${C.bg}40`, border:`1px solid ${C.border}`, borderRadius:12, padding:"8px 10px", cursor:"pointer", display:"flex", alignItems:"center", gap:10, textAlign:"left", width:"100%" }}>
+                            }}>
                               {(() => { const rid = parseInt(msg.restaurant_id); const photo = photoCacheRef.current?.[rid] || photoCacheRef.current?.[String(rid)] || allRestaurants.find(r => r.id === rid)?.img; return photo ? <img src={photo} alt="" style={{ width:44, height:44, borderRadius:8, objectFit:"cover", flexShrink:0 }} /> : null; })()}
                               <div>
-                                <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:14, color: isMine ? "#fff" : C.text }}>{msg.restaurant_name}</div>
+                                <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontStyle:"italic", fontSize:14, color: isMine ? "#fff" : C.text }}>{msg.restaurant_name}</div>
                                 <div style={{ fontSize:11, color: isMine ? "rgba(255,255,255,0.7)" : C.muted, marginTop:2 }}>Tap to view</div>
                               </div>
                             </button>
@@ -5630,11 +5219,10 @@ Return a JSON object with exactly these fields:
                   <div ref={dmMessagesEndRef} />
                 </div>
                 {/* Input */}
-                <div style={{ padding:"10px 18px 24px", borderTop:`1px solid ${C.border}`, display:"flex", gap:8, flexShrink:0 }}>
-                  <input value={dmInput} onChange={e => setDmInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendDm(); } }}
-                    placeholder="Message..." style={{ flex:1, background:C.bg2, border:`1px solid ${C.border}`, borderRadius:20, padding:"10px 16px", color:C.text, fontSize:14, fontFamily:"-apple-system,sans-serif", outline:"none" }} />
-                  <button type="button" onClick={handleSendDm} disabled={!dmInput.trim() || dmSending}
-                    style={{ width:38, height:38, borderRadius:"50%", border:"none", background: dmInput.trim() ? C.terracotta : C.bg3, color:"#fff", fontSize:16, cursor: dmInput.trim() ? "pointer" : "default", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <div className="dm-input-bar">
+                  <input className="glass-input rounded" value={dmInput} onChange={e => setDmInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendDm(); } }}
+                    placeholder="Message..." />
+                  <button type="button" className={`dm-send-btn ${dmInput.trim() ? "active" : "inactive"}`} onClick={handleSendDm} disabled={!dmInput.trim() || dmSending}>
                     →
                   </button>
                 </div>
@@ -5647,16 +5235,17 @@ Return a JSON object with exactly these fields:
 
       {/* ── SHARE VIA DM PICKER ── */}
       {dmSharePicker && createPortal(
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:10000, display:"flex", alignItems:"flex-end" }} onClick={() => setDmSharePicker(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:480, margin:"0 auto", background:C.bg, borderRadius:"20px 20px 0 0", padding:"20px 18px 36px", maxHeight:"60vh", overflowY:"auto" }}>
-            <div style={{ fontFamily:"Georgia,serif", fontStyle:"italic", fontSize:18, color:C.text, marginBottom:4 }}>Send {dmSharePicker.name} to...</div>
-            <input value={dmShareSearch} onChange={e => setDmShareSearch(e.target.value)} placeholder="Search people..." style={{ width:"100%", padding:"10px 14px", background:C.bg2, border:`1px solid ${C.border}`, borderRadius:12, color:C.text, fontSize:14, fontFamily:"-apple-system,sans-serif", outline:"none", marginBottom:12, boxSizing:"border-box" }} />
-            {dmShareResults.length === 0 ? <div style={{ color:C.muted, fontSize:13, textAlign:"center", padding:20 }}>No people found</div> : dmShareResults.map(u => (
-              <button key={u.clerk_user_id} type="button" onClick={() => handleShareViaDm(u.clerk_user_id, u.profile_name || u.profile_username || "User")}
-                style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:"10px 4px", border:"none", background:"transparent", cursor:"pointer", textAlign:"left", borderBottom:`1px solid ${C.border}08` }}>
-                {u.profile_photo ? <img src={u.profile_photo} alt="" style={{ width:36, height:36, borderRadius:"50%", objectFit:"cover" }} /> : <div style={{ width:36, height:36, borderRadius:"50%", background:C.bg3 }} />}
+        <div className="modal-backdrop" style={{ background:"rgba(0,0,0,0.7)", zIndex:10000 }} onClick={() => setDmSharePicker(null)}>
+          <div className="sheet short" onClick={e => e.stopPropagation()} style={{ padding:"20px 18px 36px", overflowY:"auto" }}>
+            <div className="sheet-header-title" style={{ marginBottom:4 }}>Send {dmSharePicker.name} to...</div>
+            <input className="glass-input" value={dmShareSearch} onChange={e => setDmShareSearch(e.target.value)} placeholder="Search people..." style={{ marginBottom:12 }} />
+            {dmShareResults.length === 0 ? <div className="empty-state" style={{ padding:20, fontSize:13 }}>No people found</div> : dmShareResults.map(u => (
+              <button key={u.clerk_user_id} type="button" className="sheet-row" onClick={() => handleShareViaDm(u.clerk_user_id, u.profile_name || u.profile_username || "User")}>
+                <div className="av-circle" style={{ width:36, height:36 }}>
+                  {u.profile_photo ? <img src={u.profile_photo} alt="" /> : null}
+                </div>
                 <div>
-                  <div style={{ fontSize:14, color:C.text, fontFamily:"-apple-system,sans-serif" }}>{u.profile_name || "User"}</div>
+                  <div style={{ fontSize:14, color:C.text, fontFamily:"'Inter', -apple-system, sans-serif" }}>{u.profile_name || "User"}</div>
                   {u.profile_username && <div style={{ fontSize:11, color:C.muted }}>@{u.profile_username}</div>}
                 </div>
               </button>
@@ -5667,92 +5256,119 @@ Return a JSON object with exactly these fields:
       )}
 
       {notifSheetOpen && createPortal(
-        <div
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1001, display: "flex", alignItems: "flex-end" }}
-          onClick={() => setNotifSheetOpen(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "100%",
-              maxWidth: 480,
-              margin: "0 auto",
-              background: C.bg2,
-              borderRadius: "20px 20px 0 0",
-              maxHeight: "75vh",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-            }}
-          >
-            <div style={{ padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-              <div style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 18, color: C.text }}>Notifications</div>
-              <button
-                type="button"
-                onClick={() => setNotifSheetOpen(false)}
-                style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}
-              >
-                ×
-              </button>
+        <div className="modal-backdrop" style={{ zIndex: 1001 }} onClick={() => setNotifSheetOpen(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "80vh" }}>
+            <div className="sheet-header" style={{ justifyContent: "space-between" }}>
+              <div className="sheet-header-title large">Notifications</div>
+              <button type="button" className="sheet-close" onClick={() => setNotifSheetOpen(false)}>×</button>
             </div>
-            <div style={{ overflowY: "auto", flex: 1, padding: "8px 18px 24px", WebkitOverflowScrolling: "touch" }}>
+            <div className="sheet-body" style={{ padding: 0 }}>
               {notifLoading ? (
-                <div style={{ padding: "16px 0", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>Loading…</div>
+                <div style={{ padding: "32px 0", textAlign: "center", color: C.muted, fontSize: 13, fontFamily: "'Inter', -apple-system, sans-serif" }}>Loading…</div>
               ) : notifList.length === 0 ? (
-                <div style={{ padding: "24px 0", textAlign: "center", color: C.muted, fontSize: 13, fontFamily: "-apple-system,sans-serif" }}>No notifications yet</div>
+                <div className="empty-state" style={{ padding: "48px 0" }}>
+                  <div className="empty-icon">🔔</div>
+                  <div className="empty-text">No notifications yet</div>
+                  <div className="empty-sub">When people follow you or love restaurants, you'll see it here.</div>
+                </div>
               ) : (
-                notifList.map((n) => {
-                  const unread = n.read === false;
-                  const fromUser = n._fromUser;
-                  const restaurant = n.restaurant_id ? allRestaurants.find(r => String(r.id) === String(n.restaurant_id)) : null;
-                  // Pick photo: user photo for follow, restaurant photo for restaurant events
-                  const photo = n.type === "followed_you" ? fromUser?.profile_photo : (restaurant ? getAnyCachedPhotoForId(restaurant.id) || restaurant.img : fromUser?.profile_photo);
+                groupNotifList(notifList).map((item, idx) => {
+                  // Section header
+                  if (item._sectionHeader) {
+                    return (
+                      <div key={`section-${item._sectionHeader}`} className="notif-section-header">
+                        {item._sectionHeader}
+                      </div>
+                    );
+                  }
+
+                  const unread = item.read === false;
+                  const isFollow = item.type === "followed_you";
+                  const fromUser = item._fromUser || (item._users && item._users[0]);
+                  const restaurant = item.restaurant_id ? allRestaurants.find(r => String(r.id) === String(item.restaurant_id)) : null;
+
+                  // LEFT: always the actor's profile photo
+                  const profileSrc = fromUser?.profile_photo;
+                  // RIGHT: restaurant photo for restaurant notifs, Follow button for follows
+                  const restaurantPhotoSrc = restaurant ? (getAnyCachedPhotoForId(restaurant.id) || restaurant.img) : null;
+                  const alreadyFollowing = isFollow && item.from_user_id && notifFollowedBack.has(item.from_user_id);
+
+                  const msg = buildNotifMessage(item);
+                  const timeStr = formatNotificationTime(item.created_at);
+
                   return (
                     <div
-                      key={n.id ?? `${n.created_at}-${n.type}`}
+                      key={item.id ?? `${item.created_at}-${item.type}-${idx}`}
+                      className="notif-item"
                       onClick={() => {
-                        if (n.type === "followed_you" && n.from_user_id) {
-                          setNotifSheetOpen(false); setViewingUserId(n.from_user_id);
-                        } else if (n.restaurant_id) {
-                          if (restaurant) { setNotifSheetOpen(false); setDetailRestaurant(restaurant); }
-                        } else if (n.from_user_id) {
-                          setNotifSheetOpen(false); setViewingUserId(n.from_user_id);
+                        if (isFollow && item.from_user_id) {
+                          setNotifSheetOpen(false); setViewingUserId(item.from_user_id);
+                        } else if (restaurant) {
+                          setNotifSheetOpen(false); setDetailRestaurant(restaurant);
+                        } else if (item.from_user_id) {
+                          setNotifSheetOpen(false); setViewingUserId(item.from_user_id);
                         }
                       }}
-                      style={{
-                        display: "flex",
-                        gap: 12,
-                        alignItems: "center",
-                        padding: "12px 0",
-                        borderBottom: `1px solid ${C.border}`,
-                        cursor: "pointer",
-                        opacity: unread ? 1 : 0.7,
-                      }}
+                      style={{ opacity: unread ? 1 : 0.7, padding: "10px 16px" }}
                     >
-                      {/* Photo + icon badge */}
-                      <div style={{ position: "relative", flexShrink: 0 }}>
-                        <div style={{ width: 46, height: 46, borderRadius: n.type === "followed_you" ? "50%" : 10, overflow: "hidden", background: C.bg3, border: unread ? `2px solid ${C.terracotta}` : `1px solid ${C.border}` }}>
-                          {photo ? <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (
-                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                              <NotificationTypeIcon type={n.type} size={20} />
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ position: "absolute", bottom: -2, right: -2, width: 20, height: 20, borderRadius: "50%", background: C.bg2, border: `1.5px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <NotificationTypeIcon type={n.type} size={11} />
-                        </div>
+                      {/* Unread glow dot */}
+                      {unread && <div className="notif-dot" />}
+
+                      {/* LEFT: User profile photo */}
+                      <div className="av-circle" style={unread ? {
+                        border: `2px solid ${C.terracotta}`,
+                        boxShadow: `0 0 12px rgba(255,150,50,0.3), 0 0 20px rgba(255,150,50,0.1)`,
+                      } : undefined}>
+                        {profileSrc ? <img src={profileSrc} alt="" /> : (
+                          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <NotificationTypeIcon type={item.type} size={18} />
+                          </div>
+                        )}
                       </div>
-                      {/* Text */}
+
+                      {/* CENTER: Text */}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, color: C.text, fontFamily: "-apple-system,sans-serif", lineHeight: 1.4 }}>{notificationMessage(n)}</div>
-                        <div style={{ fontSize: 11, color: C.muted, fontFamily: "'DM Mono',monospace", marginTop: 3 }}>{formatNotificationTime(n.created_at)}</div>
+                        <div style={{
+                          fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif",
+                          lineHeight: 1.4, overflow: "hidden", display: "-webkit-box",
+                          WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+                        }}>
+                          {renderNotifBoldText(msg)}
+                          <span style={{ color: "rgba(255,150,50,0.4)", fontSize: 12, marginLeft: 4 }}>{timeStr}</span>
+                        </div>
                       </div>
-                      {/* Arrow */}
-                      <div style={{ color: C.dim, fontSize: 14, flexShrink: 0 }}>›</div>
+
+                      {/* RIGHT: Follow button OR restaurant photo */}
+                      {isFollow ? (
+                        alreadyFollowing ? (
+                          <button type="button" className="follow-btn done" disabled onClick={e => e.stopPropagation()}>
+                            Following
+                          </button>
+                        ) : (
+                          <button type="button" className="follow-btn primary" onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!user?.id || !item.from_user_id) return;
+                            await followUser(user.id, item.from_user_id);
+                            syncFollow(user.id, item.from_user_id);
+                            setNotifFollowedBack(prev => new Set([...prev, item.from_user_id]));
+                          }}>
+                            Follow Back
+                          </button>
+                        )
+                      ) : (restaurant && restaurantPhotoSrc) ? (
+                        <div style={{
+                          width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0,
+                          background: "linear-gradient(145deg, #1e1a24, #12101a)",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.3), 0 0 0 0.5px rgba(255,220,180,0.08)",
+                        }}>
+                          <img src={restaurantPhotoSrc} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })
               )}
+              <div style={{ height: 24 }} />
             </div>
           </div>
         </div>,
@@ -5760,7 +5376,7 @@ Return a JSON object with exactly these fields:
       )}
     </div>
     </div>
-    </SignedIn>
+    {/* </SignedIn> — temporarily bypassed for design work */}
     </>
   );
 }

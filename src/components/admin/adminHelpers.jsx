@@ -1,15 +1,17 @@
 export const C = {
-  bg: "#0f0c09",
-  bg2: "#1a1208",
-  bg3: "#2e1f0e",
-  border: "#2e1f0e",
-  text: "#f0ebe2",
-  muted: "#5a3a20",
-  dim: "#3d2a18",
-  terracotta: "#c4603a",
-  red: "#c43030",
-  green: "#3a8a4a",
-  blue: "#4a7aab",
+  bg:        "#0a0a0f",
+  bg2:       "#12121a",
+  bg3:       "#1a1a24",
+  border:    "rgba(255,255,255,0.04)",
+  border2:   "rgba(255,255,255,0.06)",
+  text:      "#f5f0eb",
+  muted:     "rgba(245,240,235,0.3)",
+  dim:       "rgba(245,240,235,0.18)",
+  terracotta:"#ff9632",
+  terra2:    "#e07850",
+  rose:      "#c44060",
+  cream:     "#f5f0eb",
+  card:      "rgba(255,220,180,0.02)",
 };
 
 export const sectionHeader = {
@@ -17,7 +19,7 @@ export const sectionHeader = {
   letterSpacing: "0.12em",
   textTransform: "uppercase",
   color: C.muted,
-  fontFamily: "'DM Mono', monospace",
+  fontFamily: "'Inter', -apple-system, sans-serif",
   marginBottom: 10,
 };
 
@@ -37,7 +39,7 @@ export const inputStyle = {
   padding: "10px 12px",
   color: C.text,
   fontSize: 14,
-  fontFamily: "'DM Sans', sans-serif",
+  fontFamily: "'Inter', -apple-system, sans-serif",
   boxSizing: "border-box",
   outline: "none",
 };
@@ -49,7 +51,7 @@ export const btnPrimary = {
   borderRadius: 10,
   padding: "10px 18px",
   fontSize: 13,
-  fontFamily: "'DM Sans', sans-serif",
+  fontFamily: "'Inter', -apple-system, sans-serif",
   cursor: "pointer",
   fontWeight: 500,
 };
@@ -61,7 +63,7 @@ export const btnSecondary = {
   borderRadius: 10,
   padding: "10px 18px",
   fontSize: 13,
-  fontFamily: "'DM Sans', sans-serif",
+  fontFamily: "'Inter', -apple-system, sans-serif",
   cursor: "pointer",
   fontWeight: 500,
 };
@@ -73,7 +75,7 @@ export const btnOutline = {
   borderRadius: 10,
   padding: "10px 18px",
   fontSize: 13,
-  fontFamily: "'DM Sans', sans-serif",
+  fontFamily: "'Inter', -apple-system, sans-serif",
   cursor: "pointer",
 };
 
@@ -84,7 +86,7 @@ export const btnDanger = {
   borderRadius: 10,
   padding: "8px 14px",
   fontSize: 12,
-  fontFamily: "'DM Sans', sans-serif",
+  fontFamily: "'Inter', -apple-system, sans-serif",
   cursor: "pointer",
 };
 
@@ -95,7 +97,7 @@ export const btnSmall = {
   padding: "5px 10px",
   fontSize: 11,
   color: C.muted,
-  fontFamily: "'DM Sans', sans-serif",
+  fontFamily: "'Inter', -apple-system, sans-serif",
   cursor: "pointer",
 };
 
@@ -104,7 +106,7 @@ export const badge = (color) => ({
   padding: "2px 8px",
   borderRadius: 6,
   fontSize: 10,
-  fontFamily: "'DM Mono', monospace",
+  fontFamily: "'Inter', -apple-system, sans-serif",
   letterSpacing: "0.06em",
   color: "#fff",
   background: color,
@@ -117,7 +119,7 @@ export function ConfirmDialog({ message, onConfirm, onCancel }) {
       onClick={onCancel}
     >
       <div onClick={e => e.stopPropagation()} style={{ background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 16, padding: "24px 20px", maxWidth: 340, width: "90%", textAlign: "center" }}>
-        <div style={{ color: C.text, fontSize: 15, fontFamily: "'DM Sans', sans-serif", lineHeight: 1.5, marginBottom: 20 }}>{message}</div>
+        <div style={{ color: C.text, fontSize: 15, fontFamily: "'Inter', -apple-system, sans-serif", lineHeight: 1.5, marginBottom: 20 }}>{message}</div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
           <button type="button" onClick={onCancel} style={{ ...btnOutline, flex: 1 }}>Cancel</button>
           <button type="button" onClick={onConfirm} style={{ ...btnDanger, flex: 1, padding: "10px 18px" }}>Confirm</button>
@@ -133,7 +135,7 @@ export function Toast({ message, type = "success" }) {
       position: "fixed", top: 76, left: "50%", transform: "translateX(-50%)",
       background: type === "error" ? C.red : type === "success" ? C.terracotta : C.blue,
       color: "#fff", borderRadius: 20, padding: "10px 20px", fontSize: 13, fontWeight: 600,
-      zIndex: 100002, fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap",
+      zIndex: 100002, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap",
       boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
     }}>
       {message}
@@ -156,8 +158,8 @@ export function SearchBar({ value, onChange, placeholder = "Search..." }) {
 export function StatCard({ label, value }) {
   return (
     <div style={{ ...cardStyle, textAlign: "center", flex: 1, minWidth: 0 }}>
-      <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 32, color: C.terracotta, lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 9, color: C.muted, fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 4 }}>{label}</div>
+      <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 32, color: C.terracotta, lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 9, color: C.muted, fontFamily: "'Inter', -apple-system, sans-serif", letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 4 }}>{label}</div>
     </div>
   );
 }

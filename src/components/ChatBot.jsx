@@ -210,11 +210,19 @@ function detectCity(text, allRestaurants, followedCities) {
 // ── UI COMPONENTS ──────────────────────────────────────────────
 
 const C = {
-  cream: "#faf6f0", warm: "#f5ede0", parchment: "#ede4d3",
-  espresso: "#1e1208", bark: "#2e1f0e", mocha: "#4a3320",
-  caramel: "#8b5e3c", terracotta: "#c4603a", terra2: "#e07a52",
-  gold: "#c9973f", sage: "#6b8f71", muted: "#8a7060",
-  border: "#ddd0bc", card: "#fff9f2",
+  bg:        "#0a0a0f",
+  bg2:       "#12121a",
+  bg3:       "#1a1a24",
+  border:    "rgba(255,255,255,0.04)",
+  border2:   "rgba(255,255,255,0.06)",
+  text:      "#f5f0eb",
+  muted:     "rgba(245,240,235,0.3)",
+  dim:       "rgba(245,240,235,0.18)",
+  terracotta:"#ff9632",
+  terra2:    "#e07850",
+  rose:      "#c44060",
+  cream:     "#f5f0eb",
+  card:      "rgba(255,220,180,0.02)",
 }
 
 const SUGGESTIONS = [
@@ -310,7 +318,7 @@ function renderMessageContent(content, onRestaurantClick) {
         const label = isOpenTable ? "Book on OpenTable" : isResy ? "Book on Resy" : isTock ? "Book on Tock" : "Reserve";
         return (
           <a key={i} href={href} target="_blank" rel="noopener noreferrer"
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, padding: "8px 14px", borderRadius: 20, background: isOpenTable ? "#DA3743" : "#c4603a", color: "#fff", textDecoration: "none", fontSize: 13, fontWeight: 600, fontFamily: "-apple-system, sans-serif" }}>
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, padding: "8px 14px", borderRadius: 20, background: isOpenTable ? "#DA3743" : C.terracotta, color: "#fff", textDecoration: "none", fontSize: 13, fontWeight: 600, fontFamily: "'Inter', -apple-system, sans-serif" }}>
             🗓 {label}
           </a>
         );
@@ -325,7 +333,7 @@ function renderMessageContent(content, onRestaurantClick) {
           <em
             key={j}
             onClick={() => onRestaurantClick?.(seg)}
-            style={{ fontStyle: "italic", fontWeight: 700, color: "#c4603a", cursor: onRestaurantClick ? "pointer" : "default", textDecoration: "none", borderBottom: "1px solid rgba(196,96,58,0.3)" }}
+            style={{ fontStyle: "italic", fontWeight: 700, color: C.terracotta, cursor: onRestaurantClick ? "pointer" : "default", textDecoration: "none", borderBottom: "1px solid rgba(196,96,58,0.3)" }}
           >{seg}</em>
         ) : seg)}
       </span>
@@ -341,7 +349,7 @@ function MessageBubble({ message, onRestaurantClick }) {
         <div style={{ display: "flex", alignItems: "flex-end", gap: 6, marginBottom: 2 }}>
           <div style={{ width: 28, height: 28, borderRadius: "50%", background: `linear-gradient(135deg, ${C.terracotta}, ${C.gold})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>🍽</div>
           <div style={{ background: "#e5e5ea", borderRadius: "18px 18px 18px 4px", padding: "10px 14px", maxWidth: "100%" }}>
-            <p style={{ margin: 0, fontSize: 15, lineHeight: 1.45, color: "#000", fontFamily: "-apple-system, sans-serif", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+            <p style={{ margin: 0, fontSize: 15, lineHeight: 1.45, color: "#000", fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
               <span style={{ display: "flex", flexDirection: "column", gap: 4 }}>{renderMessageContent(renderText(message.content), onRestaurantClick)}</span>
             </p>
           </div>
@@ -349,7 +357,7 @@ function MessageBubble({ message, onRestaurantClick }) {
       )}
       {isUser && (
         <div style={{ background: "#007aff", borderRadius: "18px 18px 4px 18px", padding: "10px 14px", maxWidth: "100%" }}>
-          <p style={{ margin: 0, fontSize: 15, lineHeight: 1.45, color: "#fff", fontFamily: "-apple-system, sans-serif", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{message.content}</p>
+          <p style={{ margin: 0, fontSize: 15, lineHeight: 1.45, color: "#fff", fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{message.content}</p>
         </div>
       )}
     </div>
@@ -521,19 +529,19 @@ export default function ChatBot({
   // ── INLINE (Home tab) ────────────────────────────────────────
   if (inline) {
     return (
-      <div id="home-chat-card" style={{ background: "#1a1208", border: "1px solid #2e1f0e", borderRadius: 16, padding: 16, margin: "0 16px", display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 160px)", overflow: "hidden" }}>
+      <div id="home-chat-card" className="home-chatbot glass-heavy" style={{ display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 160px)", overflow: "hidden" }}>
         {!showIdleState && messages.length >= 1 && (
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-            <button type="button" onClick={() => { clearConversation(); conversationIdRef.current = null; }} style={{ background: "none", border: "none", color: "#5a3a20", fontSize: 12, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", padding: "4px 8px" }}>× Clear</button>
+            <button type="button" onClick={() => { clearConversation(); conversationIdRef.current = null; }} style={{ background: "none", border: "none", color: C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif", cursor: "pointer", padding: "4px 8px" }}>× Clear</button>
           </div>
         )}
         {showIdleState && (
           <>
-            <div style={{ fontFamily: "Georgia,serif", fontSize: 20, fontWeight: 700, fontStyle: "italic", color: "#f0ebe2", marginBottom: 4 }}>Where are you eating tonight?</div>
-            <div style={{ fontSize: 12, color: "#5a3a20", marginBottom: 10 }}>A vibe, a craving, a neighborhood.</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+            <h2>Where are you eating tonight?</h2>
+            <div className="chat-sub">A vibe, a craving, a neighborhood.</div>
+            <div className="home-chips">
               {chipQuestions.map(text => (
-                <button key={text} type="button" onClick={() => sendMessage(text)} style={{ background: "#2e1f0e", color: "#f0ebe2", borderRadius: 20, padding: "6px 14px", fontSize: 13, border: "none", cursor: "pointer", fontFamily: "-apple-system,sans-serif", whiteSpace: "nowrap" }}>{text}</button>
+                <button key={text} type="button" className="home-chip glass-pill" onClick={() => sendMessage(text)}>{text}</button>
               ))}
             </div>
           </>
@@ -542,24 +550,26 @@ export default function ChatBot({
           <div ref={messagesContainerRef} style={{ maxHeight: 380, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
             {messages.map((msg, i) => (
               <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
-                <div style={{ maxWidth: "85%", borderRadius: 12, padding: "8px 12px", background: msg.role === "user" ? "#c4603a" : "#2e1f0e", color: msg.role === "user" ? "#fff" : "#f0ebe2", fontSize: 14, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "-apple-system, sans-serif" }}>
+                <div className={msg.role === "user" ? "home-chat-user" : "home-chat-bot"}>
                   {msg.role === "user" ? msg.content : <span style={{ display: "flex", flexDirection: "column", gap: 4 }}>{renderMessageContent(renderText(msg.content), handleRestaurantClick)}</span>}
                 </div>
               </div>
             ))}
             {loading && (
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginBottom: 4 }}>
-                <div style={{ background: "#2e1f0e", borderRadius: "12px 12px 12px 2px", padding: "10px 16px", display: "flex", alignItems: "center", gap: 5, maxWidth: 80 }}>
-                  {[0,1,2].map(i => (<div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: "#c4603a", opacity: 0.7, animation: "chatDot 1.2s ease-in-out infinite", animationDelay: `${i*0.2}s` }} />))}
+                <div className="home-chat-bot" style={{ display: "flex", alignItems: "center", gap: 5, maxWidth: 80 }}>
+                  {[0,1,2].map(i => (<div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: C.terracotta, opacity: 0.7, animation: "chatDot 1.2s ease-in-out infinite", animationDelay: `${i*0.2}s` }} />))}
                 </div>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
         )}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendMessage())} placeholder="Ask anything..." style={{ flex: 1, borderRadius: 999, border: "1px solid #2e1f0e", background: "#0f0c09", padding: "8px 14px", fontSize: 14, color: "#f0ebe2", outline: "none", fontFamily: "'DM Sans',sans-serif" }} />
-          <button type="button" onClick={() => sendMessage()} disabled={!input.trim() || loading} style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: input.trim() && !loading ? "#c4603a" : "#2e1f0e", color: "#fff", cursor: input.trim() && !loading ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>→</button>
+        <div className="home-chat-input">
+          <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendMessage())} placeholder="Ask anything..." />
+          <button type="button" className="home-send-btn" onClick={() => sendMessage()} disabled={!input.trim() || loading} style={{ opacity: loading ? 0.5 : 1 }}>
+            <svg style={{ width:18, height:18, minWidth:18 }} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
         </div>
       </div>
     )
@@ -573,23 +583,23 @@ export default function ChatBot({
         <div style={{ background: C.cream, borderBottom: `1px solid ${C.border}`, padding: "16px 16px 12px", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
           <div style={{ width: 42, height: 42, borderRadius: "50%", background: `linear-gradient(135deg, ${C.terracotta}, ${C.gold})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, boxShadow: "0 2px 8px rgba(196,96,58,0.3)" }}>🍽</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: "-apple-system, sans-serif", fontWeight: 600, fontSize: 16, color: C.espresso }}>Cooked</div>
-            <div style={{ fontFamily: "-apple-system, sans-serif", fontSize: 12, color: C.sage, fontWeight: 500 }}>● Active now</div>
+            <div style={{ fontFamily: "'Inter', -apple-system, sans-serif", fontWeight: 600, fontSize: 16, color: C.espresso }}>Cooked</div>
+            <div style={{ fontFamily: "'Inter', -apple-system, sans-serif", fontSize: 12, color: C.sage, fontWeight: 500 }}>● Active now</div>
           </div>
           {onClose && <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 24, lineHeight: 1, padding: 4, borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>}
         </div>
 
         {/* Messages */}
         <div style={{ flex: 1, overflowY: "auto", padding: "16px 12px 8px", display: "flex", flexDirection: "column" }}>
-          <div style={{ textAlign: "center", marginBottom: 16, fontFamily: "-apple-system, sans-serif", fontSize: 12, color: C.muted, fontWeight: 500 }}>Today</div>
+          <div style={{ textAlign: "center", marginBottom: 16, fontFamily: "'Inter', -apple-system, sans-serif", fontSize: 12, color: C.muted, fontWeight: 500 }}>Today</div>
           {messages.map((msg, i) => <MessageBubble key={i} message={msg} onRestaurantClick={handleRestaurantClick} />)}
           {loading && <TypingIndicator />}
           {showSuggestions && messages.length <= 1 && (
             <div style={{ marginTop: 20 }}>
-              <p style={{ fontFamily: "-apple-system, sans-serif", fontSize: 12, color: C.muted, textAlign: "center", marginBottom: 10, fontWeight: 500 }}>Try asking...</p>
+              <p style={{ fontFamily: "'Inter', -apple-system, sans-serif", fontSize: 12, color: C.muted, textAlign: "center", marginBottom: 10, fontWeight: 500 }}>Try asking...</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
                 {SUGGESTIONS.map((s, i) => (
-                  <button key={i} onClick={() => sendMessage(s)} style={{ background: C.warm, border: `1.5px solid ${C.border}`, borderRadius: 20, padding: "7px 14px", fontSize: 13, color: C.espresso, cursor: "pointer", fontFamily: "-apple-system, sans-serif", whiteSpace: "nowrap" }}>{s}</button>
+                  <button key={i} onClick={() => sendMessage(s)} style={{ background: C.warm, border: `1.5px solid ${C.border}`, borderRadius: 20, padding: "7px 14px", fontSize: 13, color: C.espresso, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap" }}>{s}</button>
                 ))}
               </div>
             </div>
@@ -600,12 +610,12 @@ export default function ChatBot({
         {/* Input */}
         <div style={{ padding: "8px 12px 16px", background: C.cream, borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8, background: "#fff", borderRadius: 22, border: `1.5px solid ${C.border}`, padding: "4px 4px 4px 14px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}>
-            <textarea ref={textareaRef} value={input} onChange={handleTextareaInput} onKeyDown={handleKeyDown} placeholder="Ask anything..." rows={1} style={{ flex: 1, border: "none", outline: "none", resize: "none", fontSize: 15, lineHeight: "1.45", color: C.espresso, background: "transparent", fontFamily: "-apple-system, sans-serif", height: 36, maxHeight: 120, paddingTop: 8, paddingBottom: 8, overflowY: "auto" }} />
+            <textarea ref={textareaRef} value={input} onChange={handleTextareaInput} onKeyDown={handleKeyDown} placeholder="Ask anything..." rows={1} style={{ flex: 1, border: "none", outline: "none", resize: "none", fontSize: 15, lineHeight: "1.45", color: C.espresso, background: "transparent", fontFamily: "'Inter', -apple-system, sans-serif", height: 36, maxHeight: 120, paddingTop: 8, paddingBottom: 8, overflowY: "auto" }} />
             <button onClick={() => sendMessage()} disabled={!input.trim() || loading} style={{ width: 32, height: 32, borderRadius: "50%", border: "none", background: input.trim() && !loading ? "#007aff" : "#c7c7cc", color: "#fff", cursor: input.trim() && !loading ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginBottom: 2 }}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 12V3M7 3L3 7M7 3L11 7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
           </div>
-          <p style={{ textAlign: "center", fontSize: 11, color: C.muted, margin: "8px 0 0", fontFamily: "-apple-system, sans-serif" }}>
+          <p style={{ textAlign: "center", fontSize: 11, color: C.muted, margin: "8px 0 0", fontFamily: "'Inter', -apple-system, sans-serif" }}>
             Cooked knows {allRestaurants.length || 0} restaurants across {[...new Set(allRestaurants.map(r => r.city))].length || 0} cities
           </p>
         </div>

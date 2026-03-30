@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { ARCHETYPES } from "../data/restaurants";
 
-const C = { cream:"#faf6f0", parchment:"#ede4d3", terracotta:"#c4603a", text:"#1e1208", muted:"#8a7060", border:"#ddd0bc" };
+const C = { cream:"#f5f0eb", parchment:"#1a1a24", terracotta:"#ff9632", text:"#f5f0eb", muted:"rgba(245,240,235,0.3)", border:"rgba(255,255,255,0.06)", bg:"#0a0a0f" };
 
 export default function TasteResult({ quizData, swipeData, onDone }) {
   const [revealed, setRevealed] = useState(false);
@@ -30,12 +30,12 @@ export default function TasteResult({ quizData, swipeData, onDone }) {
           <div style={{ fontSize:15, color:"rgba(255,255,255,0.75)", lineHeight:1.65 }}>{archetype.desc}</div>
         </div>
       </div>
-      <div style={{ background:C.cream, padding:"28px 22px 40px", flex:1 }}>
+      <div className="glass-subtle" style={{ padding:"28px 22px 40px", flex:1 }}>
         <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:C.muted, letterSpacing:"2px", marginBottom:16 }}>TASTE DNA</div>
         {Object.entries(scores).sort((a,b)=>b[1]-a[1]).map(([k,v],i) => (
-          <div key={k} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
+          <div key={k} className="glass-subtle" style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12, padding:"8px 12px", borderRadius:10 }}>
             <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:C.muted, width:80, textTransform:"uppercase", letterSpacing:"0.5px" }}>{k}</div>
-            <div style={{ flex:1, height:5, background:C.parchment, borderRadius:3, overflow:"hidden" }}>
+            <div style={{ flex:1, height:5, borderRadius:3, overflow:"hidden", background:"rgba(255,255,255,0.06)" }}>
               <div style={{ height:"100%", background:C.terracotta, borderRadius:3, width: revealed ? `${v*10}%` : "0%", transition:`width 1.1s cubic-bezier(0.4,0,0.2,1) ${i*0.1}s` }} />
             </div>
             <div style={{ fontFamily:"'DM Mono',monospace", fontSize:11, color:C.terracotta, width:20, textAlign:"right" }}>{v}</div>
