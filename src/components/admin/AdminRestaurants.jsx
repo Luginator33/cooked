@@ -65,12 +65,31 @@ function FlameDisplay({ score, size = 10 }) {
   );
 }
 
-// Check if a restaurant already exists by lat/lng proximity (~50m) or exact name match
+// Check if a restaurant already exists by exact or fuzzy name match
+// Only uses proximity if names are also similar (avoids false positives from nearby different restaurants)
+function nameSimilarity(a, b) {
+  if (!a || !b) return 0;
+  const na = a.toLowerCase().trim().replace(/[^a-z0-9 ]/g, "");
+  const nb = b.toLowerCase().trim().replace(/[^a-z0-9 ]/g, "");
+  if (na === nb) return 1;
+  // Check if one contains the other (e.g. "La Tour" vs "La Tour Restaurant")
+  if (na.includes(nb) || nb.includes(na)) return 0.8;
+  // Check word overlap
+  const wa = new Set(na.split(/\s+/));
+  const wb = new Set(nb.split(/\s+/));
+  const overlap = [...wa].filter(w => wb.has(w) && w.length > 2).length;
+  const total = Math.max(wa.size, wb.size);
+  return total > 0 ? overlap / total : 0;
+}
+
 function findDuplicate(allRestaurants, name, lat, lng) {
-  const threshold = 0.0005;
+  const threshold = 0.0005; // ~50 meters
   for (const r of allRestaurants) {
-    if (r.name && name && r.name.toLowerCase().trim() === name.toLowerCase().trim()) return r;
-    if (lat && lng && r.lat && r.lng) {
+    const sim = nameSimilarity(r.name, name);
+    // Exact or very close name match → duplicate regardless of location
+    if (sim >= 0.8) return r;
+    // Nearby AND somewhat similar name → duplicate (catches slight name variations)
+    if (sim >= 0.4 && lat && lng && r.lat && r.lng) {
       if (Math.abs(r.lat - lat) < threshold && Math.abs(r.lng - lng) < threshold) return r;
     }
   }
