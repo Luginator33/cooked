@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { C, cardStyle, sectionHeader, StatCard, btnSmall, SearchBar } from "./adminHelpers";
 import { getAnalytics, getActivityLog, getAllUsers, getCommunityRestaurants } from "../../lib/supabase";
 import { getGraphStats, runQuery } from "../../lib/neo4j";
-import { RESTAURANTS } from "../../data/restaurants";
+import { RESTAURANTS, normalizeCity } from "../../data/restaurants";
 
 export default function AdminAnalytics({ allRestaurants }) {
   const [section, setSection] = useState("dashboard");
@@ -25,7 +25,22 @@ export default function AdminAnalytics({ allRestaurants }) {
       ]).then(([data, users, community]) => {
         // Merge static restaurants + community restaurants for accurate counts
         const byId = new Map(RESTAURANTS.map(r => [String(r.id), r]));
-        (community || []).forEach(r => { if (r?.id != null) byId.set(String(r.id), { ...(byId.get(String(r.id)) || {}), ...r }); });
+        const byName = new Map(RESTAURANTS.map(r => [r.name?.toLowerCase().trim(), r]));
+        (community || []).forEach(r => {
+          if (!r || r.id == null) return;
+          if (r.city) r.city = normalizeCity(r.city);
+          const key = String(r.id);
+          const nameKey = r.name?.toLowerCase().trim();
+          // Dedupe by name too (community may duplicate static restaurants under different IDs)
+          if (nameKey && byName.has(nameKey) && String(byName.get(nameKey).id) !== key) {
+            // Same name, different ID — merge into existing static entry
+            const existingId = String(byName.get(nameKey).id);
+            byId.set(existingId, { ...byId.get(existingId), ...r, id: byName.get(nameKey).id });
+          } else {
+            byId.set(key, { ...(byId.get(key) || {}), ...r });
+            if (nameKey) byName.set(nameKey, byId.get(key));
+          }
+        });
         const mergedAll = Array.from(byId.values());
 
         // Compute most loved restaurants
@@ -42,9 +57,9 @@ export default function AdminAnalytics({ allRestaurants }) {
             return { id, name: r?.name || `ID ${id}`, city: r?.city || "", cuisine: r?.cuisine || "", count };
           });
 
-        // City breakdown from merged data
+        // City breakdown from merged data (normalize all city names)
         const cityCount = {};
-        mergedAll.forEach(r => { if (r.city) cityCount[r.city] = (cityCount[r.city] || 0) + 1; });
+        mergedAll.forEach(r => { const c = r.city ? normalizeCity(r.city) : null; if (c) cityCount[c] = (cityCount[c] || 0) + 1; });
         const citySorted = Object.entries(cityCount).sort((a, b) => b[1] - a[1]);
 
         // Cuisine breakdown from merged data
