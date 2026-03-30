@@ -80,8 +80,14 @@ function findDuplicate(allRestaurants, name, lat, lng) {
     // 1. Exact name match → always duplicate
     if (incomingName === existingName) return r;
 
-    // 2. One name contains the other (e.g. "La Tour" vs "La Tour Restaurant")
-    if (incomingName.includes(existingName) || existingName.includes(incomingName)) return r;
+    // 2. One name's WORDS are all found as whole words in the other
+    //    (e.g. "La Tour" vs "La Tour Restaurant" — but NOT "Den" inside "Residences")
+    const existingWords = new Set(existingName.split(/\s+/).filter(w => w.length >= 3));
+    if (existingWords.size > 0 && incomingWords.size > 0) {
+      const allExistingInIncoming = [...existingWords].every(w => incomingWords.has(w));
+      const allIncomingInExisting = [...incomingWords].every(w => existingWords.has(w));
+      if (allExistingInIncoming || allIncomingInExisting) return r;
+    }
 
     // 3. Nearby + at least one significant shared word (3+ chars)
     if (lat && lng && r.lat && r.lng) {
