@@ -1061,6 +1061,7 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                         await syncRestaurant({ ...r, id: savedId });
                         const q = [...bulkQueue]; q[idx].status = "imported"; setBulkQueue(q);
                         showToast(`Imported ${r.name}`);
+                        onRestaurantsChanged?.();
                       }} style={{ ...btnPrimary, width: "100%", fontSize: 12 }}>
                         Import {item.data?.name}
                       </button>

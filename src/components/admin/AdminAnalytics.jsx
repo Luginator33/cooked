@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { C, cardStyle, sectionHeader, StatCard, btnSmall, SearchBar } from "./adminHelpers";
-import { getAnalytics, getActivityLog, getAllUsers } from "../../lib/supabase";
+import { getAnalytics, getActivityLog, getAllUsers, getCommunityRestaurants } from "../../lib/supabase";
 import { getGraphStats, runQuery } from "../../lib/neo4j";
 import { RESTAURANTS } from "../../data/restaurants";
 
@@ -13,15 +13,21 @@ export default function AdminAnalytics({ allRestaurants }) {
   const [drillDown, setDrillDown] = useState(null); // { type, title, data }
   const [graphDetails, setGraphDetails] = useState(null); // top loved, top users, etc.
 
-  // Re-fetch analytics whenever allRestaurants changes (e.g. after bulk import)
-  const restaurantCount = allRestaurants?.length || 0;
+  // Re-fetch analytics from Supabase every time we view the dashboard
+  const [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
     if (section === "dashboard") {
       setLoading(true);
       Promise.all([
         getAnalytics(),
         getAllUsers(10000),
-      ]).then(([data, users]) => {
+        getCommunityRestaurants(),
+      ]).then(([data, users, community]) => {
+        // Merge static restaurants + community restaurants for accurate counts
+        const byId = new Map(RESTAURANTS.map(r => [String(r.id), r]));
+        (community || []).forEach(r => { if (r?.id != null) byId.set(String(r.id), { ...(byId.get(String(r.id)) || {}), ...r }); });
+        const mergedAll = Array.from(byId.values());
+
         // Compute most loved restaurants
         const loveCounts = {};
         users.forEach(u => {
@@ -32,18 +38,18 @@ export default function AdminAnalytics({ allRestaurants }) {
           .sort((a, b) => b[1] - a[1])
           .slice(0, 20)
           .map(([id, count]) => {
-            const r = allRestaurants.find(r => String(r.id) === String(id));
+            const r = mergedAll.find(r => String(r.id) === String(id));
             return { id, name: r?.name || `ID ${id}`, city: r?.city || "", cuisine: r?.cuisine || "", count };
           });
 
-        // City breakdown
+        // City breakdown from merged data
         const cityCount = {};
-        allRestaurants.forEach(r => { if (r.city) cityCount[r.city] = (cityCount[r.city] || 0) + 1; });
+        mergedAll.forEach(r => { if (r.city) cityCount[r.city] = (cityCount[r.city] || 0) + 1; });
         const citySorted = Object.entries(cityCount).sort((a, b) => b[1] - a[1]);
 
-        // Cuisine breakdown
+        // Cuisine breakdown from merged data
         const cuisineCount = {};
-        allRestaurants.forEach(r => { if (r.cuisine) cuisineCount[r.cuisine] = (cuisineCount[r.cuisine] || 0) + 1; });
+        mergedAll.forEach(r => { if (r.cuisine) cuisineCount[r.cuisine] = (cuisineCount[r.cuisine] || 0) + 1; });
         const cuisineSorted = Object.entries(cuisineCount).sort((a, b) => b[1] - a[1]);
 
         // Most active users
@@ -52,7 +58,7 @@ export default function AdminAnalytics({ allRestaurants }) {
           .sort((a, b) => b.loveCount - a.loveCount)
           .slice(0, 20);
 
-        setAnalytics({ ...data, topLoved, citySorted, cuisineSorted, activeUsers, allUsers: users });
+        setAnalytics({ ...data, totalRestaurants: mergedAll.length, topLoved, citySorted, cuisineSorted, activeUsers, allUsers: users });
         setLoading(false);
       });
     }
@@ -74,7 +80,7 @@ export default function AdminAnalytics({ allRestaurants }) {
     if (section === "log") {
       getActivityLog(100).then(setActivityLog);
     }
-  }, [section, restaurantCount]);
+  }, [section]);
 
   const actionLabel = (action) => {
     const map = {
@@ -130,7 +136,7 @@ export default function AdminAnalytics({ allRestaurants }) {
                 <div onClick={() => setDrillDown({ type: "cuisines", title: "Cuisines" })} style={{ flex: 1, cursor: "pointer" }}>
                   <StatCard label="Cuisines" value={analytics.cuisineSorted.length} />
                 </div>
-                <StatCard label="Restaurants" value={allRestaurants.length.toLocaleString()} />
+                <StatCard label="Restaurants" value={(analytics.totalRestaurants || allRestaurants.length).toLocaleString()} />
               </div>
 
               {/* Most loved */}
