@@ -84,6 +84,7 @@ export default function Profile({
   /** Called after a photo is saved to `restaurant_photos` (e.g. admin sync) so Discover can update queue state. */
   onSharedPhotoSaved,
   onOpenIgImport,
+  onRestaurantsChanged,
 }) {
   const { user } = useUser();
   const { signOut } = useClerk();
@@ -1174,7 +1175,7 @@ export default function Profile({
       })()}
 
       {/* Admin Panel */}
-      {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} allRestaurants={allRestaurants} userId={user?.id} />}
+      {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} allRestaurants={allRestaurants} userId={user?.id} onRestaurantsChanged={onRestaurantsChanged} />}
 
       {/* Edit profile modal */}
       {editing && (

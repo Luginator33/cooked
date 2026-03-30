@@ -13,8 +13,11 @@ export default function AdminAnalytics({ allRestaurants }) {
   const [drillDown, setDrillDown] = useState(null); // { type, title, data }
   const [graphDetails, setGraphDetails] = useState(null); // top loved, top users, etc.
 
+  // Re-fetch analytics whenever allRestaurants changes (e.g. after bulk import)
+  const restaurantCount = allRestaurants?.length || 0;
   useEffect(() => {
-    if (section === "dashboard" && !analytics) {
+    if (section === "dashboard") {
+      setLoading(true);
       Promise.all([
         getAnalytics(),
         getAllUsers(10000),
@@ -71,7 +74,7 @@ export default function AdminAnalytics({ allRestaurants }) {
     if (section === "log") {
       getActivityLog(100).then(setActivityLog);
     }
-  }, [section]);
+  }, [section, restaurantCount]);
 
   const actionLabel = (action) => {
     const map = {

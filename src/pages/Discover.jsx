@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -1602,35 +1602,35 @@ export default function Discover({ tasteProfile, initialTab }) {
   // Merge in community restaurants from Supabase so all users can see them.
   // City names are normalized so Google Places variants (e.g. "Ciudad de Mexico")
   // and neighborhood names (e.g. "Silver Lake") map to canonical cities.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const community = await getCommunityRestaurants();
-      if (cancelled || !Array.isArray(community) || community.length === 0) return;
-      setAllRestaurants((prev) => {
-        const byId = new Map(prev.map((r) => [String(r.id), r]));
-        const byName = new Map(prev.map((r) => [r.name?.toLowerCase().trim(), r]));
-        community.forEach((r) => {
-          if (!r || r.id == null) return;
-          // Normalize city before merging
-          if (r.city) r.city = normalizeCity(r.city);
-          const key = String(r.id);
-          const nameKey = r.name?.toLowerCase().trim();
-          if (nameKey) {
-            const existingByName = byName.get(nameKey);
-            if (existingByName && String(existingByName.id) !== key) {
-              byId.delete(String(existingByName.id));
-            }
+  const refreshCommunityRestaurants = useCallback(async () => {
+    const community = await getCommunityRestaurants();
+    if (!Array.isArray(community) || community.length === 0) return;
+    setAllRestaurants((prev) => {
+      const byId = new Map(prev.map((r) => [String(r.id), r]));
+      const byName = new Map(prev.map((r) => [r.name?.toLowerCase().trim(), r]));
+      community.forEach((r) => {
+        if (!r || r.id == null) return;
+        // Normalize city before merging
+        if (r.city) r.city = normalizeCity(r.city);
+        const key = String(r.id);
+        const nameKey = r.name?.toLowerCase().trim();
+        if (nameKey) {
+          const existingByName = byName.get(nameKey);
+          if (existingByName && String(existingByName.id) !== key) {
+            byId.delete(String(existingByName.id));
           }
-          const merged = { ...(byId.get(key) || {}), ...r };
-          byId.set(key, merged);
-          if (nameKey) byName.set(nameKey, merged);
-        });
-        return Array.from(byId.values());
+        }
+        const merged = { ...(byId.get(key) || {}), ...r };
+        byId.set(key, merged);
+        if (nameKey) byName.set(nameKey, merged);
       });
-    })();
-    return () => { cancelled = true; };
+      return Array.from(byId.values());
+    });
   }, []);
+
+  useEffect(() => {
+    refreshCommunityRestaurants();
+  }, [refreshCommunityRestaurants]);
 
   // Apply admin overrides (edits/deletions) from Supabase
   useEffect(() => {
@@ -4396,6 +4396,7 @@ Return a JSON object with exactly these fields:
             clerkImageUrl={user?.imageUrl}
             onViewUser={setViewingUserId}
             allCitiesFromDb={dynamicAllCities}
+            onRestaurantsChanged={refreshCommunityRestaurants}
             onOpenIgImport={() => { setIgError(null); setIgAddedRestaurants([]); setIgDone(false); setIgImporting(false); setPickerMode("ig-import"); setIgModal(true); }}
             onSharedPhotoSaved={(restaurantId, photoUrl) => {
               setPhotoResolved((prev) => [...new Set([...prev, restaurantId])]);
