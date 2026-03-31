@@ -487,30 +487,23 @@ export default function ChatBot({
   const handleResearchSubmit = async () => {
     const raw = researchUrl.trim();
     if (!raw || researchLoading) return;
+
+    // If it's just a URL with no text content, prompt to paste content instead
+    const isUrl = /^https?:\/\//i.test(raw);
+    const isJustUrl = isUrl && raw.split(/\s+/).length <= 1;
+    if (isJustUrl) {
+      setResearchStatus({ type: "error", msg: "Copy the text from that page and paste it here — Instagram/websites block direct fetching" });
+      return;
+    }
+
     setResearchLoading(true);
     setResearchStatus(null);
 
     try {
-      // Determine if it's a URL or raw text
-      const isUrl = /^https?:\/\//i.test(raw);
-      let contentToSummarize = raw;
-
-      // If it's a URL, try to fetch the page content through our proxy
-      if (isUrl) {
-        try {
-          const fetchRes = await fetch("https://cooked-proxy.luga-podesta.workers.dev/fetch-url", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: raw }),
-          });
-          if (fetchRes.ok) {
-            const fetchData = await fetchRes.json();
-            contentToSummarize = fetchData.text || fetchData.content || raw;
-          }
-        } catch {
-          // If proxy fetch fails, we'll just send the URL to Claude
-        }
-      }
+      // Extract the URL if text starts with one (user pasted URL + content)
+      const urlMatch = raw.match(/^(https?:\/\/\S+)\s+/);
+      const sourceUrl = urlMatch ? urlMatch[1] : null;
+      const contentToSummarize = urlMatch ? raw.slice(urlMatch[0].length) : raw;
 
       // Send to Claude to extract restaurant/food knowledge
       const res = await fetch("https://cooked-proxy.luga-podesta.workers.dev/", {
@@ -536,9 +529,9 @@ export default function ChatBot({
 
       // Save to Supabase
       const { error } = await saveResearch({
-        url: isUrl ? raw : null,
+        url: sourceUrl,
         summary,
-        source_type: isUrl ? "link" : "text",
+        source_type: sourceUrl ? "link" : "text",
         created_by: userId,
       });
 
@@ -693,9 +686,9 @@ export default function ChatBot({
         {isAdmin && showResearch && (
           <div style={{ background: "rgba(255,150,50,0.06)", border: "1px solid rgba(255,150,50,0.15)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: C.terracotta, marginBottom: 8, fontFamily: "'Inter', -apple-system, sans-serif" }}>Feed the bot</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input type="text" value={researchUrl} onChange={e => setResearchUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && handleResearchSubmit()} placeholder="Paste a link or text..." style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif", outline: "none" }} />
-              <button type="button" onClick={handleResearchSubmit} disabled={!researchUrl.trim() || researchLoading} style={{ background: C.terracotta, border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: researchUrl.trim() && !researchLoading ? "pointer" : "default", opacity: !researchUrl.trim() || researchLoading ? 0.5 : 1, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap" }}>{researchLoading ? "Learning..." : "Learn"}</button>
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+              <textarea value={researchUrl} onChange={e => setResearchUrl(e.target.value)} placeholder="Paste text from an article, IG caption, blog..." rows={2} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif", outline: "none", resize: "vertical", minHeight: 48, maxHeight: 120 }} />
+              <button type="button" onClick={handleResearchSubmit} disabled={!researchUrl.trim() || researchLoading} style={{ background: C.terracotta, border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: researchUrl.trim() && !researchLoading ? "pointer" : "default", opacity: !researchUrl.trim() || researchLoading ? 0.5 : 1, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap", height: 36 }}>{researchLoading ? "Learning..." : "Learn"}</button>
             </div>
             {researchStatus && <div style={{ marginTop: 6, fontSize: 11, color: researchStatus.type === "success" ? "#4ade80" : "#f87171", fontFamily: "'Inter', -apple-system, sans-serif" }}>{researchStatus.msg}</div>}
             {researchEntries.length > 0 && (
