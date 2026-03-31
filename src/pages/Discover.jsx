@@ -3337,7 +3337,7 @@ Return a JSON object with exactly these fields:
     </SignedOut>}
     {/* <SignedIn> — temporarily bypassed for design work */}
     <div style={{ width:"100%", minHeight:"100vh", fontFamily:"'Inter',sans-serif" }}>
-    <div style={{ maxWidth:390, margin:"0 auto", minHeight:"100vh", paddingBottom:90, position:"relative" }}>
+    <div style={{ maxWidth:480, margin:"0 auto", minHeight:"100vh", paddingBottom:90, position:"relative" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Inter:wght@300;400;500;600;700&display=swap');
         * { box-sizing:border-box; margin:0; padding:0; }
@@ -4356,7 +4356,7 @@ Return a JSON object with exactly these fields:
       {tab === "map" && (
         <>
           <div style={{ position:"fixed", top:0, left:0, right:0, bottom:60, zIndex:1, background:C.bg }} />
-          <div style={{ position:"fixed", top:0, bottom:60, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:390, zIndex:2 }}>
+          <div style={{ position:"fixed", top:0, bottom:60, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, zIndex:2 }}>
             <div ref={mapRef} style={{ width:"100%", height:"100%" }} />
           {selectedRest && (
             <div style={{ position:"absolute", bottom:16, left:16, right:16, background:"rgba(18,18,26,0.4)", backdropFilter:"blur(32px) saturate(1.4)", WebkitBackdropFilter:"blur(32px) saturate(1.4)", borderRadius:20, overflow:"hidden", boxShadow:"0 8px 40px rgba(0,0,0,0.35), inset 0 0.5px 0 rgba(255,255,255,0.08)", border:"0.5px solid rgba(255,255,255,0.1)", cursor:"pointer" }} onClick={() => { setDetailRestaurant(selectedRest); setSelectedRest(null); }}>
