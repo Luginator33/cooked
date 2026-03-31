@@ -4,228 +4,242 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>cooked — App Icon Options</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,700&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,700&family=Cormorant+Garamond:ital,wght@1,700&display=swap');
-  body { background: #1a1a1a; color: #f5f0eb; font-family: -apple-system, sans-serif; padding: 40px 20px; }
+  body { background: #0a0a0f; color: #f5f0eb; font-family: -apple-system, 'Inter', sans-serif; padding: 40px 20px; }
   h1 { font-family: 'Playfair Display', serif; font-style: italic; font-size: 28px; margin-bottom: 8px; }
-  p { color: rgba(245,240,235,0.4); margin-bottom: 40px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 40px; max-width: 1000px; }
+  p { color: rgba(245,240,235,0.35); margin-bottom: 48px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 48px; max-width: 1100px; }
   .option { text-align: center; }
-  .option .icon-wrap { display: inline-block; border-radius: 32px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
-  .option .icon-wrap svg { width: 160px; height: 160px; display: block; }
-  .label { margin-top: 14px; font-size: 14px; font-weight: 600; color: #ff9632; }
-  .sub { font-size: 11px; color: rgba(245,240,235,0.3); margin-top: 4px; line-height: 1.4; }
-  .row { display: flex; gap: 12px; align-items: center; margin-top: 10px; justify-content: center; }
-  .row .med { width: 60px; height: 60px; border-radius: 13px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
-  .row .med svg { width: 60px; height: 60px; display: block; }
-  .row .sm { width: 40px; height: 40px; border-radius: 9px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
-  .row .sm svg { width: 40px; height: 40px; display: block; }
+  .icon-wrap { display: inline-block; border-radius: 36px; overflow: hidden; box-shadow: 0 12px 48px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(255,220,180,0.06); }
+  .icon-wrap svg { width: 180px; height: 180px; display: block; }
+  .label { margin-top: 16px; font-size: 13px; font-weight: 600; color: #ff9632; letter-spacing: 0.02em; }
+  .sub { font-size: 11px; color: rgba(245,240,235,0.25); margin-top: 4px; }
+  .sizes { display: flex; gap: 12px; align-items: flex-end; margin-top: 14px; justify-content: center; }
+  .sz { border-radius: 14px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(255,220,180,0.04); }
+  .sz svg { display: block; }
+  .sz.m { border-radius: 14px; } .sz.m svg { width: 64px; height: 64px; }
+  .sz.s { border-radius: 10px; } .sz.s svg { width: 44px; height: 44px; }
 </style>
 </head>
 <body>
-<h1>App Icon Options — Liquid Glass</h1>
-<p>All options use the glass/glow aesthetic from the app. Shown at icon size + home screen previews.</p>
+<h1>App Icon Options</h1>
+<p>Using the exact brand colors, Playfair Display italic, and glass treatments from the app</p>
 
 <div class="grid">
 
-  <!-- Option A: Glass card with glowing "c" -->
+  <!-- A: Split logo — cook(cream) ed(terra) on dark -->
   <div class="option">
     <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
+    <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <radialGradient id="a-bg1" cx="30%" cy="20%" r="60%"><stop offset="0%" stop-color="#2a1a0e"/><stop offset="100%" stop-color="#0a0a0f"/></radialGradient>
-        <radialGradient id="a-bg2" cx="70%" cy="80%" r="50%"><stop offset="0%" stop-color="#1a0e18" stop-opacity="0.5"/><stop offset="100%" stop-color="transparent"/></radialGradient>
-        <linearGradient id="a-text" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffb040"/><stop offset="40%" stop-color="#ff8830"/><stop offset="70%" stop-color="#e05835"/><stop offset="100%" stop-color="#c44060"/></linearGradient>
-        <linearGradient id="a-glass" x1="0" y1="0" x2="0.5" y2="1"><stop offset="0%" stop-color="rgba(255,220,180,0.12)"/><stop offset="50%" stop-color="rgba(255,180,120,0.04)"/><stop offset="100%" stop-color="rgba(140,100,180,0.06)"/></linearGradient>
-        <filter id="a-glow"><feGaussianBlur stdDeviation="20" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <linearGradient id="a-logo" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#3a1c0e"/><stop offset="15%" stop-color="#7a2e1a"/>
+          <stop offset="35%" stop-color="#d4712a"/><stop offset="50%" stop-color="#ff9632"/>
+          <stop offset="65%" stop-color="#e87040"/><stop offset="80%" stop-color="#8b3018"/>
+          <stop offset="100%" stop-color="#2a0e06"/>
+        </linearGradient>
+        <linearGradient id="a-ed" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e07850"/><stop offset="100%" stop-color="#c4603a"/>
+        </linearGradient>
+        <filter id="a-glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
       </defs>
-      <rect width="512" height="512" rx="102" fill="url(#a-bg1)"/>
-      <rect width="512" height="512" rx="102" fill="url(#a-bg2)"/>
-      <!-- Glass panel -->
-      <rect x="56" y="56" width="400" height="400" rx="60" fill="rgba(255,220,180,0.03)" stroke="url(#a-glass)" stroke-width="1"/>
-      <rect x="56" y="56" width="400" height="200" rx="60" fill="rgba(255,255,255,0.015)"/>
-      <!-- Glow behind letter -->
-      <circle cx="256" cy="250" r="100" fill="#ff8830" opacity="0.08" filter="url(#a-glow)"/>
-      <text x="256" y="310" text-anchor="middle" font-family="Georgia, 'Playfair Display', serif" font-style="italic" font-weight="700" font-size="260" fill="url(#a-text)" filter="url(#a-glow)">c</text>
+      <rect width="512" height="512" rx="102" fill="#0a0a0f"/>
+      <!-- Subtle warm radial -->
+      <circle cx="256" cy="256" r="200" fill="#e07850" opacity="0.03"/>
+      <text x="196" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="url(#a-logo)" filter="url(#a-glow)">cook</text>
+      <text x="382" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="url(#a-ed)" filter="url(#a-glow)">ed</text>
     </svg>
     </div>
-    <div class="label">A — Glass Monogram</div>
-    <div class="sub">Glowing "c" on glass panel</div>
-    <div class="row">
-      <div class="med"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0e0a08"/><rect x="56" y="56" width="400" height="400" rx="60" fill="rgba(255,220,180,0.03)" stroke="rgba(255,220,180,0.1)" stroke-width="1"/><circle cx="256" cy="250" r="80" fill="#ff8830" opacity="0.06"/><text x="256" y="310" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="260" fill="#ff9632">c</text></svg></div>
-      <div class="sm"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0e0a08"/><text x="256" y="310" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="260" fill="#ff9632">c</text></svg></div>
+    <div class="label">A — Brand Logo</div>
+    <div class="sub">Exact logo treatment from the app</div>
+    <div class="sizes">
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><circle cx="256" cy="256" r="200" fill="#e07850" opacity="0.03"/><text x="196" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#d4712a">cook</text><text x="382" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#e07850">ed</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><text x="196" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#d4712a">cook</text><text x="382" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#e07850">ed</text></svg></div>
     </div>
   </div>
 
-  <!-- Option B: Layered glass with full logo -->
+  <!-- B: Glass card with split logo -->
   <div class="option">
     <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
+    <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <radialGradient id="b-orb1" cx="25%" cy="25%" r="50%"><stop offset="0%" stop-color="#e07850" stop-opacity="0.15"/><stop offset="100%" stop-color="transparent"/></radialGradient>
-        <radialGradient id="b-orb2" cx="75%" cy="75%" r="45%"><stop offset="0%" stop-color="#c44060" stop-opacity="0.1"/><stop offset="100%" stop-color="transparent"/></radialGradient>
-        <linearGradient id="b-border" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="rgba(255,220,180,0.2)"/><stop offset="50%" stop-color="rgba(255,140,100,0.05)"/><stop offset="100%" stop-color="rgba(140,100,180,0.08)"/></linearGradient>
-        <linearGradient id="b-text" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffb040"/><stop offset="40%" stop-color="#ff8830"/><stop offset="70%" stop-color="#e05835"/><stop offset="100%" stop-color="#c44060"/></linearGradient>
+        <linearGradient id="b-glass-bg" x1="0" y1="0" x2="0.3" y2="1">
+          <stop offset="0%" stop-color="rgba(255,220,180,0.05)"/><stop offset="30%" stop-color="rgba(255,255,255,0.02)"/>
+          <stop offset="100%" stop-color="rgba(255,255,255,0.01)"/>
+        </linearGradient>
+        <linearGradient id="b-glass-border" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="rgba(255,220,180,0.25)"/><stop offset="25%" stop-color="rgba(255,180,120,0.1)"/>
+          <stop offset="50%" stop-color="rgba(255,140,100,0.05)"/><stop offset="75%" stop-color="rgba(200,120,160,0.04)"/>
+          <stop offset="100%" stop-color="rgba(140,100,180,0.07)"/>
+        </linearGradient>
+        <linearGradient id="b-logo" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#3a1c0e"/><stop offset="15%" stop-color="#7a2e1a"/>
+          <stop offset="35%" stop-color="#d4712a"/><stop offset="50%" stop-color="#ff9632"/>
+          <stop offset="65%" stop-color="#e87040"/><stop offset="80%" stop-color="#8b3018"/>
+          <stop offset="100%" stop-color="#2a0e06"/>
+        </linearGradient>
+        <filter id="b-glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
       </defs>
       <rect width="512" height="512" rx="102" fill="#0a0a0f"/>
-      <rect width="512" height="512" rx="102" fill="url(#b-orb1)"/>
-      <rect width="512" height="512" rx="102" fill="url(#b-orb2)"/>
-      <!-- Top glass shine -->
-      <ellipse cx="200" cy="120" rx="180" ry="80" fill="rgba(255,220,180,0.04)"/>
-      <!-- Glass border -->
-      <rect x="40" y="40" width="432" height="432" rx="80" fill="none" stroke="url(#b-border)" stroke-width="0.75"/>
-      <!-- Inner glow line top -->
-      <line x1="100" y1="41" x2="412" y2="41" stroke="rgba(255,220,180,0.1)" stroke-width="0.5"/>
-      <text x="220" y="290" text-anchor="middle" font-family="Georgia, 'Playfair Display', serif" font-style="italic" font-weight="700" font-size="115" fill="#f5f0eb">cook</text>
-      <text x="400" y="290" text-anchor="middle" font-family="Georgia, 'Playfair Display', serif" font-style="italic" font-weight="700" font-size="115" fill="url(#b-text)">ed</text>
-      <!-- Subtle tagline -->
-      <text x="256" y="370" text-anchor="middle" font-family="-apple-system, 'Inter', sans-serif" font-weight="300" font-size="28" fill="rgba(245,240,235,0.2)" letter-spacing="2">know where to go</text>
+      <!-- Glass card -->
+      <rect x="40" y="120" width="432" height="272" rx="44" fill="url(#b-glass-bg)" stroke="url(#b-glass-border)" stroke-width="0.75"/>
+      <!-- Top inner highlight -->
+      <line x1="90" y1="120.5" x2="422" y2="120.5" stroke="rgba(255,220,180,0.08)" stroke-width="0.5"/>
+      <text x="196" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="url(#b-logo)" filter="url(#b-glow)">cook</text>
+      <text x="382" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#e07850" filter="url(#b-glow)">ed</text>
     </svg>
     </div>
-    <div class="label">B — Glass Logo</div>
-    <div class="sub">Full "cook<span style="color:#e07850">ed</span>" with glass border + orbs</div>
-    <div class="row">
-      <div class="med"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><rect width="512" height="512" rx="102" fill="url(#b-orb1)"/><rect x="40" y="40" width="432" height="432" rx="80" fill="none" stroke="rgba(255,220,180,0.12)" stroke-width="1"/><text x="220" y="290" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="115" fill="#f5f0eb">cook</text><text x="400" y="290" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="115" fill="#e07850">ed</text></svg></div>
-      <div class="sm"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><text x="220" y="290" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="115" fill="#f5f0eb">cook</text><text x="400" y="290" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="115" fill="#e07850">ed</text></svg></div>
+    <div class="label">B — Glass Card Logo</div>
+    <div class="sub">Logo inside glass panel</div>
+    <div class="sizes">
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><rect x="40" y="120" width="432" height="272" rx="44" fill="rgba(255,220,180,0.03)" stroke="rgba(255,220,180,0.1)" stroke-width="1"/><text x="196" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#d4712a">cook</text><text x="382" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#e07850">ed</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><rect x="40" y="120" width="432" height="272" rx="44" fill="rgba(255,220,180,0.03)" stroke="rgba(255,220,180,0.12)" stroke-width="1.5"/><text x="196" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#d4712a">cook</text><text x="382" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#e07850">ed</text></svg></div>
     </div>
   </div>
 
-  <!-- Option C: Glass flame -->
+  <!-- C: "c" monogram with glass circle -->
   <div class="option">
     <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
+    <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <radialGradient id="c-glow" cx="50%" cy="45%" r="40%"><stop offset="0%" stop-color="#ff8830" stop-opacity="0.12"/><stop offset="100%" stop-color="transparent"/></radialGradient>
-        <linearGradient id="c-flame" x1="0.5" y1="1" x2="0.5" y2="0"><stop offset="0%" stop-color="#c44060"/><stop offset="30%" stop-color="#e05835"/><stop offset="60%" stop-color="#ff8830"/><stop offset="100%" stop-color="#ffcc55"/></linearGradient>
-        <linearGradient id="c-glass-border" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="rgba(255,220,180,0.18)"/><stop offset="50%" stop-color="rgba(255,140,100,0.04)"/><stop offset="100%" stop-color="rgba(200,120,160,0.08)"/></linearGradient>
-        <filter id="c-blur"><feGaussianBlur stdDeviation="16" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <linearGradient id="c-logo" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#3a1c0e"/><stop offset="15%" stop-color="#7a2e1a"/>
+          <stop offset="35%" stop-color="#d4712a"/><stop offset="50%" stop-color="#ff9632"/>
+          <stop offset="65%" stop-color="#e87040"/><stop offset="80%" stop-color="#8b3018"/>
+          <stop offset="100%" stop-color="#2a0e06"/>
+        </linearGradient>
+        <linearGradient id="c-ring" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="rgba(255,220,180,0.18)"/><stop offset="50%" stop-color="rgba(255,140,100,0.04)"/>
+          <stop offset="100%" stop-color="rgba(140,100,180,0.05)"/>
+        </linearGradient>
+        <filter id="c-glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
       </defs>
       <rect width="512" height="512" rx="102" fill="#0a0a0f"/>
-      <rect width="512" height="512" rx="102" fill="url(#c-glow)"/>
+      <!-- Warm ambient -->
+      <circle cx="256" cy="240" r="180" fill="#e07850" opacity="0.015"/>
       <!-- Glass circle -->
-      <circle cx="256" cy="230" r="140" fill="rgba(255,220,180,0.025)" stroke="url(#c-glass-border)" stroke-width="0.75"/>
-      <!-- Inner shine -->
-      <ellipse cx="220" cy="150" rx="80" ry="30" fill="rgba(255,255,255,0.03)"/>
-      <!-- Flame -->
-      <path d="M256 110 C256 110 186 185 186 260 C186 298.7 217.3 330 256 330 C294.7 330 326 298.7 326 260 C326 235 313 212 293 192 C297 212 289 232 273 244 C281 212 273 180 245 148 C249 172 237 192 221 208 C221 208 246 145 256 110Z" fill="url(#c-flame)" opacity="0.85" filter="url(#c-blur)"/>
-      <ellipse cx="256" cy="300" rx="22" ry="28" fill="#ffdd66" opacity="0.7"/>
-      <!-- Text below -->
-      <text x="256" y="430" text-anchor="middle" font-family="Georgia, 'Playfair Display', serif" font-style="italic" font-weight="700" font-size="72" fill="rgba(245,240,235,0.6)">cooked</text>
+      <circle cx="256" cy="240" r="155" fill="rgba(255,220,180,0.02)" stroke="url(#c-ring)" stroke-width="0.75"/>
+      <!-- Top highlight on circle -->
+      <ellipse cx="230" cy="120" rx="80" ry="20" fill="rgba(255,255,255,0.015)"/>
+      <text x="256" y="300" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="240" fill="url(#c-logo)" filter="url(#c-glow)">c</text>
+      <!-- Wordmark below -->
+      <text x="256" y="450" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="44" fill="rgba(245,240,235,0.2)">cooked</text>
     </svg>
     </div>
-    <div class="label">C — Glass Flame</div>
-    <div class="sub">Flame in glass circle + logo below</div>
-    <div class="row">
-      <div class="med"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><circle cx="256" cy="230" r="140" fill="rgba(255,220,180,0.025)" stroke="rgba(255,220,180,0.1)" stroke-width="1"/><path d="M256 110 C256 110 186 185 186 260 C186 298.7 217.3 330 256 330 C294.7 330 326 298.7 326 260 C326 235 313 212 293 192 C297 212 289 232 273 244 C281 212 273 180 245 148 C249 172 237 192 221 208 C221 208 246 145 256 110Z" fill="url(#c-flame)" opacity="0.85"/><ellipse cx="256" cy="300" rx="22" ry="28" fill="#ffdd66" opacity="0.7"/><text x="256" y="430" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="72" fill="rgba(245,240,235,0.5)">cooked</text></svg></div>
-      <div class="sm"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><path d="M256 110 C256 110 186 185 186 260 C186 298.7 217.3 330 256 330 C294.7 330 326 298.7 326 260 C326 235 313 212 293 192 C297 212 289 232 273 244 C281 212 273 180 245 148 C249 172 237 192 221 208 C221 208 246 145 256 110Z" fill="url(#c-flame)" opacity="0.85"/><ellipse cx="256" cy="300" rx="22" ry="28" fill="#ffdd66" opacity="0.7"/></svg></div>
+    <div class="label">C — Glass Monogram</div>
+    <div class="sub">"c" in glass circle with wordmark</div>
+    <div class="sizes">
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><circle cx="256" cy="240" r="155" fill="rgba(255,220,180,0.02)" stroke="rgba(255,220,180,0.1)" stroke-width="1"/><text x="256" y="300" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="240" fill="#d4712a">c</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><text x="256" y="300" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="240" fill="#d4712a">c</text></svg></div>
     </div>
   </div>
 
-  <!-- Option D: Stacked glass cards -->
+  <!-- D: Stacked glass cards -->
   <div class="option">
     <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
+    <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <radialGradient id="d-orb" cx="35%" cy="30%" r="55%"><stop offset="0%" stop-color="#e07850" stop-opacity="0.1"/><stop offset="100%" stop-color="transparent"/></radialGradient>
-        <linearGradient id="d-card" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0%" stop-color="rgba(255,220,180,0.08)"/><stop offset="100%" stop-color="rgba(255,255,255,0.01)"/></linearGradient>
-        <linearGradient id="d-border" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="rgba(255,220,180,0.2)"/><stop offset="100%" stop-color="rgba(140,100,180,0.06)"/></linearGradient>
-        <linearGradient id="d-text" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffb040"/><stop offset="100%" stop-color="#e05835"/></linearGradient>
+        <linearGradient id="d-border" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="rgba(255,220,180,0.18)"/><stop offset="50%" stop-color="rgba(255,140,100,0.04)"/>
+          <stop offset="100%" stop-color="rgba(140,100,180,0.05)"/>
+        </linearGradient>
+        <linearGradient id="d-logo" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#3a1c0e"/><stop offset="15%" stop-color="#7a2e1a"/>
+          <stop offset="35%" stop-color="#d4712a"/><stop offset="50%" stop-color="#ff9632"/>
+          <stop offset="65%" stop-color="#e87040"/><stop offset="80%" stop-color="#8b3018"/>
+          <stop offset="100%" stop-color="#2a0e06"/>
+        </linearGradient>
+        <filter id="d-glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
       </defs>
       <rect width="512" height="512" rx="102" fill="#0a0a0f"/>
-      <rect width="512" height="512" rx="102" fill="url(#d-orb)"/>
-      <!-- Back card -->
-      <rect x="120" y="60" width="300" height="380" rx="28" fill="rgba(255,220,180,0.02)" stroke="rgba(255,220,180,0.06)" stroke-width="0.5" transform="rotate(8, 256, 250)"/>
-      <!-- Middle card -->
-      <rect x="100" y="70" width="300" height="380" rx="28" fill="rgba(255,220,180,0.03)" stroke="rgba(255,220,180,0.08)" stroke-width="0.5" transform="rotate(-4, 256, 250)"/>
+      <!-- Back card (rotated right) -->
+      <rect x="96" y="56" width="320" height="400" rx="32" fill="rgba(255,220,180,0.012)" stroke="rgba(255,220,180,0.04)" stroke-width="0.5" transform="rotate(7, 256, 256)"/>
+      <!-- Middle card (rotated left) -->
+      <rect x="86" y="56" width="320" height="400" rx="32" fill="rgba(255,220,180,0.02)" stroke="rgba(255,220,180,0.06)" stroke-width="0.5" transform="rotate(-3, 256, 256)"/>
       <!-- Front card -->
-      <rect x="86" y="80" width="340" height="360" rx="32" fill="url(#d-card)" stroke="url(#d-border)" stroke-width="0.75"/>
-      <!-- Shine on front card -->
-      <ellipse cx="200" cy="130" rx="120" ry="40" fill="rgba(255,255,255,0.025)"/>
-      <!-- Inner glow line -->
-      <line x1="130" y1="81" x2="382" y2="81" stroke="rgba(255,220,180,0.08)" stroke-width="0.5"/>
+      <rect x="76" y="56" width="360" height="400" rx="36" fill="rgba(255,220,180,0.03)" stroke="url(#d-border)" stroke-width="0.75"/>
+      <!-- Top inner highlight -->
+      <line x1="120" y1="56.5" x2="392" y2="56.5" stroke="rgba(255,220,180,0.08)" stroke-width="0.5"/>
       <!-- Logo on card -->
-      <text x="256" y="280" text-anchor="middle" font-family="Georgia, 'Playfair Display', serif" font-style="italic" font-weight="700" font-size="90" fill="url(#d-text)">cooked</text>
-      <!-- Subtitle -->
-      <text x="256" y="340" text-anchor="middle" font-family="-apple-system, 'Inter', sans-serif" font-weight="300" font-size="22" fill="rgba(245,240,235,0.15)" letter-spacing="4">KNOW WHERE TO GO</text>
+      <text x="206" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="100" fill="url(#d-logo)" filter="url(#d-glow)">cook</text>
+      <text x="380" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="100" fill="#e07850" filter="url(#d-glow)">ed</text>
     </svg>
     </div>
-    <div class="label">D — Stacked Cards</div>
-    <div class="sub">Glass card stack — like the swipe cards</div>
-    <div class="row">
-      <div class="med"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><rect x="120" y="60" width="300" height="380" rx="28" fill="rgba(255,220,180,0.02)" stroke="rgba(255,220,180,0.06)" stroke-width="0.5" transform="rotate(8, 256, 250)"/><rect x="100" y="70" width="300" height="380" rx="28" fill="rgba(255,220,180,0.03)" stroke="rgba(255,220,180,0.08)" stroke-width="0.5" transform="rotate(-4, 256, 250)"/><rect x="86" y="80" width="340" height="360" rx="32" fill="rgba(255,220,180,0.04)" stroke="rgba(255,220,180,0.12)" stroke-width="1"/><text x="256" y="280" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="90" fill="#ff9632">cooked</text></svg></div>
-      <div class="sm"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><rect x="86" y="80" width="340" height="360" rx="32" fill="rgba(255,220,180,0.04)" stroke="rgba(255,220,180,0.12)" stroke-width="1.5"/><text x="256" y="280" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="90" fill="#ff9632">cooked</text></svg></div>
+    <div class="label">D — Card Stack</div>
+    <div class="sub">Glass cards fanned like the swipe deck</div>
+    <div class="sizes">
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><rect x="96" y="56" width="320" height="400" rx="32" fill="rgba(255,220,180,0.012)" stroke="rgba(255,220,180,0.05)" stroke-width="0.75" transform="rotate(7, 256, 256)"/><rect x="86" y="56" width="320" height="400" rx="32" fill="rgba(255,220,180,0.02)" stroke="rgba(255,220,180,0.07)" stroke-width="0.75" transform="rotate(-3, 256, 256)"/><rect x="76" y="56" width="360" height="400" rx="36" fill="rgba(255,220,180,0.035)" stroke="rgba(255,220,180,0.12)" stroke-width="1"/><text x="206" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="100" fill="#d4712a">cook</text><text x="380" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="100" fill="#e07850">ed</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><rect x="96" y="56" width="320" height="400" rx="32" fill="rgba(255,220,180,0.015)" stroke="rgba(255,220,180,0.06)" stroke-width="1" transform="rotate(7, 256, 256)"/><rect x="86" y="56" width="320" height="400" rx="32" fill="rgba(255,220,180,0.025)" stroke="rgba(255,220,180,0.08)" stroke-width="1" transform="rotate(-3, 256, 256)"/><rect x="76" y="56" width="360" height="400" rx="36" fill="rgba(255,220,180,0.04)" stroke="rgba(255,220,180,0.14)" stroke-width="1.5"/><text x="206" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="100" fill="#d4712a">cook</text><text x="380" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="100" fill="#e07850">ed</text></svg></div>
     </div>
   </div>
 
-  <!-- Option E: Glowing ring "c" -->
+  <!-- E: Warm gradient "c" -->
   <div class="option">
     <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
+    <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <radialGradient id="e-bg" cx="50%" cy="45%" r="50%"><stop offset="0%" stop-color="#1a120a"/><stop offset="100%" stop-color="#0a0a0f"/></radialGradient>
-        <linearGradient id="e-ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffb040"/><stop offset="25%" stop-color="#ff8830"/><stop offset="50%" stop-color="#e05835"/><stop offset="75%" stop-color="#c44060"/><stop offset="100%" stop-color="#ffb040"/></linearGradient>
-        <linearGradient id="e-text" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffb040"/><stop offset="50%" stop-color="#ff8830"/><stop offset="100%" stop-color="#e05835"/></linearGradient>
-        <filter id="e-glow"><feGaussianBlur stdDeviation="8"/></filter>
-        <filter id="e-glow2"><feGaussianBlur stdDeviation="24" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-      </defs>
-      <rect width="512" height="512" rx="102" fill="url(#e-bg)"/>
-      <!-- Outer glow ring -->
-      <circle cx="256" cy="240" r="145" fill="none" stroke="url(#e-ring)" stroke-width="2" opacity="0.15" filter="url(#e-glow)"/>
-      <!-- Glass ring -->
-      <circle cx="256" cy="240" r="140" fill="rgba(255,220,180,0.015)" stroke="url(#e-ring)" stroke-width="1.5" opacity="0.5"/>
-      <!-- Inner glass shine -->
-      <ellipse cx="220" cy="150" rx="90" ry="40" fill="rgba(255,255,255,0.02)"/>
-      <!-- Letter -->
-      <text x="256" y="300" text-anchor="middle" font-family="Georgia, 'Playfair Display', serif" font-style="italic" font-weight="700" font-size="220" fill="url(#e-text)" filter="url(#e-glow2)">c</text>
-      <!-- Wordmark -->
-      <text x="256" y="440" text-anchor="middle" font-family="Georgia, 'Playfair Display', serif" font-style="italic" font-weight="700" font-size="52" fill="rgba(245,240,235,0.3)">cooked</text>
-    </svg>
-    </div>
-    <div class="label">E — Glow Ring</div>
-    <div class="sub">Glowing "c" inside gradient ring</div>
-    <div class="row">
-      <div class="med"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0e0a08"/><circle cx="256" cy="240" r="140" fill="rgba(255,220,180,0.015)" stroke="rgba(255,180,100,0.2)" stroke-width="2"/><text x="256" y="300" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="220" fill="#ff9632">c</text><text x="256" y="440" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="52" fill="rgba(245,240,235,0.25)">cooked</text></svg></div>
-      <div class="sm"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0e0a08"/><circle cx="256" cy="240" r="140" fill="none" stroke="rgba(255,180,100,0.2)" stroke-width="3"/><text x="256" y="300" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="220" fill="#ff9632">c</text></svg></div>
-    </div>
-  </div>
-
-  <!-- Option F: Warm glass with "ed" accent -->
-  <div class="option">
-    <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
-      <defs>
-        <radialGradient id="f-orb1" cx="20%" cy="20%" r="60%"><stop offset="0%" stop-color="#e07850" stop-opacity="0.08"/><stop offset="100%" stop-color="transparent"/></radialGradient>
-        <radialGradient id="f-orb2" cx="80%" cy="70%" r="50%"><stop offset="0%" stop-color="#c44060" stop-opacity="0.06"/><stop offset="100%" stop-color="transparent"/></radialGradient>
-        <radialGradient id="f-orb3" cx="50%" cy="50%" r="35%"><stop offset="0%" stop-color="#ffb040" stop-opacity="0.04"/><stop offset="100%" stop-color="transparent"/></radialGradient>
-        <linearGradient id="f-accent" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ff9632"/><stop offset="100%" stop-color="#e05835"/></linearGradient>
-        <linearGradient id="f-glass" x1="0" y1="0" x2="0.5" y2="1"><stop offset="0%" stop-color="rgba(255,220,180,0.15)"/><stop offset="50%" stop-color="rgba(255,180,120,0.04)"/><stop offset="100%" stop-color="rgba(200,120,160,0.06)"/></linearGradient>
+        <linearGradient id="e-logo" x1="0.2" y1="0" x2="0.8" y2="1">
+          <stop offset="0%" stop-color="#3a1c0e"/><stop offset="15%" stop-color="#7a2e1a"/>
+          <stop offset="35%" stop-color="#d4712a"/><stop offset="50%" stop-color="#ff9632"/>
+          <stop offset="65%" stop-color="#e87040"/><stop offset="80%" stop-color="#8b3018"/>
+          <stop offset="100%" stop-color="#2a0e06"/>
+        </linearGradient>
+        <filter id="e-shadow"><feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="#ff9632" flood-opacity="0.2"/></filter>
       </defs>
       <rect width="512" height="512" rx="102" fill="#0a0a0f"/>
-      <rect width="512" height="512" rx="102" fill="url(#f-orb1)"/>
-      <rect width="512" height="512" rx="102" fill="url(#f-orb2)"/>
-      <rect width="512" height="512" rx="102" fill="url(#f-orb3)"/>
-      <!-- Glass panel -->
-      <rect x="36" y="150" width="440" height="220" rx="40" fill="rgba(255,220,180,0.025)" stroke="url(#f-glass)" stroke-width="0.75"/>
-      <!-- Inner highlight -->
-      <rect x="36" y="150" width="440" height="110" rx="40" fill="rgba(255,255,255,0.01)"/>
-      <line x1="80" y1="151" x2="432" y2="151" stroke="rgba(255,220,180,0.06)" stroke-width="0.5"/>
-      <!-- cook in cream -->
-      <text x="200" y="290" text-anchor="middle" font-family="Georgia, 'Playfair Display', serif" font-style="italic" font-weight="700" font-size="110" fill="#f5f0eb">cook</text>
-      <!-- ed in gradient -->
-      <text x="370" y="290" text-anchor="middle" font-family="Georgia, 'Playfair Display', serif" font-style="italic" font-weight="700" font-size="110" fill="url(#f-accent)">ed</text>
-      <!-- Subtle dots -->
-      <circle cx="180" cy="420" r="3" fill="rgba(255,150,50,0.3)"/>
-      <circle cx="220" cy="420" r="3" fill="rgba(255,150,50,0.15)"/>
-      <circle cx="256" cy="420" r="3" fill="rgba(255,150,50,0.15)"/>
-      <circle cx="292" cy="420" r="3" fill="rgba(255,150,50,0.15)"/>
-      <circle cx="332" cy="420" r="3" fill="rgba(255,150,50,0.15)"/>
+      <!-- Subtle ambient glow -->
+      <circle cx="256" cy="256" r="160" fill="#ff9632" opacity="0.02"/>
+      <text x="256" y="340" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="320" fill="url(#e-logo)" filter="url(#e-shadow)">c</text>
     </svg>
     </div>
-    <div class="label">F — Glass Panel</div>
-    <div class="sub">"cook<span style="color:#e07850">ed</span>" in floating glass panel + orbs</div>
-    <div class="row">
-      <div class="med"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><rect width="512" height="512" rx="102" fill="url(#f-orb1)"/><rect width="512" height="512" rx="102" fill="url(#f-orb2)"/><rect x="36" y="150" width="440" height="220" rx="40" fill="rgba(255,220,180,0.025)" stroke="rgba(255,220,180,0.1)" stroke-width="1"/><text x="200" y="290" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="110" fill="#f5f0eb">cook</text><text x="370" y="290" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="110" fill="#e07850">ed</text></svg></div>
-      <div class="sm"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><rect x="36" y="150" width="440" height="220" rx="40" fill="rgba(255,220,180,0.03)" stroke="rgba(255,220,180,0.1)" stroke-width="1.5"/><text x="200" y="290" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="110" fill="#f5f0eb">cook</text><text x="370" y="290" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="110" fill="#e07850">ed</text></svg></div>
+    <div class="label">E — Bold Monogram</div>
+    <div class="sub">Large "c" with brand gradient + glow</div>
+    <div class="sizes">
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><circle cx="256" cy="256" r="160" fill="#ff9632" opacity="0.02"/><text x="256" y="340" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="320" fill="#d4712a">c</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><text x="256" y="340" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="320" fill="#d4712a">c</text></svg></div>
+    </div>
+  </div>
+
+  <!-- F: Full glass heavy treatment -->
+  <div class="option">
+    <div class="icon-wrap">
+    <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="f-glass" x1="0" y1="0" x2="0.5" y2="1">
+          <stop offset="0%" stop-color="rgba(255,220,180,0.06)"/><stop offset="30%" stop-color="rgba(255,255,255,0.025)"/>
+          <stop offset="100%" stop-color="rgba(255,255,255,0.012)"/>
+        </linearGradient>
+        <linearGradient id="f-border" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="rgba(255,220,180,0.35)"/><stop offset="20%" stop-color="rgba(255,180,120,0.15)"/>
+          <stop offset="45%" stop-color="rgba(255,140,100,0.06)"/><stop offset="65%" stop-color="rgba(200,100,160,0.05)"/>
+          <stop offset="85%" stop-color="rgba(140,100,200,0.1)"/><stop offset="100%" stop-color="rgba(180,140,220,0.15)"/>
+        </linearGradient>
+        <linearGradient id="f-logo" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#3a1c0e"/><stop offset="15%" stop-color="#7a2e1a"/>
+          <stop offset="35%" stop-color="#d4712a"/><stop offset="50%" stop-color="#ff9632"/>
+          <stop offset="65%" stop-color="#e87040"/><stop offset="80%" stop-color="#8b3018"/>
+          <stop offset="100%" stop-color="#2a0e06"/>
+        </linearGradient>
+        <filter id="f-glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <rect width="512" height="512" rx="102" fill="#0a0a0f"/>
+      <!-- Full glass-heavy panel as background -->
+      <rect x="24" y="24" width="464" height="464" rx="82" fill="url(#f-glass)" stroke="url(#f-border)" stroke-width="1"/>
+      <!-- Top inner glow -->
+      <line x1="70" y1="25" x2="442" y2="25" stroke="rgba(255,220,180,0.1)" stroke-width="0.5"/>
+      <!-- Outer glow -->
+      <rect x="24" y="24" width="464" height="232" rx="82" fill="rgba(255,255,255,0.008)"/>
+      <!-- Logo -->
+      <text x="196" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="url(#f-logo)" filter="url(#f-glow)">cook</text>
+      <text x="382" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#e07850" filter="url(#f-glow)">ed</text>
+    </svg>
+    </div>
+    <div class="label">F — Full Glass</div>
+    <div class="sub">glass-heavy treatment covering entire icon</div>
+    <div class="sizes">
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><rect x="24" y="24" width="464" height="464" rx="82" fill="rgba(255,220,180,0.04)" stroke="rgba(255,220,180,0.15)" stroke-width="1.5"/><text x="196" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#d4712a">cook</text><text x="382" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#e07850">ed</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><rect x="24" y="24" width="464" height="464" rx="82" fill="rgba(255,220,180,0.04)" stroke="rgba(255,220,180,0.18)" stroke-width="2"/><text x="196" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#d4712a">cook</text><text x="382" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="#e07850">ed</text></svg></div>
     </div>
   </div>
 
