@@ -515,25 +515,38 @@ export default function ChatBot({
         setResearchStatus({ type: "info", msg: "Fetching page..." });
         let fetched = false;
 
-        // Try fetching via CORS proxy
-        try {
-          const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(sourceUrl)}`;
-          const fetchRes = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
-          if (fetchRes.ok) {
-            const html = await fetchRes.text();
-            const extracted = extractTextFromHtml(html);
-            if (extracted.length > 100) {
-              contentToSummarize = extracted.slice(0, 12000);
-              if (extraText) contentToSummarize += `\n\nContext: ${extraText}`;
-              fetched = true;
-            }
-          }
-        } catch {}
+        // Strip UTM params for cleaner fetch
+        let cleanUrl = sourceUrl;
+        try { const u = new URL(sourceUrl); ['utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(p => u.searchParams.delete(p)); cleanUrl = u.toString(); } catch {}
 
-        // If proxy failed, try direct fetch
+        // Try multiple CORS proxies in sequence
+        const proxies = [
+          (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+          (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+          (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+        ];
+
+        for (const makeProxy of proxies) {
+          if (fetched) break;
+          try {
+            const proxyUrl = makeProxy(cleanUrl);
+            const fetchRes = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+            if (fetchRes.ok) {
+              const html = await fetchRes.text();
+              const extracted = extractTextFromHtml(html);
+              if (extracted.length > 100) {
+                contentToSummarize = extracted.slice(0, 12000);
+                if (extraText) contentToSummarize += `\n\nContext: ${extraText}`;
+                fetched = true;
+              }
+            }
+          } catch {}
+        }
+
+        // Last resort: direct fetch (works for some sites)
         if (!fetched) {
           try {
-            const fetchRes = await fetch(sourceUrl, { signal: AbortSignal.timeout(6000) });
+            const fetchRes = await fetch(cleanUrl, { signal: AbortSignal.timeout(6000) });
             if (fetchRes.ok) {
               const html = await fetchRes.text();
               const extracted = extractTextFromHtml(html);
