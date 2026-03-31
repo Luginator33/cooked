@@ -2350,13 +2350,13 @@ a.det-info-val:hover { color: #ff9632; }
 
 /* ─── Keyframe Animations ─── */
 @keyframes shuffle-left {
-  0% { opacity: 0; transform: translateX(-30px) translateY(-120px) rotate(-8deg) scale(0.25); }
-  25% { opacity: 1; }
+  0% { opacity: 0; transform: translateX(-20px) translateY(60px) rotate(-4deg) scale(1.6); }
+  20% { opacity: 1; }
   100% { opacity: 1; transform: translateX(0) translateY(0) rotate(var(--end-rotate)) scale(1); box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
 }
 @keyframes shuffle-right {
-  0% { opacity: 0; transform: translateX(30px) translateY(-120px) rotate(8deg) scale(0.25); }
-  25% { opacity: 1; }
+  0% { opacity: 0; transform: translateX(20px) translateY(60px) rotate(4deg) scale(1.6); }
+  20% { opacity: 1; }
   100% { opacity: 1; transform: translateX(0) translateY(0) rotate(var(--end-rotate)) scale(1); box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
 }
 @keyframes spin-glow { to { transform: rotate(360deg); } }
