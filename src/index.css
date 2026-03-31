@@ -2164,13 +2164,14 @@ a.det-info-val:hover { color: #ff9632; }
 /*          HEAT SCREEN                         */
 /* ============================================ */
 .d-heat {
-  padding: 0 0 60px; position: relative; height: 100dvh;
+  padding: 0; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  max-width: 480px; margin: 0 auto;
   display: flex; flex-direction: column; align-items: stretch; overflow: hidden;
 }
 .heat-content {
   display: flex; flex-direction: column; align-items: stretch;
   flex: 1; min-height: 0;
-  padding: 52px 0 0;
+  padding: 48px 0 64px;
 }
 .d-heat .glow-bg1 { width: 400px; height: 400px; top: -80px; left: -180px; }
 
