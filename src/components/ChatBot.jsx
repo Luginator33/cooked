@@ -679,50 +679,31 @@ export default function ChatBot({
   if (inline) {
     return (
       <div id="home-chat-card" className="home-chatbot glass-heavy" style={{ display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 160px)", overflow: "hidden" }}>
-        {!showIdleState && messages.length >= 1 && (
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: 8 }}>
-            {isAdmin && (
-              <button type="button" onClick={() => setShowResearch(v => !v)} style={{ background: showResearch ? "rgba(255,150,50,0.15)" : "none", border: showResearch ? "1px solid rgba(255,150,50,0.3)" : "none", color: showResearch ? C.terracotta : C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif", cursor: "pointer", padding: "4px 8px", borderRadius: 8 }}>🔬 Research</button>
-            )}
+        {/* Admin Research button + Clear — always at top */}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: showResearch ? 0 : (showIdleState ? -4 : 8) }}>
+          {isAdmin && (
+            <button type="button" onClick={() => setShowResearch(v => !v)} style={{ background: showResearch ? "rgba(255,150,50,0.15)" : "none", border: showResearch ? "1px solid rgba(255,150,50,0.3)" : "none", color: showResearch ? C.terracotta : C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif", cursor: "pointer", padding: "4px 8px", borderRadius: 8 }}>🔬 Research</button>
+          )}
+          {!showIdleState && messages.length >= 1 && (
             <button type="button" onClick={() => { clearConversation(); conversationIdRef.current = null; }} style={{ background: "none", border: "none", color: C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif", cursor: "pointer", padding: "4px 8px" }}>× Clear</button>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Admin Research Panel */}
+        {/* Admin Research Panel — single instance */}
         {isAdmin && showResearch && (
           <div style={{ background: "rgba(255,150,50,0.06)", border: "1px solid rgba(255,150,50,0.15)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: C.terracotta, marginBottom: 8, fontFamily: "'Inter', -apple-system, sans-serif" }}>Feed the bot</div>
             <div style={{ display: "flex", gap: 8 }}>
-              <input
-                type="text"
-                value={researchUrl}
-                onChange={e => setResearchUrl(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleResearchSubmit()}
-                placeholder="Paste a link or text..."
-                style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif", outline: "none" }}
-              />
-              <button
-                type="button"
-                onClick={handleResearchSubmit}
-                disabled={!researchUrl.trim() || researchLoading}
-                style={{ background: C.terracotta, border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: researchUrl.trim() && !researchLoading ? "pointer" : "default", opacity: !researchUrl.trim() || researchLoading ? 0.5 : 1, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap" }}
-              >
-                {researchLoading ? "Learning..." : "Learn"}
-              </button>
+              <input type="text" value={researchUrl} onChange={e => setResearchUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && handleResearchSubmit()} placeholder="Paste a link or text..." style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif", outline: "none" }} />
+              <button type="button" onClick={handleResearchSubmit} disabled={!researchUrl.trim() || researchLoading} style={{ background: C.terracotta, border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: researchUrl.trim() && !researchLoading ? "pointer" : "default", opacity: !researchUrl.trim() || researchLoading ? 0.5 : 1, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap" }}>{researchLoading ? "Learning..." : "Learn"}</button>
             </div>
-            {researchStatus && (
-              <div style={{ marginTop: 6, fontSize: 11, color: researchStatus.type === "success" ? "#4ade80" : "#f87171", fontFamily: "'Inter', -apple-system, sans-serif" }}>
-                {researchStatus.msg}
-              </div>
-            )}
+            {researchStatus && <div style={{ marginTop: 6, fontSize: 11, color: researchStatus.type === "success" ? "#4ade80" : "#f87171", fontFamily: "'Inter', -apple-system, sans-serif" }}>{researchStatus.msg}</div>}
             {researchEntries.length > 0 && (
               <div style={{ marginTop: 10, maxHeight: 120, overflowY: "auto" }}>
                 <div style={{ fontSize: 10, color: C.muted, marginBottom: 4, fontFamily: "'Inter', -apple-system, sans-serif" }}>{researchEntries.length} sources learned</div>
                 {researchEntries.slice(0, 8).map(entry => (
                   <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <div style={{ flex: 1, fontSize: 11, color: C.text, opacity: 0.7, fontFamily: "'Inter', -apple-system, sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {entry.url ? new URL(entry.url).hostname.replace("www.", "") : "Text"} — {entry.summary?.slice(0, 60)}...
-                    </div>
+                    <div style={{ flex: 1, fontSize: 11, color: C.text, opacity: 0.7, fontFamily: "'Inter', -apple-system, sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.url ? new URL(entry.url).hostname.replace("www.", "") : "Text"} — {entry.summary?.slice(0, 60)}...</div>
                     <button type="button" onClick={() => handleDeleteResearch(entry.id)} style={{ background: "none", border: "none", color: C.muted, fontSize: 10, cursor: "pointer", padding: "2px 4px", flexShrink: 0 }}>×</button>
                   </div>
                 ))}
@@ -730,34 +711,9 @@ export default function ChatBot({
             )}
           </div>
         )}
+
         {showIdleState && (
           <>
-            {isAdmin && (
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: -4 }}>
-                <button type="button" onClick={() => setShowResearch(v => !v)} style={{ background: showResearch ? "rgba(255,150,50,0.15)" : "none", border: showResearch ? "1px solid rgba(255,150,50,0.3)" : "none", color: showResearch ? C.terracotta : C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif", cursor: "pointer", padding: "4px 8px", borderRadius: 8 }}>🔬 Research</button>
-              </div>
-            )}
-            {isAdmin && showResearch && (
-              <div style={{ background: "rgba(255,150,50,0.06)", border: "1px solid rgba(255,150,50,0.15)", borderRadius: 12, padding: 12, marginBottom: 8 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: C.terracotta, marginBottom: 8, fontFamily: "'Inter', -apple-system, sans-serif" }}>Feed the bot</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input type="text" value={researchUrl} onChange={e => setResearchUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && handleResearchSubmit()} placeholder="Paste a link or text..." style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif", outline: "none" }} />
-                  <button type="button" onClick={handleResearchSubmit} disabled={!researchUrl.trim() || researchLoading} style={{ background: C.terracotta, border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: researchUrl.trim() && !researchLoading ? "pointer" : "default", opacity: !researchUrl.trim() || researchLoading ? 0.5 : 1, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap" }}>{researchLoading ? "Learning..." : "Learn"}</button>
-                </div>
-                {researchStatus && <div style={{ marginTop: 6, fontSize: 11, color: researchStatus.type === "success" ? "#4ade80" : "#f87171", fontFamily: "'Inter', -apple-system, sans-serif" }}>{researchStatus.msg}</div>}
-                {researchEntries.length > 0 && (
-                  <div style={{ marginTop: 10, maxHeight: 120, overflowY: "auto" }}>
-                    <div style={{ fontSize: 10, color: C.muted, marginBottom: 4, fontFamily: "'Inter', -apple-system, sans-serif" }}>{researchEntries.length} sources learned</div>
-                    {researchEntries.slice(0, 8).map(entry => (
-                      <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                        <div style={{ flex: 1, fontSize: 11, color: C.text, opacity: 0.7, fontFamily: "'Inter', -apple-system, sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.url ? new URL(entry.url).hostname.replace("www.", "") : "Text"} — {entry.summary?.slice(0, 60)}...</div>
-                        <button type="button" onClick={() => handleDeleteResearch(entry.id)} style={{ background: "none", border: "none", color: C.muted, fontSize: 10, cursor: "pointer", padding: "2px 4px", flexShrink: 0 }}>×</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
             <h2>Where are you eating tonight?</h2>
             <div className="chat-sub">A vibe, a craving, a neighborhood.</div>
             <div className="home-chips">
