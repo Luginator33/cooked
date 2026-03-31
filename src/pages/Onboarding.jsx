@@ -191,9 +191,23 @@ function CardFanSlide({ onNext, onSignIn }) {
   if (!showPage) {
     return (
       <div className="d-onboarding" style={{ justifyContent: "center", alignItems: "center" }}>
-        <div className="glow-orb glow-amber glow-1" />
-        <div className="glow-orb glow-rose glow-2" />
-        <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 42, background: "linear-gradient(135deg, #d4a050, #e08848, #e07048, #d05860, #b84878)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", opacity: 0.6 }}>cooked</div>
+        <style>{`
+          @keyframes flame-pulse {
+            0%, 100% { filter: drop-shadow(0 0 12px rgba(255,140,50,0.4)) drop-shadow(0 0 30px rgba(255,100,40,0.2)); transform: scale(1); }
+            50% { filter: drop-shadow(0 0 20px rgba(255,140,50,0.6)) drop-shadow(0 0 50px rgba(255,100,40,0.35)); transform: scale(1.05); }
+          }
+        `}</style>
+        <svg width={64} height={77} viewBox="0 0 167 200" style={{ animation: "flame-pulse 2s ease-in-out infinite" }}>
+          <defs>
+            <linearGradient id="splash-flame" x1="0" y1="0" x2="0.3" y2="1">
+              <stop offset="0%" stopColor="#ffcc44" />
+              <stop offset="30%" stopColor="#ffaa30" />
+              <stop offset="60%" stopColor="#f07830" />
+              <stop offset="100%" stopColor="#c44828" />
+            </linearGradient>
+          </defs>
+          <path d={FLAME_PATH} fill="url(#splash-flame)" />
+        </svg>
       </div>
     );
   }
