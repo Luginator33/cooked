@@ -29,10 +29,13 @@ a:hover {
   color: #e07850;
 }
 
+html { overflow-x: hidden; overscroll-behavior-x: none; }
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
   background-image:
     radial-gradient(ellipse at 30% 20%, rgba(224,120,80,0.04) 0%, transparent 50%),
     radial-gradient(ellipse at 70% 60%, rgba(196,64,96,0.03) 0%, transparent 40%),
@@ -78,7 +81,7 @@ button:focus-visible {
 /* ─── Phone frame ─── */
 .phone-frame {
   width: 100%; max-width: 480px; margin: 0 auto; min-height: 100vh;
-  position: relative; overflow-x: hidden;
+  position: relative; overflow-x: hidden; overscroll-behavior-x: none;
 }
 
 /* ─── Screen nav (reference design nav) ─── */
