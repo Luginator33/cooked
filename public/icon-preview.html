@@ -6,17 +6,17 @@
 <title>cooked — App Icon Options</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,700&display=swap" rel="stylesheet">
 <style>
-  body { background: #0a0a0f; color: #f5f0eb; font-family: -apple-system, 'Inter', sans-serif; padding: 40px 20px; }
+  body { background: #0a0a0f; color: #f5f0eb; font-family: -apple-system, sans-serif; padding: 40px 20px; }
   h1 { font-family: 'Playfair Display', serif; font-style: italic; font-size: 28px; margin-bottom: 8px; }
   p { color: rgba(245,240,235,0.35); margin-bottom: 48px; font-size: 14px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 48px; max-width: 1100px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 48px; max-width: 1200px; }
   .option { text-align: center; }
-  .icon-wrap { display: inline-block; border-radius: 36px; overflow: hidden; box-shadow: 0 12px 48px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(255,220,180,0.06); }
+  .icon-wrap { display: inline-block; border-radius: 36px; overflow: hidden; box-shadow: 0 12px 48px rgba(0,0,0,0.6); }
   .icon-wrap svg { width: 180px; height: 180px; display: block; }
-  .label { margin-top: 16px; font-size: 13px; font-weight: 600; color: #ff9632; letter-spacing: 0.02em; }
+  .label { margin-top: 16px; font-size: 13px; font-weight: 600; color: #ff9632; }
   .sub { font-size: 11px; color: rgba(245,240,235,0.25); margin-top: 4px; }
   .sizes { display: flex; gap: 12px; align-items: flex-end; margin-top: 14px; justify-content: center; }
-  .sz { border-radius: 14px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(255,220,180,0.04); }
+  .sz { overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
   .sz svg { display: block; }
   .sz.m { border-radius: 14px; } .sz.m svg { width: 64px; height: 64px; }
   .sz.s { border-radius: 10px; } .sz.s svg { width: 44px; height: 44px; }
@@ -24,186 +24,237 @@
 </head>
 <body>
 <h1>App Icon Options</h1>
-<p>Based on the actual logo — warm gold-to-rose gradient on dark</p>
+<p>Warm dark background with amber glow + gold-to-rose logo gradient</p>
 
-<!-- Shared defs referenced by all icons -->
+<!-- Shared defs -->
 <svg width="0" height="0">
-  <defs>
-    <!-- The actual logo gradient from the splash screen -->
-    <linearGradient id="logo-grad" x1="0" y1="0.3" x2="1" y2="0.7">
-      <stop offset="0%" stop-color="#d4a054"/>
-      <stop offset="20%" stop-color="#e0904a"/>
-      <stop offset="45%" stop-color="#e07850"/>
-      <stop offset="65%" stop-color="#d06048"/>
-      <stop offset="85%" stop-color="#b84a5a"/>
-      <stop offset="100%" stop-color="#a04068"/>
-    </linearGradient>
-    <!-- Warm bg radials -->
-    <radialGradient id="bg-warm" cx="50%" cy="40%" r="60%">
-      <stop offset="0%" stop-color="#1a110a"/><stop offset="100%" stop-color="#0a0a0f"/>
-    </radialGradient>
-    <radialGradient id="bg-warm2" cx="30%" cy="60%" r="50%">
-      <stop offset="0%" stop-color="#1a0e14" stop-opacity="0.4"/><stop offset="100%" stop-color="transparent"/>
-    </radialGradient>
-    <!-- Glass border -->
-    <linearGradient id="glass-border" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="rgba(255,220,180,0.25)"/><stop offset="25%" stop-color="rgba(255,180,120,0.1)"/>
-      <stop offset="50%" stop-color="rgba(255,140,100,0.05)"/><stop offset="75%" stop-color="rgba(200,120,160,0.04)"/>
-      <stop offset="100%" stop-color="rgba(140,100,180,0.07)"/>
-    </linearGradient>
-    <!-- Text glow -->
-    <filter id="txt-glow"><feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#e07850" flood-opacity="0.25"/></filter>
-    <filter id="txt-glow-sm"><feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#e07850" flood-opacity="0.2"/></filter>
-  </defs>
+<defs>
+  <!-- Background: warm dark brown, not pure black -->
+  <radialGradient id="bg1" cx="50%" cy="45%" r="65%">
+    <stop offset="0%" stop-color="#1e140c"/><stop offset="50%" stop-color="#120c08"/><stop offset="100%" stop-color="#0a0806"/>
+  </radialGradient>
+  <!-- Subtle purple-brown in corners -->
+  <radialGradient id="bg2" cx="70%" cy="70%" r="50%">
+    <stop offset="0%" stop-color="#18101a" stop-opacity="0.3"/><stop offset="100%" stop-color="transparent"/>
+  </radialGradient>
+  <!-- Amber glow under text -->
+  <radialGradient id="glow-under" cx="50%" cy="58%" r="30%">
+    <stop offset="0%" stop-color="#e07840" stop-opacity="0.12"/><stop offset="60%" stop-color="#e07840" stop-opacity="0.04"/><stop offset="100%" stop-color="transparent"/>
+  </radialGradient>
+  <!-- The logo gradient: gold → orange → rose/pink -->
+  <linearGradient id="logo" x1="0" y1="0.5" x2="1" y2="0.5">
+    <stop offset="0%" stop-color="#d4a050"/><stop offset="25%" stop-color="#e08848"/>
+    <stop offset="50%" stop-color="#e07048"/><stop offset="75%" stop-color="#d05860"/>
+    <stop offset="100%" stop-color="#b84878"/>
+  </linearGradient>
+  <!-- Text glow: warm orange -->
+  <filter id="glow"><feGaussianBlur in="SourceGraphic" stdDeviation="10" result="b"/><feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0.5 0.3 0 0 0  0 0 0 0 0  0 0 0 0.4 0" result="c"/><feMerge><feMergeNode in="c"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="glow-sm"><feGaussianBlur in="SourceGraphic" stdDeviation="6" result="b"/><feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0.5 0.3 0 0 0  0 0 0 0 0  0 0 0 0.35 0" result="c"/><feMerge><feMergeNode in="c"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <!-- Glass border -->
+  <linearGradient id="glass-b" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="rgba(255,200,150,0.2)"/><stop offset="50%" stop-color="rgba(255,140,100,0.04)"/>
+    <stop offset="100%" stop-color="rgba(180,120,160,0.06)"/>
+  </linearGradient>
+</defs>
 </svg>
 
 <div class="grid">
 
-  <!-- A: Clean logo, dark bg, subtle warmth -->
+  <!-- A: Full "cooked" with glow -->
   <div class="option">
-    <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm)"/>
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm2)"/>
-      <text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="120" fill="url(#logo-grad)" filter="url(#txt-glow)">cooked</text>
-    </svg>
-    </div>
-    <div class="label">A — Clean Logo</div>
-    <div class="sub">Full word, warm background</div>
+    <div class="icon-wrap"><svg viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="102" fill="url(#bg1)"/>
+      <rect width="512" height="512" rx="102" fill="url(#bg2)"/>
+      <rect width="512" height="512" rx="102" fill="url(#glow-under)"/>
+      <text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="118" fill="url(#logo)" filter="url(#glow)">cooked</text>
+    </svg></div>
+    <div class="label">A — Full Logo + Glow</div>
+    <div class="sub">Matches the splash screen exactly</div>
     <div class="sizes">
-      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="120" fill="url(#logo-grad)">cooked</text></svg></div>
-      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="120" fill="url(#logo-grad)">cooked</text></svg></div>
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-under)"/><text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="118" fill="url(#logo)" filter="url(#glow-sm)">cooked</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-under)"/><text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="118" fill="url(#logo)">cooked</text></svg></div>
     </div>
   </div>
 
-  <!-- B: Logo in glass panel -->
+  <!-- B: "c" monogram with glow -->
   <div class="option">
-    <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm)"/>
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm2)"/>
-      <rect x="32" y="140" width="448" height="232" rx="40" fill="rgba(255,220,180,0.025)" stroke="url(#glass-border)" stroke-width="0.75"/>
-      <line x1="80" y1="140.5" x2="432" y2="140.5" stroke="rgba(255,220,180,0.08)" stroke-width="0.5"/>
-      <text x="256" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="112" fill="url(#logo-grad)" filter="url(#txt-glow)">cooked</text>
-    </svg>
-    </div>
-    <div class="label">B — Glass Panel</div>
-    <div class="sub">Logo floating in glass card</div>
+    <div class="icon-wrap"><svg viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="102" fill="url(#bg1)"/>
+      <rect width="512" height="512" rx="102" fill="url(#bg2)"/>
+      <radialGradient id="glow-c" cx="50%" cy="52%" r="35%">
+        <stop offset="0%" stop-color="#e07840" stop-opacity="0.15"/><stop offset="60%" stop-color="#e07840" stop-opacity="0.04"/><stop offset="100%" stop-color="transparent"/>
+      </radialGradient>
+      <rect width="512" height="512" rx="102" fill="url(#glow-c)"/>
+      <text x="256" y="345" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="330" fill="url(#logo)" filter="url(#glow)">c</text>
+    </svg></div>
+    <div class="label">B — "c" with Glow</div>
+    <div class="sub">Bold monogram, warm glow behind</div>
     <div class="sizes">
-      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><rect x="32" y="140" width="448" height="232" rx="40" fill="rgba(255,220,180,0.03)" stroke="rgba(255,220,180,0.1)" stroke-width="1"/><text x="256" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="112" fill="url(#logo-grad)">cooked</text></svg></div>
-      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><rect x="32" y="140" width="448" height="232" rx="40" fill="rgba(255,220,180,0.035)" stroke="rgba(255,220,180,0.12)" stroke-width="1.5"/><text x="256" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="112" fill="url(#logo-grad)">cooked</text></svg></div>
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-c)"/><text x="256" y="345" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="330" fill="url(#logo)" filter="url(#glow-sm)">c</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-c)"/><text x="256" y="345" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="330" fill="url(#logo)">c</text></svg></div>
     </div>
   </div>
 
-  <!-- C: Big "c" monogram -->
+  <!-- C: Logo in glass card -->
   <div class="option">
-    <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm)"/>
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm2)"/>
-      <text x="256" y="350" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="340" fill="url(#logo-grad)" filter="url(#txt-glow)">c</text>
-    </svg>
-    </div>
-    <div class="label">C — Big "c"</div>
-    <div class="sub">Bold monogram, fills the icon</div>
+    <div class="icon-wrap"><svg viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="102" fill="url(#bg1)"/>
+      <rect width="512" height="512" rx="102" fill="url(#bg2)"/>
+      <rect width="512" height="512" rx="102" fill="url(#glow-under)"/>
+      <rect x="36" y="150" width="440" height="212" rx="36" fill="rgba(255,200,150,0.02)" stroke="url(#glass-b)" stroke-width="0.75"/>
+      <line x1="80" y1="150.5" x2="432" y2="150.5" stroke="rgba(255,200,150,0.06)" stroke-width="0.5"/>
+      <text x="256" y="285" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="url(#logo)" filter="url(#glow)">cooked</text>
+    </svg></div>
+    <div class="label">C — Glass Card</div>
+    <div class="sub">Logo in glass panel with glow</div>
     <div class="sizes">
-      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><text x="256" y="350" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="340" fill="url(#logo-grad)">c</text></svg></div>
-      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><text x="256" y="350" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="340" fill="url(#logo-grad)">c</text></svg></div>
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-under)"/><rect x="36" y="150" width="440" height="212" rx="36" fill="rgba(255,200,150,0.025)" stroke="rgba(255,200,150,0.1)" stroke-width="1"/><text x="256" y="285" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="url(#logo)" filter="url(#glow-sm)">cooked</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-under)"/><rect x="36" y="150" width="440" height="212" rx="36" fill="rgba(255,200,150,0.03)" stroke="rgba(255,200,150,0.12)" stroke-width="1.5"/><text x="256" y="285" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="108" fill="url(#logo)">cooked</text></svg></div>
     </div>
   </div>
 
-  <!-- D: "c" in glass ring -->
+  <!-- D: "c" in glass circle -->
   <div class="option">
-    <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm)"/>
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm2)"/>
-      <circle cx="256" cy="256" r="170" fill="rgba(255,220,180,0.015)" stroke="url(#glass-border)" stroke-width="0.75"/>
-      <text x="256" y="320" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="280" fill="url(#logo-grad)" filter="url(#txt-glow)">c</text>
-    </svg>
-    </div>
-    <div class="label">D — Glass Ring</div>
-    <div class="sub">"c" inside glass circle</div>
+    <div class="icon-wrap"><svg viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="102" fill="url(#bg1)"/>
+      <rect width="512" height="512" rx="102" fill="url(#bg2)"/>
+      <rect width="512" height="512" rx="102" fill="url(#glow-c)"/>
+      <circle cx="256" cy="256" r="165" fill="rgba(255,200,150,0.015)" stroke="url(#glass-b)" stroke-width="0.75"/>
+      <text x="256" y="320" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="270" fill="url(#logo)" filter="url(#glow)">c</text>
+    </svg></div>
+    <div class="label">D — Glass Circle</div>
+    <div class="sub">"c" in glass ring with warm glow</div>
     <div class="sizes">
-      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><circle cx="256" cy="256" r="170" fill="rgba(255,220,180,0.02)" stroke="rgba(255,220,180,0.1)" stroke-width="1"/><text x="256" y="320" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="280" fill="url(#logo-grad)">c</text></svg></div>
-      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><circle cx="256" cy="256" r="170" fill="rgba(255,220,180,0.025)" stroke="rgba(255,220,180,0.12)" stroke-width="1.5"/><text x="256" y="320" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="280" fill="url(#logo-grad)">c</text></svg></div>
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-c)"/><circle cx="256" cy="256" r="165" fill="rgba(255,200,150,0.02)" stroke="rgba(255,200,150,0.1)" stroke-width="1"/><text x="256" y="320" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="270" fill="url(#logo)" filter="url(#glow-sm)">c</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-c)"/><circle cx="256" cy="256" r="165" fill="rgba(255,200,150,0.025)" stroke="rgba(255,200,150,0.12)" stroke-width="1.5"/><text x="256" y="320" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="270" fill="url(#logo)">c</text></svg></div>
     </div>
   </div>
 
-  <!-- E: Card stack with logo -->
+  <!-- E: Card stack -->
   <div class="option">
-    <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm)"/>
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm2)"/>
-      <!-- Cards fanned -->
-      <rect x="106" y="56" width="300" height="400" rx="28" fill="rgba(255,220,180,0.01)" stroke="rgba(255,220,180,0.04)" stroke-width="0.5" transform="rotate(6, 256, 256)"/>
-      <rect x="96" y="56" width="300" height="400" rx="28" fill="rgba(255,220,180,0.015)" stroke="rgba(255,220,180,0.05)" stroke-width="0.5" transform="rotate(-3, 256, 256)"/>
-      <rect x="76" y="56" width="360" height="400" rx="32" fill="rgba(255,220,180,0.025)" stroke="url(#glass-border)" stroke-width="0.75"/>
-      <line x1="116" y1="56.5" x2="396" y2="56.5" stroke="rgba(255,220,180,0.06)" stroke-width="0.5"/>
-      <text x="256" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="96" fill="url(#logo-grad)" filter="url(#txt-glow-sm)">cooked</text>
-    </svg>
-    </div>
-    <div class="label">E — Card Stack</div>
-    <div class="sub">Fanned glass cards with logo</div>
+    <div class="icon-wrap"><svg viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="102" fill="url(#bg1)"/>
+      <rect width="512" height="512" rx="102" fill="url(#bg2)"/>
+      <rect width="512" height="512" rx="102" fill="url(#glow-under)"/>
+      <rect x="116" y="56" width="280" height="400" rx="24" fill="rgba(255,200,150,0.008)" stroke="rgba(255,200,150,0.03)" stroke-width="0.5" transform="rotate(6, 256, 256)"/>
+      <rect x="106" y="56" width="280" height="400" rx="24" fill="rgba(255,200,150,0.012)" stroke="rgba(255,200,150,0.04)" stroke-width="0.5" transform="rotate(-3, 256, 256)"/>
+      <rect x="76" y="56" width="360" height="400" rx="28" fill="rgba(255,200,150,0.018)" stroke="url(#glass-b)" stroke-width="0.75"/>
+      <line x1="110" y1="56.5" x2="400" y2="56.5" stroke="rgba(255,200,150,0.05)" stroke-width="0.5"/>
+      <text x="256" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="92" fill="url(#logo)" filter="url(#glow)">cooked</text>
+    </svg></div>
+    <div class="label">E — Swipe Cards</div>
+    <div class="sub">Glass card stack + logo</div>
     <div class="sizes">
-      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><rect x="106" y="56" width="300" height="400" rx="28" fill="rgba(255,220,180,0.012)" stroke="rgba(255,220,180,0.05)" stroke-width="0.75" transform="rotate(6, 256, 256)"/><rect x="96" y="56" width="300" height="400" rx="28" fill="rgba(255,220,180,0.018)" stroke="rgba(255,220,180,0.06)" stroke-width="0.75" transform="rotate(-3, 256, 256)"/><rect x="76" y="56" width="360" height="400" rx="32" fill="rgba(255,220,180,0.03)" stroke="rgba(255,220,180,0.1)" stroke-width="1"/><text x="256" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="96" fill="url(#logo-grad)">cooked</text></svg></div>
-      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><rect x="106" y="56" width="300" height="400" rx="28" fill="rgba(255,220,180,0.015)" stroke="rgba(255,220,180,0.06)" stroke-width="1" transform="rotate(6, 256, 256)"/><rect x="96" y="56" width="300" height="400" rx="28" fill="rgba(255,220,180,0.02)" stroke="rgba(255,220,180,0.07)" stroke-width="1" transform="rotate(-3, 256, 256)"/><rect x="76" y="56" width="360" height="400" rx="32" fill="rgba(255,220,180,0.035)" stroke="rgba(255,220,180,0.12)" stroke-width="1.5"/><text x="256" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="96" fill="url(#logo-grad)">cooked</text></svg></div>
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-under)"/><rect x="116" y="56" width="280" height="400" rx="24" fill="rgba(255,200,150,0.01)" stroke="rgba(255,200,150,0.04)" stroke-width="0.75" transform="rotate(6, 256, 256)"/><rect x="106" y="56" width="280" height="400" rx="24" fill="rgba(255,200,150,0.015)" stroke="rgba(255,200,150,0.05)" stroke-width="0.75" transform="rotate(-3, 256, 256)"/><rect x="76" y="56" width="360" height="400" rx="28" fill="rgba(255,200,150,0.022)" stroke="rgba(255,200,150,0.1)" stroke-width="1"/><text x="256" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="92" fill="url(#logo)" filter="url(#glow-sm)">cooked</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect x="116" y="56" width="280" height="400" rx="24" fill="rgba(255,200,150,0.012)" stroke="rgba(255,200,150,0.05)" stroke-width="1" transform="rotate(6, 256, 256)"/><rect x="106" y="56" width="280" height="400" rx="24" fill="rgba(255,200,150,0.018)" stroke="rgba(255,200,150,0.06)" stroke-width="1" transform="rotate(-3, 256, 256)"/><rect x="76" y="56" width="360" height="400" rx="28" fill="rgba(255,200,150,0.025)" stroke="rgba(255,200,150,0.12)" stroke-width="1.5"/><text x="256" y="290" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="92" fill="url(#logo)">cooked</text></svg></div>
     </div>
   </div>
 
-  <!-- F: Logo with glass full-bleed border -->
+  <!-- I: Flame icon -->
   <div class="option">
-    <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm)"/>
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm2)"/>
-      <!-- Full glass-heavy panel -->
-      <rect x="20" y="20" width="472" height="472" rx="86" fill="rgba(255,220,180,0.02)" stroke="url(#glass-border)" stroke-width="0.75"/>
-      <line x1="60" y1="20.5" x2="452" y2="20.5" stroke="rgba(255,220,180,0.06)" stroke-width="0.5"/>
-      <text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="118" fill="url(#logo-grad)" filter="url(#txt-glow)">cooked</text>
-    </svg>
-    </div>
-    <div class="label">F — Full Glass</div>
-    <div class="sub">glass-heavy border treatment</div>
+    <div class="icon-wrap"><svg viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="102" fill="url(#bg1)"/>
+      <rect width="512" height="512" rx="102" fill="url(#bg2)"/>
+      <radialGradient id="glow-flame" cx="50%" cy="50%" r="35%">
+        <stop offset="0%" stop-color="#e07840" stop-opacity="0.18"/><stop offset="50%" stop-color="#d06050" stop-opacity="0.06"/><stop offset="100%" stop-color="transparent"/>
+      </radialGradient>
+      <rect width="512" height="512" rx="102" fill="url(#glow-flame)"/>
+      <!-- Flame shape -->
+      <linearGradient id="flame-grad" x1="0.5" y1="1" x2="0.5" y2="0">
+        <stop offset="0%" stop-color="#b84878"/><stop offset="25%" stop-color="#d05860"/>
+        <stop offset="50%" stop-color="#e07048"/><stop offset="75%" stop-color="#e08848"/>
+        <stop offset="100%" stop-color="#d4a050"/>
+      </linearGradient>
+      <filter id="flame-glow"><feGaussianBlur in="SourceGraphic" stdDeviation="8" result="b"/><feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0.4 0.2 0 0 0  0 0 0 0 0  0 0 0 0.35 0" result="c"/><feMerge><feMergeNode in="c"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <g filter="url(#flame-glow)">
+        <path d="M256 68C256 68 168 158 168 258C168 306.6 207.4 346 256 346C304.6 346 344 306.6 344 258C344 230 330 202 308 180C312 200 304 220 286 232C294 200 286 168 256 138C260 162 248 180 232 194C232 194 256 128 256 68Z" fill="url(#flame-grad)"/>
+        <ellipse cx="256" cy="310" rx="24" ry="32" fill="#f0c860" opacity="0.7"/>
+      </g>
+      <text x="256" y="440" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="66" fill="url(#logo)" filter="url(#glow-sm)">cooked</text>
+    </svg></div>
+    <div class="label">I — Flame + Logo</div>
+    <div class="sub">Fire icon with logo below</div>
     <div class="sizes">
-      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><rect x="20" y="20" width="472" height="472" rx="86" fill="rgba(255,220,180,0.025)" stroke="rgba(255,220,180,0.12)" stroke-width="1.5"/><text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="118" fill="url(#logo-grad)">cooked</text></svg></div>
-      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><rect x="20" y="20" width="472" height="472" rx="86" fill="rgba(255,220,180,0.03)" stroke="rgba(255,220,180,0.15)" stroke-width="2"/><text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="118" fill="url(#logo-grad)">cooked</text></svg></div>
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-flame)"/><path d="M256 68C256 68 168 158 168 258C168 306.6 207.4 346 256 346C304.6 346 344 306.6 344 258C344 230 330 202 308 180C312 200 304 220 286 232C294 200 286 168 256 138C260 162 248 180 232 194C232 194 256 128 256 68Z" fill="url(#flame-grad)"/><ellipse cx="256" cy="310" rx="24" ry="32" fill="#f0c860" opacity="0.7"/><text x="256" y="440" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="66" fill="url(#logo)">cooked</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><path d="M256 68C256 68 168 158 168 258C168 306.6 207.4 346 256 346C304.6 346 344 306.6 344 258C344 230 330 202 308 180C312 200 304 220 286 232C294 200 286 168 256 138C260 162 248 180 232 194C232 194 256 128 256 68Z" fill="url(#flame-grad)"/><ellipse cx="256" cy="310" rx="24" ry="32" fill="#f0c860" opacity="0.7"/></svg></div>
     </div>
   </div>
 
-  <!-- G: Centered "c" with glass square -->
+  <!-- J: Flame only, no text -->
   <div class="option">
-    <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm)"/>
-      <rect width="512" height="512" rx="102" fill="url(#bg-warm2)"/>
-      <rect x="96" y="96" width="320" height="320" rx="48" fill="rgba(255,220,180,0.02)" stroke="url(#glass-border)" stroke-width="0.75"/>
-      <line x1="140" y1="96.5" x2="372" y2="96.5" stroke="rgba(255,220,180,0.06)" stroke-width="0.5"/>
-      <text x="256" y="310" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="240" fill="url(#logo-grad)" filter="url(#txt-glow)">c</text>
-    </svg>
+    <div class="icon-wrap"><svg viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="102" fill="url(#bg1)"/>
+      <rect width="512" height="512" rx="102" fill="url(#bg2)"/>
+      <radialGradient id="glow-flame2" cx="50%" cy="48%" r="32%">
+        <stop offset="0%" stop-color="#e07840" stop-opacity="0.2"/><stop offset="50%" stop-color="#d06050" stop-opacity="0.06"/><stop offset="100%" stop-color="transparent"/>
+      </radialGradient>
+      <rect width="512" height="512" rx="102" fill="url(#glow-flame2)"/>
+      <g filter="url(#flame-glow)">
+        <path d="M256 56C256 56 148 168 148 296C148 355.6 196.4 404 256 404C315.6 404 364 355.6 364 296C364 260 346 226 318 198C323 224 313 248 290 264C300 224 290 184 252 146C258 176 242 200 222 218C222 218 252 134 256 56Z" fill="url(#flame-grad)"/>
+        <ellipse cx="256" cy="360" rx="30" ry="40" fill="#f0c860" opacity="0.65"/>
+      </g>
+    </svg></div>
+    <div class="label">J — Flame Only</div>
+    <div class="sub">Just the fire, iconic and bold</div>
+    <div class="sizes">
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-flame2)"/><path d="M256 56C256 56 148 168 148 296C148 355.6 196.4 404 256 404C315.6 404 364 355.6 364 296C364 260 346 226 318 198C323 224 313 248 290 264C300 224 290 184 252 146C258 176 242 200 222 218C222 218 252 134 256 56Z" fill="url(#flame-grad)"/><ellipse cx="256" cy="360" rx="30" ry="40" fill="#f0c860" opacity="0.65"/></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><path d="M256 56C256 56 148 168 148 296C148 355.6 196.4 404 256 404C315.6 404 364 355.6 364 296C364 260 346 226 318 198C323 224 313 248 290 264C300 224 290 184 252 146C258 176 242 200 222 218C222 218 252 134 256 56Z" fill="url(#flame-grad)"/><ellipse cx="256" cy="360" rx="30" ry="40" fill="#f0c860" opacity="0.65"/></svg></div>
     </div>
+  </div>
+
+  <!-- F: Full glass border -->
+  <div class="option">
+    <div class="icon-wrap"><svg viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="102" fill="url(#bg1)"/>
+      <rect width="512" height="512" rx="102" fill="url(#bg2)"/>
+      <rect width="512" height="512" rx="102" fill="url(#glow-under)"/>
+      <rect x="18" y="18" width="476" height="476" rx="88" fill="rgba(255,200,150,0.012)" stroke="url(#glass-b)" stroke-width="0.75"/>
+      <line x1="55" y1="18.5" x2="457" y2="18.5" stroke="rgba(255,200,150,0.05)" stroke-width="0.5"/>
+      <text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="116" fill="url(#logo)" filter="url(#glow)">cooked</text>
+    </svg></div>
+    <div class="label">F — Glass Border</div>
+    <div class="sub">Full glass frame around icon</div>
+    <div class="sizes">
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-under)"/><rect x="18" y="18" width="476" height="476" rx="88" fill="rgba(255,200,150,0.015)" stroke="rgba(255,200,150,0.1)" stroke-width="1.5"/><text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="116" fill="url(#logo)" filter="url(#glow-sm)">cooked</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-under)"/><rect x="18" y="18" width="476" height="476" rx="88" fill="rgba(255,200,150,0.018)" stroke="rgba(255,200,150,0.12)" stroke-width="2"/><text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="116" fill="url(#logo)">cooked</text></svg></div>
+    </div>
+  </div>
+
+  <!-- G: "c" in glass square -->
+  <div class="option">
+    <div class="icon-wrap"><svg viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="102" fill="url(#bg1)"/>
+      <rect width="512" height="512" rx="102" fill="url(#bg2)"/>
+      <rect width="512" height="512" rx="102" fill="url(#glow-c)"/>
+      <rect x="96" y="96" width="320" height="320" rx="48" fill="rgba(255,200,150,0.015)" stroke="url(#glass-b)" stroke-width="0.75"/>
+      <line x1="138" y1="96.5" x2="374" y2="96.5" stroke="rgba(255,200,150,0.05)" stroke-width="0.5"/>
+      <text x="256" y="315" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="240" fill="url(#logo)" filter="url(#glow)">c</text>
+    </svg></div>
     <div class="label">G — Glass Square</div>
-    <div class="sub">"c" in rounded glass square</div>
+    <div class="sub">"c" in rounded glass box</div>
     <div class="sizes">
-      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><rect x="96" y="96" width="320" height="320" rx="48" fill="rgba(255,220,180,0.025)" stroke="rgba(255,220,180,0.1)" stroke-width="1"/><text x="256" y="310" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="240" fill="url(#logo-grad)">c</text></svg></div>
-      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0f0b08"/><rect x="96" y="96" width="320" height="320" rx="48" fill="rgba(255,220,180,0.03)" stroke="rgba(255,220,180,0.12)" stroke-width="1.5"/><text x="256" y="310" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="240" fill="url(#logo-grad)">c</text></svg></div>
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-c)"/><rect x="96" y="96" width="320" height="320" rx="48" fill="rgba(255,200,150,0.02)" stroke="rgba(255,200,150,0.1)" stroke-width="1"/><text x="256" y="315" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="240" fill="url(#logo)" filter="url(#glow-sm)">c</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-c)"/><rect x="96" y="96" width="320" height="320" rx="48" fill="rgba(255,200,150,0.025)" stroke="rgba(255,200,150,0.12)" stroke-width="1.5"/><text x="256" y="315" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="240" fill="url(#logo)">c</text></svg></div>
     </div>
   </div>
 
-  <!-- H: Minimal — just the gradient word, no glass -->
+  <!-- H: Logo higher with glow pool -->
   <div class="option">
-    <div class="icon-wrap">
-    <svg viewBox="0 0 512 512">
-      <rect width="512" height="512" rx="102" fill="#0a0a0f"/>
-      <text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="120" fill="url(#logo-grad)" filter="url(#txt-glow)">cooked</text>
-    </svg>
-    </div>
-    <div class="label">H — Pure Minimal</div>
-    <div class="sub">Logo on flat dark, nothing else</div>
+    <div class="icon-wrap"><svg viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="102" fill="url(#bg1)"/>
+      <rect width="512" height="512" rx="102" fill="url(#bg2)"/>
+      <!-- Bigger, lower glow pool -->
+      <radialGradient id="glow-pool" cx="50%" cy="65%" r="35%">
+        <stop offset="0%" stop-color="#e07840" stop-opacity="0.18"/><stop offset="40%" stop-color="#d06050" stop-opacity="0.08"/><stop offset="100%" stop-color="transparent"/>
+      </radialGradient>
+      <rect width="512" height="512" rx="102" fill="url(#glow-pool)"/>
+      <text x="256" y="280" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="118" fill="url(#logo)" filter="url(#glow)">cooked</text>
+    </svg></div>
+    <div class="label">H — Heavy Glow</div>
+    <div class="sub">Stronger warm glow beneath logo</div>
     <div class="sizes">
-      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="120" fill="url(#logo-grad)">cooked</text></svg></div>
-      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="#0a0a0f"/><text x="256" y="295" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="120" fill="url(#logo-grad)">cooked</text></svg></div>
+      <div class="sz m"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-pool)"/><text x="256" y="280" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="118" fill="url(#logo)" filter="url(#glow-sm)">cooked</text></svg></div>
+      <div class="sz s"><svg viewBox="0 0 512 512"><rect width="512" height="512" rx="102" fill="url(#bg1)"/><rect width="512" height="512" rx="102" fill="url(#glow-pool)"/><text x="256" y="280" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-style="italic" font-weight="700" font-size="118" fill="url(#logo)">cooked</text></svg></div>
     </div>
   </div>
 
