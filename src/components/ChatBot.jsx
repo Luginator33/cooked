@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react"
 import { getYoudLoveThis, getRisingRestaurants, getHiddenGems, getTrendingInFollowedCities } from "../lib/neo4j"
+import { saveResearch, getResearchEntries, deleteResearch } from "../lib/supabase"
 
 function safeSetItem(key, value) {
   try {
@@ -417,7 +418,7 @@ const INITIAL_ASSISTANT_MESSAGE = {
 export default function ChatBot({
   onClose, allRestaurants = [], initialInput = "", initialMessages, inline = false,
   userId, lovedRestaurants, watchlist, followedCities, tasteProfile, selectedCity,
-  onOpenDetail,
+  onOpenDetail, isAdmin = false,
 }) {
   const [messages, setMessages] = useState(initialMessages?.length > 0 ? initialMessages : [INITIAL_ASSISTANT_MESSAGE])
   const [input, setInput] = useState("")
@@ -425,6 +426,12 @@ export default function ChatBot({
   const [showSuggestions, setShowSuggestions] = useState(true)
   const conversationIdRef = useRef(null)
   const neo4jCacheRef = useRef(null) // cache Neo4j data for session
+  const researchCacheRef = useRef(null) // cached research entries
+  const [showResearch, setShowResearch] = useState(false)
+  const [researchUrl, setResearchUrl] = useState("")
+  const [researchLoading, setResearchLoading] = useState(false)
+  const [researchStatus, setResearchStatus] = useState(null) // { type: 'success'|'error', msg }
+  const [researchEntries, setResearchEntries] = useState([])
   const [chipQuestions] = useState(() => {
     const arr = [...SAMPLE_QUESTIONS]
     for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
@@ -466,6 +473,98 @@ export default function ChatBot({
       };
     });
   }, [userId]);
+
+  // Prefetch research entries for system prompt
+  useEffect(() => {
+    if (researchCacheRef.current) return;
+    getResearchEntries(50).then(({ data }) => {
+      researchCacheRef.current = data || [];
+      setResearchEntries(data || []);
+    });
+  }, []);
+
+  // Submit research URL/text
+  const handleResearchSubmit = async () => {
+    const raw = researchUrl.trim();
+    if (!raw || researchLoading) return;
+    setResearchLoading(true);
+    setResearchStatus(null);
+
+    try {
+      // Determine if it's a URL or raw text
+      const isUrl = /^https?:\/\//i.test(raw);
+      let contentToSummarize = raw;
+
+      // If it's a URL, try to fetch the page content through our proxy
+      if (isUrl) {
+        try {
+          const fetchRes = await fetch("https://cooked-proxy.luga-podesta.workers.dev/fetch-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: raw }),
+          });
+          if (fetchRes.ok) {
+            const fetchData = await fetchRes.json();
+            contentToSummarize = fetchData.text || fetchData.content || raw;
+          }
+        } catch {
+          // If proxy fetch fails, we'll just send the URL to Claude
+        }
+      }
+
+      // Send to Claude to extract restaurant/food knowledge
+      const res = await fetch("https://cooked-proxy.luga-podesta.workers.dev/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 600,
+          system: `You are a restaurant knowledge extractor. Given content from a blog, article, Instagram post, or website, extract the key restaurant and food insights into a concise knowledge snippet (3-6 sentences max). Focus on: restaurant names, specific dishes, chef names, vibes, neighborhoods, what makes places special, insider tips. Write in a natural, informative tone — like notes a knowledgeable friend would jot down. If the content isn't about food/restaurants/hotels, say "NOT_RELEVANT" and nothing else.`,
+          messages: [{ role: "user", content: contentToSummarize.slice(0, 8000) }],
+        }),
+      });
+
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json();
+      const summary = data.content?.[0]?.text || "";
+
+      if (summary.includes("NOT_RELEVANT")) {
+        setResearchStatus({ type: "error", msg: "Content doesn't seem food-related" });
+        setResearchLoading(false);
+        return;
+      }
+
+      // Save to Supabase
+      const { error } = await saveResearch({
+        url: isUrl ? raw : null,
+        summary,
+        source_type: isUrl ? "link" : "text",
+        created_by: userId,
+      });
+
+      if (error) throw error;
+
+      // Refresh cache
+      const { data: updated } = await getResearchEntries(50);
+      researchCacheRef.current = updated || [];
+      setResearchEntries(updated || []);
+      setResearchUrl("");
+      setResearchStatus({ type: "success", msg: "Learned!" });
+      setTimeout(() => setResearchStatus(null), 2000);
+    } catch (err) {
+      console.error("Research error:", err);
+      setResearchStatus({ type: "error", msg: "Failed to process — try pasting the text directly" });
+    } finally {
+      setResearchLoading(false);
+    }
+  };
+
+  const handleDeleteResearch = async (id) => {
+    await deleteResearch(id);
+    const { data } = await getResearchEntries(50);
+    researchCacheRef.current = data || [];
+    setResearchEntries(data || []);
+  };
 
   const handleRestaurantClick = (name) => {
     const normalized = name.toLowerCase().trim();
@@ -526,8 +625,15 @@ export default function ChatBot({
       const neo4j = neo4jCacheRef.current || {};
       const neo4jContext = buildNeo4jContext(neo4j.recommendations, neo4j.trending, neo4j.rising, neo4j.hiddenGems);
 
+      // Build research context from stored knowledge
+      const research = researchCacheRef.current || [];
+      const researchContext = research.length > 0
+        ? "\n## CURATED KNOWLEDGE (from articles, blogs, and insider sources — weave in naturally)\n" +
+          research.map(r => r.summary).join("\n\n") + "\n"
+        : "";
+
       // Build full system prompt
-      const systemPrompt = buildSystemPrompt(dynamicKB, userContext, neo4jContext);
+      const systemPrompt = buildSystemPrompt(dynamicKB, userContext, neo4jContext + researchContext);
 
       const response = await fetch("https://cooked-proxy.luga-podesta.workers.dev/", {
         method: "POST",
@@ -574,12 +680,84 @@ export default function ChatBot({
     return (
       <div id="home-chat-card" className="home-chatbot glass-heavy" style={{ display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 160px)", overflow: "hidden" }}>
         {!showIdleState && messages.length >= 1 && (
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: 8 }}>
+            {isAdmin && (
+              <button type="button" onClick={() => setShowResearch(v => !v)} style={{ background: showResearch ? "rgba(255,150,50,0.15)" : "none", border: showResearch ? "1px solid rgba(255,150,50,0.3)" : "none", color: showResearch ? C.terracotta : C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif", cursor: "pointer", padding: "4px 8px", borderRadius: 8 }}>🔬 Research</button>
+            )}
             <button type="button" onClick={() => { clearConversation(); conversationIdRef.current = null; }} style={{ background: "none", border: "none", color: C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif", cursor: "pointer", padding: "4px 8px" }}>× Clear</button>
+          </div>
+        )}
+
+        {/* Admin Research Panel */}
+        {isAdmin && showResearch && (
+          <div style={{ background: "rgba(255,150,50,0.06)", border: "1px solid rgba(255,150,50,0.15)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: C.terracotta, marginBottom: 8, fontFamily: "'Inter', -apple-system, sans-serif" }}>Feed the bot</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                type="text"
+                value={researchUrl}
+                onChange={e => setResearchUrl(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleResearchSubmit()}
+                placeholder="Paste a link or text..."
+                style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif", outline: "none" }}
+              />
+              <button
+                type="button"
+                onClick={handleResearchSubmit}
+                disabled={!researchUrl.trim() || researchLoading}
+                style={{ background: C.terracotta, border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: researchUrl.trim() && !researchLoading ? "pointer" : "default", opacity: !researchUrl.trim() || researchLoading ? 0.5 : 1, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap" }}
+              >
+                {researchLoading ? "Learning..." : "Learn"}
+              </button>
+            </div>
+            {researchStatus && (
+              <div style={{ marginTop: 6, fontSize: 11, color: researchStatus.type === "success" ? "#4ade80" : "#f87171", fontFamily: "'Inter', -apple-system, sans-serif" }}>
+                {researchStatus.msg}
+              </div>
+            )}
+            {researchEntries.length > 0 && (
+              <div style={{ marginTop: 10, maxHeight: 120, overflowY: "auto" }}>
+                <div style={{ fontSize: 10, color: C.muted, marginBottom: 4, fontFamily: "'Inter', -apple-system, sans-serif" }}>{researchEntries.length} sources learned</div>
+                {researchEntries.slice(0, 8).map(entry => (
+                  <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <div style={{ flex: 1, fontSize: 11, color: C.text, opacity: 0.7, fontFamily: "'Inter', -apple-system, sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {entry.url ? new URL(entry.url).hostname.replace("www.", "") : "Text"} — {entry.summary?.slice(0, 60)}...
+                    </div>
+                    <button type="button" onClick={() => handleDeleteResearch(entry.id)} style={{ background: "none", border: "none", color: C.muted, fontSize: 10, cursor: "pointer", padding: "2px 4px", flexShrink: 0 }}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {showIdleState && (
           <>
+            {isAdmin && (
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: -4 }}>
+                <button type="button" onClick={() => setShowResearch(v => !v)} style={{ background: showResearch ? "rgba(255,150,50,0.15)" : "none", border: showResearch ? "1px solid rgba(255,150,50,0.3)" : "none", color: showResearch ? C.terracotta : C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif", cursor: "pointer", padding: "4px 8px", borderRadius: 8 }}>🔬 Research</button>
+              </div>
+            )}
+            {isAdmin && showResearch && (
+              <div style={{ background: "rgba(255,150,50,0.06)", border: "1px solid rgba(255,150,50,0.15)", borderRadius: 12, padding: 12, marginBottom: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.terracotta, marginBottom: 8, fontFamily: "'Inter', -apple-system, sans-serif" }}>Feed the bot</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input type="text" value={researchUrl} onChange={e => setResearchUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && handleResearchSubmit()} placeholder="Paste a link or text..." style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif", outline: "none" }} />
+                  <button type="button" onClick={handleResearchSubmit} disabled={!researchUrl.trim() || researchLoading} style={{ background: C.terracotta, border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: researchUrl.trim() && !researchLoading ? "pointer" : "default", opacity: !researchUrl.trim() || researchLoading ? 0.5 : 1, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap" }}>{researchLoading ? "Learning..." : "Learn"}</button>
+                </div>
+                {researchStatus && <div style={{ marginTop: 6, fontSize: 11, color: researchStatus.type === "success" ? "#4ade80" : "#f87171", fontFamily: "'Inter', -apple-system, sans-serif" }}>{researchStatus.msg}</div>}
+                {researchEntries.length > 0 && (
+                  <div style={{ marginTop: 10, maxHeight: 120, overflowY: "auto" }}>
+                    <div style={{ fontSize: 10, color: C.muted, marginBottom: 4, fontFamily: "'Inter', -apple-system, sans-serif" }}>{researchEntries.length} sources learned</div>
+                    {researchEntries.slice(0, 8).map(entry => (
+                      <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                        <div style={{ flex: 1, fontSize: 11, color: C.text, opacity: 0.7, fontFamily: "'Inter', -apple-system, sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.url ? new URL(entry.url).hostname.replace("www.", "") : "Text"} — {entry.summary?.slice(0, 60)}...</div>
+                        <button type="button" onClick={() => handleDeleteResearch(entry.id)} style={{ background: "none", border: "none", color: C.muted, fontSize: 10, cursor: "pointer", padding: "2px 4px", flexShrink: 0 }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <h2>Where are you eating tonight?</h2>
             <div className="chat-sub">A vibe, a craving, a neighborhood.</div>
             <div className="home-chips">

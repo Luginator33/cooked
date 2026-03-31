@@ -813,6 +813,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [showHeatTip, setShowHeatTip] = useState(false);
   const [heatTipFading, setHeatTipFading] = useState(false);
   const [setupGateOpen, setSetupGateOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [setupName, setSetupName] = useState("");
   const [setupUsername, setSetupUsername] = useState("");
   const [setupSaving, setSetupSaving] = useState(false);
@@ -1721,6 +1722,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       if (cancelled) return;
 
       if (remote) {
+        setIsAdmin(remote.is_admin === true);
         const clerkProfileName = user.fullName || user.firstName || "User";
         const clerkProfileUsername = user.username || user.primaryEmailAddress?.emailAddress?.split("@")[0] || "";
         const remoteHeat = remote.heat || {
@@ -3455,7 +3457,7 @@ Return a JSON object with exactly these fields:
           <div className="glow-orb glow-rose glow-bg2" />
 
           {/* Inline chat */}
-          <ChatBot key={homeChatKey} inline allRestaurants={allRestaurants} initialInput={chatInput} initialMessages={restoredMessages} userId={user?.id} lovedRestaurants={lovedRestaurants} watchlist={watchlist} followedCities={followedCities} tasteProfile={chatTasteProfile} selectedCity={city} onOpenDetail={setDetailRestaurant} />
+          <ChatBot key={homeChatKey} inline allRestaurants={allRestaurants} initialInput={chatInput} initialMessages={restoredMessages} userId={user?.id} lovedRestaurants={lovedRestaurants} watchlist={watchlist} followedCities={followedCities} tasteProfile={chatTasteProfile} selectedCity={city} onOpenDetail={setDetailRestaurant} isAdmin={isAdmin} />
 
           {(() => {
             let recentChats = [];

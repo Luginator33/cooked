@@ -486,3 +486,28 @@ export async function getUnreadMessageCount(userId) {
     .eq('read', false);
   return count || 0;
 }
+
+// ── CHATBOT RESEARCH / KNOWLEDGE BASE ─────────────────────
+export async function saveResearch({ url, summary, source_type, created_by }) {
+  const { data, error } = await supabase.from('chatbot_research').insert({
+    url: url || null,
+    summary,
+    source_type: source_type || 'link',
+    created_by,
+  }).select().single();
+  return { data, error };
+}
+
+export async function getResearchEntries(limit = 50) {
+  const { data, error } = await supabase
+    .from('chatbot_research')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return { data: data || [], error };
+}
+
+export async function deleteResearch(id) {
+  const { error } = await supabase.from('chatbot_research').delete().eq('id', id);
+  return { error };
+}
