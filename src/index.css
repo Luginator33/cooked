@@ -2164,7 +2164,7 @@ a.det-info-val:hover { color: #ff9632; }
 /*          HEAT SCREEN                         */
 /* ============================================ */
 .d-heat {
-  padding: 0; position: relative; height: 100dvh;
+  padding: 0 0 80px; position: relative; height: 100dvh;
   display: flex; flex-direction: column; align-items: stretch; overflow: hidden;
 }
 .heat-content {
