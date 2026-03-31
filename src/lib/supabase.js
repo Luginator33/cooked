@@ -162,14 +162,22 @@ export async function addCommunityRestaurant(restaurantObject) {
 
 // Fetch all community-added restaurants.
 export async function getCommunityRestaurants() {
-  const { data, error } = await supabase
-    .from('community_restaurants')
-    .select('*')
-  if (error) {
-    console.error(error)
-    return []
+  // Supabase defaults to 1000 rows max — paginate to fetch all
+  let all = [];
+  let from = 0;
+  const pageSize = 1000;
+  while (true) {
+    const { data, error } = await supabase
+      .from('community_restaurants')
+      .select('*')
+      .range(from, from + pageSize - 1);
+    if (error) { console.error(error); break; }
+    if (!data || data.length === 0) break;
+    all = all.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
   }
-  return data || []
+  return all;
 }
 
 // Follow a user
