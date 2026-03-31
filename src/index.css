@@ -283,10 +283,10 @@ button:focus-visible {
 .d-onboarding .hero-card img { width: 100%; height: 100%; object-fit: cover; }
 
 .d-onboarding .hero-card.from-left {
-  animation: shuffle-left 0.7s cubic-bezier(0.22, 0.68, 0.35, 1.0) forwards;
+  animation: shuffle-left 1.1s cubic-bezier(0.0, 0.0, 0.15, 1.0) forwards;
 }
 .d-onboarding .hero-card.from-right {
-  animation: shuffle-right 0.7s cubic-bezier(0.22, 0.68, 0.35, 1.0) forwards;
+  animation: shuffle-right 1.1s cubic-bezier(0.0, 0.0, 0.15, 1.0) forwards;
 }
 
 /* 23 cards — outside-in stacking, 100ms beat per card */
@@ -348,8 +348,8 @@ button:focus-visible {
   -webkit-mask-composite: xor; mask-composite: exclude;
 }
 .ob-hero-card img { width: 100%; height: 100%; object-fit: cover; }
-.ob-hero-card.from-left { animation: shuffle-left 0.7s cubic-bezier(0.22, 0.68, 0.35, 1.0) forwards; }
-.ob-hero-card.from-right { animation: shuffle-right 0.7s cubic-bezier(0.22, 0.68, 0.35, 1.0) forwards; }
+.ob-hero-card.from-left { animation: shuffle-left 1.1s cubic-bezier(0.0, 0.0, 0.15, 1.0) forwards; }
+.ob-hero-card.from-right { animation: shuffle-right 1.1s cubic-bezier(0.0, 0.0, 0.15, 1.0) forwards; }
 
 /* 23 cards + 1 hero — outside-in stacking, 100ms beat per card */
 .ob-hero-card:nth-child(2)  { z-index: 1;  animation-delay: 0.00s; --end-rotate: -54deg; }
@@ -2348,16 +2348,14 @@ a.det-info-val:hover { color: #ff9632; }
 
 /* ─── Keyframe Animations ─── */
 @keyframes shuffle-left {
-  0%   { opacity: 0; transform: translateX(180px) translateY(-40px) rotate(15deg) scale(1.1); }
-  15%  { opacity: 1; }
-  50%  { transform: translateX(20px) translateY(10px) rotate(calc(var(--end-rotate) + 4deg)) scale(1.02); }
-  100% { opacity: 1; transform: translateX(0) translateY(0) rotate(var(--end-rotate)) scale(1); box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
+  0%   { opacity: 0; transform: translateX(120px) translateY(80px) rotate(-8deg) scale(2.8); filter: blur(2px); }
+  20%  { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; filter: blur(0); transform: translateX(0) translateY(0) rotate(var(--end-rotate)) scale(1); box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
 }
 @keyframes shuffle-right {
-  0%   { opacity: 0; transform: translateX(-180px) translateY(-40px) rotate(-15deg) scale(1.1); }
-  15%  { opacity: 1; }
-  50%  { transform: translateX(-20px) translateY(10px) rotate(calc(var(--end-rotate) - 4deg)) scale(1.02); }
-  100% { opacity: 1; transform: translateX(0) translateY(0) rotate(var(--end-rotate)) scale(1); box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
+  0%   { opacity: 0; transform: translateX(-120px) translateY(80px) rotate(8deg) scale(2.8); filter: blur(2px); }
+  20%  { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; filter: blur(0); transform: translateX(0) translateY(0) rotate(var(--end-rotate)) scale(1); box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
 }
 @keyframes spin-glow { to { transform: rotate(360deg); } }
 @keyframes zoneIn { to { opacity: 1; transform: scale(1); } }
