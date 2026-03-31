@@ -234,8 +234,8 @@ button:focus-visible {
 .d-onboarding {
   min-height: 100vh; display: flex; flex-direction: column;
   justify-content: center; align-items: center;
-  padding: 60px 28px 100px; padding-top: calc(60px + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+  padding: 60px 28px 100px; padding-top: max(80px, calc(60px + env(safe-area-inset-top, 54px)));
+  padding-bottom: calc(100px + env(safe-area-inset-bottom, 34px));
   position: relative; overflow: hidden;
   max-width: 480px; margin: 0 auto;
 }
@@ -1640,7 +1640,7 @@ a.det-info-val:hover { color: #ff9632; }
 
 /* Settings gear — top right */
 .d-profile-hero .settings-btn {
-  position: absolute; top: calc(48px + env(safe-area-inset-top, 0px)); right: 16px; z-index: 5;
+  position: absolute; top: max(54px, calc(12px + env(safe-area-inset-top, 54px))); right: 16px; z-index: 5;
   width: 36px; height: 36px; border-radius: 50%;
   background: rgba(10,10,15,0.3);
   backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
@@ -1945,7 +1945,7 @@ a.det-info-val:hover { color: #ff9632; }
 .d-home .glow-bg2 { width: 300px; height: 300px; bottom: 400px; left: -150px; opacity: 0.15; }
 
 .d-home-header {
-  padding: 12px 16px; padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  padding: 12px 16px; padding-top: max(54px, calc(12px + env(safe-area-inset-top, 54px)));
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   max-width: 480px; margin: 0 auto;
   display: flex; justify-content: space-between; align-items: center;
@@ -2179,13 +2179,13 @@ a.det-info-val:hover { color: #ff9632; }
   display: flex; flex-direction: column; align-items: stretch;
   flex: 1; min-height: 0;
   padding: 48px 0 64px;
-  padding-top: calc(48px + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  padding-top: max(90px, calc(48px + env(safe-area-inset-top, 54px)));
+  padding-bottom: calc(64px + env(safe-area-inset-bottom, 34px));
 }
 .d-heat .glow-bg1 { width: 400px; height: 400px; top: -80px; left: -180px; }
 
 .d-heat-header {
-  padding: 12px 16px; padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  padding: 12px 16px; padding-top: max(54px, calc(12px + env(safe-area-inset-top, 54px)));
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   max-width: 480px; margin: 0 auto;
   display: flex; justify-content: space-between; align-items: center;
