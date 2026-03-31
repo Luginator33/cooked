@@ -38,30 +38,30 @@ function FlameIcon({ size = 14, filled = true, color = "#ff9632" }) {
 // ─── Data ───
 
 const HERO_PHOTOS = [
-  "onboarding-photos/1saddles-june19issue-june19-jacs.webp",
-  "onboarding-photos/Liza-Beyrouth-restaurant-beirut-lebanon-conde-nast-traveller-05jan18-Marco-Pinarelli_1.webp",
-  "onboarding-photos/2024-10-24.webp",
-  "onboarding-photos/25178655.jpg",
-  "onboarding-photos/2flavour.webp",
-  "onboarding-photos/2017_06_13_n_naka_047.webp",
-  "onboarding-photos/51951496.jpg",
-  "onboarding-photos/El-Portalon-restaurant-dalt-vila-Ibiza-spain-conde-nast-traveller-05jan18-pr.webp",
-  "onboarding-photos/ULU-CLIFF-HOUSE-uluwatu-bali-conde-nast-traveller-05jan18-thomas-antcliff.webp",
-  "onboarding-photos/Au Cheval Interior_Hi Res.webp",
-  "onboarding-photos/Chefs-prepare-each-round-of-bites-while-you-watch.-Photo-courtesy-of-Sushi-by-Scratch-Restaurants.jpg",
-  "onboarding-photos/divebar-hero-dark.jpg",
-  "onboarding-photos/el-moro-restaurant-colonia-cuauhtemoc-mexico-city-mexico-conde-nast-traveller-05jan18-moritz-bernoully.webp",
-  "onboarding-photos/Oct-2021-Page-125.webp",
-  "onboarding-photos/Leos-Oyster-bar-san-francisco-conde-nast-traveller-05jan18-pr.webp",
-  "onboarding-photos/2klein.webp",
-  "onboarding-photos/Rosetta-MexicoCity-Mexico-03.jpg",
-  "onboarding-photos/TAL-cocina-del-mar-RSTRNTVIEWS0723-f1e693ec25b44bdd96674d33320e0647.webp",
-  "onboarding-photos/TAL-vertigo-RSTRNTVIEWS0723-3617e737079640a59f1e4e2cd7f268ee.webp",
-  "onboarding-photos/2table-to-book-may-2021-issue-chris-schalkx.webp",
-  "onboarding-photos/10 © Oliver Pilcher_Lighting by Adam Klimaszewski.webp",
-  "onboarding-photos/soho-farmhouse-wonderflaw-places-3-1024x684.jpg",
-  "onboarding-photos/Screenshot 2026-03-28 at 12.50.20 PM.png",
-  "onboarding-photos/taqueria-cover.webp",
+  "onboarding-photos/thumbs/1saddles-june19issue-june19-jacs.jpg",
+  "onboarding-photos/thumbs/Liza-Beyrouth-restaurant-beirut-lebanon-conde-nast-traveller-05jan18-Marco-Pinarelli_1.jpg",
+  "onboarding-photos/thumbs/2024-10-24.jpg",
+  "onboarding-photos/thumbs/25178655.jpg",
+  "onboarding-photos/thumbs/2flavour.jpg",
+  "onboarding-photos/thumbs/2017_06_13_n_naka_047.jpg",
+  "onboarding-photos/thumbs/51951496.jpg",
+  "onboarding-photos/thumbs/El-Portalon-restaurant-dalt-vila-Ibiza-spain-conde-nast-traveller-05jan18-pr.jpg",
+  "onboarding-photos/thumbs/ULU-CLIFF-HOUSE-uluwatu-bali-conde-nast-traveller-05jan18-thomas-antcliff.jpg",
+  "onboarding-photos/thumbs/Au Cheval Interior_Hi Res.jpg",
+  "onboarding-photos/thumbs/Chefs-prepare-each-round-of-bites-while-you-watch.-Photo-courtesy-of-Sushi-by-Scratch-Restaurants.jpg",
+  "onboarding-photos/thumbs/divebar-hero-dark.jpg",
+  "onboarding-photos/thumbs/el-moro-restaurant-colonia-cuauhtemoc-mexico-city-mexico-conde-nast-traveller-05jan18-moritz-bernoully.jpg",
+  "onboarding-photos/thumbs/Oct-2021-Page-125.jpg",
+  "onboarding-photos/thumbs/Leos-Oyster-bar-san-francisco-conde-nast-traveller-05jan18-pr.jpg",
+  "onboarding-photos/thumbs/2klein.jpg",
+  "onboarding-photos/thumbs/Rosetta-MexicoCity-Mexico-03.jpg",
+  "onboarding-photos/thumbs/TAL-cocina-del-mar-RSTRNTVIEWS0723-f1e693ec25b44bdd96674d33320e0647.jpg",
+  "onboarding-photos/thumbs/TAL-vertigo-RSTRNTVIEWS0723-3617e737079640a59f1e4e2cd7f268ee.jpg",
+  "onboarding-photos/thumbs/2table-to-book-may-2021-issue-chris-schalkx.jpg",
+  "onboarding-photos/thumbs/10 © Oliver Pilcher_Lighting by Adam Klimaszewski.jpg",
+  "onboarding-photos/thumbs/soho-farmhouse-wonderflaw-places-3-1024x684.jpg",
+  "onboarding-photos/thumbs/Screenshot 2026-03-28 at 12.50.20 PM.jpg",
+  "onboarding-photos/thumbs/taqueria-cover.jpg",
 ];
 
 const HOME_CITIES = [
@@ -166,6 +166,23 @@ function ProgressDots({ step, total = 9 }) {
 // ─── Slide 0: Card Fan ───
 
 function CardFanSlide({ onNext, onSignIn }) {
+  const [photosReady, setPhotosReady] = useState(false);
+  useEffect(() => {
+    let loaded = 0;
+    const total = HERO_PHOTOS.length;
+    HERO_PHOTOS.forEach(src => {
+      const img = new Image();
+      img.onload = img.onerror = () => {
+        loaded++;
+        if (loaded >= total) setPhotosReady(true);
+      };
+      img.src = src;
+    });
+    // Fallback — show after 3s even if some haven't loaded
+    const t = setTimeout(() => setPhotosReady(true), 3000);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <div className="d-onboarding">
       <div className="glow-orb glow-amber glow-1" />
@@ -175,13 +192,13 @@ function CardFanSlide({ onNext, onSignIn }) {
       <div className="ob-hero-cards">
         {/* First child = glow div */}
         <div className="ob-hero-card" />
-        {/* 24 photo cards */}
-        {HERO_PHOTOS.map((src, i) => (
+        {/* 24 photo cards — only animate once all preloaded */}
+        {photosReady && HERO_PHOTOS.map((src, i) => (
           <div
             key={i}
             className={`ob-hero-card ${i % 2 === 0 ? "from-left" : "from-right"}`}
           >
-            <img src={src} alt="" />
+            <img src={src} alt="" loading="eager" />
           </div>
         ))}
       </div>
