@@ -4232,7 +4232,7 @@ Return a JSON object with exactly these fields:
             <div className="heat-content">
               {/* Empty state */}
               {heatDeck.length === 0 && (
-                <div style={{ height:480, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16, color:"#f5f0eb", margin:"0 20px" }}>
+                <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16, color:"#f5f0eb", margin:"0 20px" }}>
                   <div style={{ fontSize:48 }}>🎉</div>
                   <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:24, fontStyle:"italic" }}>You've been through it all</div>
                   <div style={{ fontFamily:"'Inter', sans-serif", fontSize:14, color:"rgba(245,240,235,0.3)" }}>
@@ -4244,7 +4244,7 @@ Return a JSON object with exactly these fields:
 
               {/* Card stack */}
               {card && (
-                <div style={{ position:"relative", height:480, margin:"0 20px" }}>
+                <div style={{ position:"relative", flex:1, minHeight:0, margin:"0 20px" }}>
                   {/* Next card — static, full size, sits behind ready to be revealed */}
                   {nextCard && (
                     <div
