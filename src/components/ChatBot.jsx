@@ -507,29 +507,30 @@ export default function ChatBot({
       // Determine if input contains a URL
       const urlMatch = raw.match(/(https?:\/\/\S+)/);
       const sourceUrl = urlMatch ? urlMatch[1] : null;
-      const isJustUrl = sourceUrl && raw.replace(sourceUrl, '').trim().length < 10;
+      const extraText = sourceUrl ? raw.replace(sourceUrl, '').trim() : '';
       let contentToSummarize = raw;
 
-      // If it's mostly just a URL, try to fetch the page content
-      if (isJustUrl && sourceUrl) {
+      // If a URL is present, always try to fetch the page content
+      if (sourceUrl) {
         setResearchStatus({ type: "info", msg: "Fetching page..." });
         let fetched = false;
 
         // Try fetching via CORS proxy
         try {
           const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(sourceUrl)}`;
-          const fetchRes = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+          const fetchRes = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
           if (fetchRes.ok) {
             const html = await fetchRes.text();
             const extracted = extractTextFromHtml(html);
             if (extracted.length > 100) {
               contentToSummarize = extracted.slice(0, 12000);
+              if (extraText) contentToSummarize += `\n\nContext: ${extraText}`;
               fetched = true;
             }
           }
         } catch {}
 
-        // If proxy failed, try direct fetch (works for some sites)
+        // If proxy failed, try direct fetch
         if (!fetched) {
           try {
             const fetchRes = await fetch(sourceUrl, { signal: AbortSignal.timeout(6000) });
@@ -538,23 +539,21 @@ export default function ChatBot({
               const extracted = extractTextFromHtml(html);
               if (extracted.length > 100) {
                 contentToSummarize = extracted.slice(0, 12000);
+                if (extraText) contentToSummarize += `\n\nContext: ${extraText}`;
                 fetched = true;
               }
             }
           } catch {}
         }
 
-        // If we still couldn't get content, ask user to paste text
-        if (!fetched) {
+        // If fetch failed but user provided extra text, use that
+        if (!fetched && extraText.length > 20) {
+          contentToSummarize = extraText;
+        } else if (!fetched) {
           setResearchStatus({ type: "error", msg: "Couldn't fetch that page — paste the text/caption directly instead" });
           setResearchLoading(false);
           return;
         }
-      }
-
-      // Non-URL text: use whatever was pasted (minus URL if present)
-      if (!isJustUrl && sourceUrl) {
-        contentToSummarize = raw.replace(sourceUrl, '').trim();
       }
 
       setResearchStatus({ type: "info", msg: "Extracting knowledge..." });
