@@ -57,11 +57,11 @@ const HERO_PHOTOS = [
   "onboarding-photos/Rosetta-MexicoCity-Mexico-03.jpg",
   "onboarding-photos/TAL-cocina-del-mar-RSTRNTVIEWS0723-f1e693ec25b44bdd96674d33320e0647.webp",
   "onboarding-photos/TAL-vertigo-RSTRNTVIEWS0723-3617e737079640a59f1e4e2cd7f268ee.webp",
-  "onboarding-photos/taqueria-cover.webp",
+  "onboarding-photos/2table-to-book-may-2021-issue-chris-schalkx.webp",
   "onboarding-photos/10 © Oliver Pilcher_Lighting by Adam Klimaszewski.webp",
   "onboarding-photos/soho-farmhouse-wonderflaw-places-3-1024x684.jpg",
   "onboarding-photos/Screenshot 2026-03-28 at 12.50.20 PM.png",
-  "onboarding-photos/2table-to-book-may-2021-issue-chris-schalkx.webp",
+  "onboarding-photos/taqueria-cover.webp",
 ];
 
 const HOME_CITIES = [
