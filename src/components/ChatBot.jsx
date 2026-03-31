@@ -484,26 +484,80 @@ export default function ChatBot({
   }, []);
 
   // Submit research URL/text
+  // Helper: strip HTML tags and extract readable text
+  const extractTextFromHtml = (html) => {
+    // Remove script/style tags and their content
+    let text = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '');
+    // Remove all HTML tags
+    text = text.replace(/<[^>]+>/g, ' ');
+    // Decode common HTML entities
+    text = text.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ');
+    // Collapse whitespace
+    text = text.replace(/\s+/g, ' ').trim();
+    return text;
+  };
+
   const handleResearchSubmit = async () => {
     const raw = researchUrl.trim();
     if (!raw || researchLoading) return;
-
-    // If it's just a URL with no text content, prompt to paste content instead
-    const isUrl = /^https?:\/\//i.test(raw);
-    const isJustUrl = isUrl && raw.split(/\s+/).length <= 1;
-    if (isJustUrl) {
-      setResearchStatus({ type: "error", msg: "Copy the text from that page and paste it here — Instagram/websites block direct fetching" });
-      return;
-    }
-
     setResearchLoading(true);
     setResearchStatus(null);
 
     try {
-      // Extract the URL if text starts with one (user pasted URL + content)
-      const urlMatch = raw.match(/^(https?:\/\/\S+)\s+/);
+      // Determine if input contains a URL
+      const urlMatch = raw.match(/(https?:\/\/\S+)/);
       const sourceUrl = urlMatch ? urlMatch[1] : null;
-      const contentToSummarize = urlMatch ? raw.slice(urlMatch[0].length) : raw;
+      const isJustUrl = sourceUrl && raw.replace(sourceUrl, '').trim().length < 10;
+      let contentToSummarize = raw;
+
+      // If it's mostly just a URL, try to fetch the page content
+      if (isJustUrl && sourceUrl) {
+        setResearchStatus({ type: "info", msg: "Fetching page..." });
+        let fetched = false;
+
+        // Try fetching via CORS proxy
+        try {
+          const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(sourceUrl)}`;
+          const fetchRes = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+          if (fetchRes.ok) {
+            const html = await fetchRes.text();
+            const extracted = extractTextFromHtml(html);
+            if (extracted.length > 100) {
+              contentToSummarize = extracted.slice(0, 12000);
+              fetched = true;
+            }
+          }
+        } catch {}
+
+        // If proxy failed, try direct fetch (works for some sites)
+        if (!fetched) {
+          try {
+            const fetchRes = await fetch(sourceUrl, { signal: AbortSignal.timeout(6000) });
+            if (fetchRes.ok) {
+              const html = await fetchRes.text();
+              const extracted = extractTextFromHtml(html);
+              if (extracted.length > 100) {
+                contentToSummarize = extracted.slice(0, 12000);
+                fetched = true;
+              }
+            }
+          } catch {}
+        }
+
+        // If we still couldn't get content, ask user to paste text
+        if (!fetched) {
+          setResearchStatus({ type: "error", msg: "Couldn't fetch that page — paste the text/caption directly instead" });
+          setResearchLoading(false);
+          return;
+        }
+      }
+
+      // Non-URL text: use whatever was pasted (minus URL if present)
+      if (!isJustUrl && sourceUrl) {
+        contentToSummarize = raw.replace(sourceUrl, '').trim();
+      }
+
+      setResearchStatus({ type: "info", msg: "Extracting knowledge..." });
 
       // Send to Claude to extract restaurant/food knowledge
       const res = await fetch("https://cooked-proxy.luga-podesta.workers.dev/", {
@@ -690,7 +744,7 @@ export default function ChatBot({
               <textarea value={researchUrl} onChange={e => setResearchUrl(e.target.value)} placeholder="Paste text from an article, IG caption, blog..." rows={2} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif", outline: "none", resize: "vertical", minHeight: 48, maxHeight: 120 }} />
               <button type="button" onClick={handleResearchSubmit} disabled={!researchUrl.trim() || researchLoading} style={{ background: C.terracotta, border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: researchUrl.trim() && !researchLoading ? "pointer" : "default", opacity: !researchUrl.trim() || researchLoading ? 0.5 : 1, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap", height: 36 }}>{researchLoading ? "Learning..." : "Learn"}</button>
             </div>
-            {researchStatus && <div style={{ marginTop: 6, fontSize: 11, color: researchStatus.type === "success" ? "#4ade80" : "#f87171", fontFamily: "'Inter', -apple-system, sans-serif" }}>{researchStatus.msg}</div>}
+            {researchStatus && <div style={{ marginTop: 6, fontSize: 11, color: researchStatus.type === "success" ? "#4ade80" : researchStatus.type === "info" ? C.terracotta : "#f87171", fontFamily: "'Inter', -apple-system, sans-serif" }}>{researchStatus.msg}</div>}
             {researchEntries.length > 0 && (
               <div style={{ marginTop: 10, maxHeight: 120, overflowY: "auto" }}>
                 <div style={{ fontSize: 10, color: C.muted, marginBottom: 4, fontFamily: "'Inter', -apple-system, sans-serif" }}>{researchEntries.length} sources learned</div>
