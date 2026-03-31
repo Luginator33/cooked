@@ -517,46 +517,48 @@ export default function ChatBot({
 
         // Strip UTM params for cleaner fetch
         let cleanUrl = sourceUrl;
-        try { const u = new URL(sourceUrl); ['utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(p => u.searchParams.delete(p)); cleanUrl = u.toString(); } catch {}
+        try { const u = new URL(sourceUrl); ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','fbclid'].forEach(p => u.searchParams.delete(p)); cleanUrl = u.toString(); } catch {}
 
-        // Try multiple CORS proxies in sequence
-        const proxies = [
-          (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-          (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-          (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-        ];
-
-        for (const makeProxy of proxies) {
-          if (fetched) break;
-          try {
-            const proxyUrl = makeProxy(cleanUrl);
-            const fetchRes = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
-            if (fetchRes.ok) {
-              const html = await fetchRes.text();
-              const extracted = extractTextFromHtml(html);
-              if (extracted.length > 100) {
-                contentToSummarize = extracted.slice(0, 12000);
-                if (extraText) contentToSummarize += `\n\nContext: ${extraText}`;
-                fetched = true;
-              }
+        // Try our Cloudflare Worker first (no CORS issues)
+        try {
+          const workerRes = await fetch("https://cooked-proxy.luga-podesta.workers.dev/fetch-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: cleanUrl }),
+            signal: AbortSignal.timeout(12000),
+          });
+          if (workerRes.ok) {
+            const workerData = await workerRes.json();
+            if (workerData.text?.length > 100) {
+              contentToSummarize = workerData.text.slice(0, 12000);
+              if (extraText) contentToSummarize += `\n\nContext: ${extraText}`;
+              fetched = true;
             }
-          } catch {}
-        }
+          }
+        } catch {}
 
-        // Last resort: direct fetch (works for some sites)
+        // Fallback: try CORS proxies
         if (!fetched) {
-          try {
-            const fetchRes = await fetch(cleanUrl, { signal: AbortSignal.timeout(6000) });
-            if (fetchRes.ok) {
-              const html = await fetchRes.text();
-              const extracted = extractTextFromHtml(html);
-              if (extracted.length > 100) {
-                contentToSummarize = extracted.slice(0, 12000);
-                if (extraText) contentToSummarize += `\n\nContext: ${extraText}`;
-                fetched = true;
+          const proxies = [
+            (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+            (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+          ];
+          for (const makeProxy of proxies) {
+            if (fetched) break;
+            try {
+              const proxyUrl = makeProxy(cleanUrl);
+              const fetchRes = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+              if (fetchRes.ok) {
+                const html = await fetchRes.text();
+                const extracted = extractTextFromHtml(html);
+                if (extracted.length > 100) {
+                  contentToSummarize = extracted.slice(0, 12000);
+                  if (extraText) contentToSummarize += `\n\nContext: ${extraText}`;
+                  fetched = true;
+                }
               }
-            }
-          } catch {}
+            } catch {}
+          }
         }
 
         // If fetch failed but user provided extra text, use that
@@ -577,9 +579,18 @@ export default function ChatBot({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
-          max_tokens: 600,
-          system: `You are a restaurant knowledge extractor. Given content from a blog, article, Instagram post, or website, extract the key restaurant and food insights into a concise knowledge snippet (3-6 sentences max). Focus on: restaurant names, specific dishes, chef names, vibes, neighborhoods, what makes places special, insider tips. Write in a natural, informative tone — like notes a knowledgeable friend would jot down. If the content isn't about food/restaurants/hotels, say "NOT_RELEVANT" and nothing else.`,
-          messages: [{ role: "user", content: contentToSummarize.slice(0, 8000) }],
+          max_tokens: 1000,
+          system: `You are a restaurant/hotel knowledge extractor for the app "Cooked". Given content from a blog, article, Instagram post, or website, do TWO things:
+
+1. KNOWLEDGE SUMMARY: Extract key restaurant, bar, and hotel insights into a concise knowledge snippet (3-8 sentences). Focus on: place names, specific dishes, chef names, vibes, neighborhoods, what makes places special, insider tips. Write naturally — like notes a knowledgeable friend would jot down.
+
+2. NEW PLACES: List any restaurants, bars, or hotels mentioned that might be worth adding to our database. Format each as:
+NEW_PLACE: Name | City | Neighborhood | Cuisine/Type | Price ($-$$$$) | One-line description
+
+Put the knowledge summary first, then any NEW_PLACE lines at the end.
+
+If the content isn't about food/restaurants/hotels/bars, say "NOT_RELEVANT" and nothing else.`,
+          messages: [{ role: "user", content: contentToSummarize.slice(0, 10000) }],
         }),
       });
 
@@ -593,10 +604,25 @@ export default function ChatBot({
         return;
       }
 
-      // Save to Supabase
+      // Parse out NEW_PLACE entries
+      const newPlaces = [];
+      const knowledgeLines = [];
+      summary.split('\n').forEach(line => {
+        if (line.startsWith('NEW_PLACE:')) {
+          const parts = line.replace('NEW_PLACE:', '').split('|').map(s => s.trim());
+          if (parts.length >= 3) {
+            newPlaces.push({ name: parts[0], city: parts[1], neighborhood: parts[2], cuisine: parts[3] || '', price: parts[4] || '', desc: parts[5] || '' });
+          }
+        } else {
+          knowledgeLines.push(line);
+        }
+      });
+      const knowledgeSummary = knowledgeLines.join('\n').trim();
+
+      // Save knowledge to Supabase
       const { error } = await saveResearch({
         url: sourceUrl,
-        summary,
+        summary: knowledgeSummary,
         source_type: sourceUrl ? "link" : "text",
         created_by: userId,
       });
@@ -608,8 +634,14 @@ export default function ChatBot({
       researchCacheRef.current = updated || [];
       setResearchEntries(updated || []);
       setResearchUrl("");
-      setResearchStatus({ type: "success", msg: "Learned!" });
-      setTimeout(() => setResearchStatus(null), 2000);
+
+      const placeCount = newPlaces.length;
+      setResearchStatus({ type: "success", msg: placeCount > 0 ? `Learned! Found ${placeCount} new place${placeCount > 1 ? 's' : ''} to review.` : "Learned!" });
+      // Store new places for admin to review
+      if (newPlaces.length > 0) {
+        try { safeSetItem("cooked_research_new_places", JSON.stringify([...JSON.parse(localStorage.getItem("cooked_research_new_places") || "[]"), ...newPlaces])); } catch {}
+      }
+      setTimeout(() => setResearchStatus(null), 3000);
     } catch (err) {
       console.error("Research error:", err);
       setResearchStatus({ type: "error", msg: "Failed to process — try pasting the text directly" });
