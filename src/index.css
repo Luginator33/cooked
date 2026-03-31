@@ -349,34 +349,34 @@ button:focus-visible {
   -webkit-mask-composite: xor; mask-composite: exclude;
 }
 .ob-hero-card img { width: 100%; height: 100%; object-fit: cover; }
-.ob-hero-card.from-left { animation: shuffle-left 1s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
-.ob-hero-card.from-right { animation: shuffle-right 1s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+.ob-hero-card.from-left { animation: shuffle-left 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.ob-hero-card.from-right { animation: shuffle-right 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 
 /* 24 cards + 1 hero — outside-in stacking (ob-hero-card naming) */
 .ob-hero-card:nth-child(2)  { z-index: 1;  animation-delay: 0.00s; --end-rotate: -54deg; }
-.ob-hero-card:nth-child(24) { z-index: 2;  animation-delay: 0.03s; --end-rotate: 49deg; }
-.ob-hero-card:nth-child(3)  { z-index: 3;  animation-delay: 0.08s; --end-rotate: -49deg; }
-.ob-hero-card:nth-child(23) { z-index: 4;  animation-delay: 0.11s; --end-rotate: 44deg; }
-.ob-hero-card:nth-child(4)  { z-index: 5;  animation-delay: 0.16s; --end-rotate: -44deg; }
-.ob-hero-card:nth-child(22) { z-index: 6;  animation-delay: 0.19s; --end-rotate: 39deg; }
-.ob-hero-card:nth-child(5)  { z-index: 7;  animation-delay: 0.24s; --end-rotate: -39deg; }
-.ob-hero-card:nth-child(21) { z-index: 8;  animation-delay: 0.27s; --end-rotate: 34deg; }
-.ob-hero-card:nth-child(6)  { z-index: 9;  animation-delay: 0.32s; --end-rotate: -34deg; }
-.ob-hero-card:nth-child(20) { z-index: 10; animation-delay: 0.35s; --end-rotate: 29deg; }
-.ob-hero-card:nth-child(7)  { z-index: 11; animation-delay: 0.40s; --end-rotate: -29deg; }
-.ob-hero-card:nth-child(19) { z-index: 12; animation-delay: 0.43s; --end-rotate: 24deg; }
-.ob-hero-card:nth-child(8)  { z-index: 13; animation-delay: 0.48s; --end-rotate: -24deg; }
-.ob-hero-card:nth-child(18) { z-index: 14; animation-delay: 0.51s; --end-rotate: 19deg; }
-.ob-hero-card:nth-child(9)  { z-index: 15; animation-delay: 0.56s; --end-rotate: -19deg; }
-.ob-hero-card:nth-child(17) { z-index: 16; animation-delay: 0.59s; --end-rotate: 14deg; }
-.ob-hero-card:nth-child(10) { z-index: 17; animation-delay: 0.64s; --end-rotate: -14deg; }
-.ob-hero-card:nth-child(16) { z-index: 18; animation-delay: 0.67s; --end-rotate: 9deg; }
-.ob-hero-card:nth-child(11) { z-index: 19; animation-delay: 0.72s; --end-rotate: -9deg; }
-.ob-hero-card:nth-child(15) { z-index: 20; animation-delay: 0.75s; --end-rotate: 5deg; }
-.ob-hero-card:nth-child(12) { z-index: 21; animation-delay: 0.80s; --end-rotate: -5deg; }
-.ob-hero-card:nth-child(14) { z-index: 22; animation-delay: 0.83s; --end-rotate: 2deg; }
-.ob-hero-card:nth-child(13) { z-index: 23; animation-delay: 0.88s; --end-rotate: -2deg; }
-.ob-hero-card:nth-child(25) { z-index: 25; animation-delay: 0.95s; --end-rotate: 0deg; width: 112px; height: 155px; }
+.ob-hero-card:nth-child(24) { z-index: 2;  animation-delay: 0.06s; --end-rotate: 49deg; }
+.ob-hero-card:nth-child(3)  { z-index: 3;  animation-delay: 0.12s; --end-rotate: -49deg; }
+.ob-hero-card:nth-child(23) { z-index: 4;  animation-delay: 0.18s; --end-rotate: 44deg; }
+.ob-hero-card:nth-child(4)  { z-index: 5;  animation-delay: 0.24s; --end-rotate: -44deg; }
+.ob-hero-card:nth-child(22) { z-index: 6;  animation-delay: 0.30s; --end-rotate: 39deg; }
+.ob-hero-card:nth-child(5)  { z-index: 7;  animation-delay: 0.36s; --end-rotate: -39deg; }
+.ob-hero-card:nth-child(21) { z-index: 8;  animation-delay: 0.42s; --end-rotate: 34deg; }
+.ob-hero-card:nth-child(6)  { z-index: 9;  animation-delay: 0.48s; --end-rotate: -34deg; }
+.ob-hero-card:nth-child(20) { z-index: 10; animation-delay: 0.54s; --end-rotate: 29deg; }
+.ob-hero-card:nth-child(7)  { z-index: 11; animation-delay: 0.60s; --end-rotate: -29deg; }
+.ob-hero-card:nth-child(19) { z-index: 12; animation-delay: 0.66s; --end-rotate: 24deg; }
+.ob-hero-card:nth-child(8)  { z-index: 13; animation-delay: 0.72s; --end-rotate: -24deg; }
+.ob-hero-card:nth-child(18) { z-index: 14; animation-delay: 0.78s; --end-rotate: 19deg; }
+.ob-hero-card:nth-child(9)  { z-index: 15; animation-delay: 0.84s; --end-rotate: -19deg; }
+.ob-hero-card:nth-child(17) { z-index: 16; animation-delay: 0.90s; --end-rotate: 14deg; }
+.ob-hero-card:nth-child(10) { z-index: 17; animation-delay: 0.96s; --end-rotate: -14deg; }
+.ob-hero-card:nth-child(16) { z-index: 18; animation-delay: 1.02s; --end-rotate: 9deg; }
+.ob-hero-card:nth-child(11) { z-index: 19; animation-delay: 1.08s; --end-rotate: -9deg; }
+.ob-hero-card:nth-child(15) { z-index: 20; animation-delay: 1.14s; --end-rotate: 5deg; }
+.ob-hero-card:nth-child(12) { z-index: 21; animation-delay: 1.20s; --end-rotate: -5deg; }
+.ob-hero-card:nth-child(14) { z-index: 22; animation-delay: 1.26s; --end-rotate: 2deg; }
+.ob-hero-card:nth-child(13) { z-index: 23; animation-delay: 1.32s; --end-rotate: -2deg; }
+.ob-hero-card:nth-child(25) { z-index: 25; animation-delay: 1.45s; --end-rotate: 0deg; width: 112px; height: 155px; }
 /* glow behind cards */
 .ob-hero-card:first-child {
   position: absolute; width: 260px; height: 260px; top: -20px; left: 20px; z-index: 1;
@@ -2350,13 +2350,13 @@ a.det-info-val:hover { color: #ff9632; }
 
 /* ─── Keyframe Animations ─── */
 @keyframes shuffle-left {
-  0% { opacity: 0; transform: translateX(-20px) translateY(60px) rotate(-4deg) scale(1.6); }
-  20% { opacity: 1; }
+  0% { opacity: 0; transform: translateX(0) translateY(100px) rotate(0deg) scale(3.5); }
+  15% { opacity: 0.8; }
   100% { opacity: 1; transform: translateX(0) translateY(0) rotate(var(--end-rotate)) scale(1); box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
 }
 @keyframes shuffle-right {
-  0% { opacity: 0; transform: translateX(20px) translateY(60px) rotate(4deg) scale(1.6); }
-  20% { opacity: 1; }
+  0% { opacity: 0; transform: translateX(0) translateY(100px) rotate(0deg) scale(3.5); }
+  15% { opacity: 0.8; }
   100% { opacity: 1; transform: translateX(0) translateY(0) rotate(var(--end-rotate)) scale(1); box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
 }
 @keyframes spin-glow { to { transform: rotate(360deg); } }
