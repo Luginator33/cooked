@@ -4245,7 +4245,7 @@ Return a JSON object with exactly these fields:
 
               {/* Card stack */}
               {card && (
-                <div style={{ position:"relative", flex:1, minHeight:0, maxHeight:"56vh", margin:"0 20px" }}>
+                <div style={{ position:"relative", height:"56vh", minHeight:0, margin:"0 20px" }}>
                   {/* Next card — static, full size, sits behind ready to be revealed */}
                   {nextCard && (
                     <div
