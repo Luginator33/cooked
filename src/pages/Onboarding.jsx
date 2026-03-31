@@ -167,21 +167,36 @@ function ProgressDots({ step, total = 9 }) {
 
 function CardFanSlide({ onNext, onSignIn }) {
   const [photosReady, setPhotosReady] = useState(false);
+  const [showPage, setShowPage] = useState(false);
   useEffect(() => {
     let loaded = 0;
     const total = HERO_PHOTOS.length;
+    const onAllLoaded = () => {
+      // Extra buffer so browser has time to decode images
+      setTimeout(() => { setPhotosReady(true); setShowPage(true); }, 400);
+    };
     HERO_PHOTOS.forEach(src => {
       const img = new Image();
       img.onload = img.onerror = () => {
         loaded++;
-        if (loaded >= total) setPhotosReady(true);
+        if (loaded >= total) onAllLoaded();
       };
       img.src = src;
     });
-    // Fallback — show after 3s even if some haven't loaded
-    const t = setTimeout(() => setPhotosReady(true), 3000);
+    // Fallback — show after 4s even if some haven't loaded
+    const t = setTimeout(() => { setPhotosReady(true); setShowPage(true); }, 4000);
     return () => clearTimeout(t);
   }, []);
+
+  if (!showPage) {
+    return (
+      <div className="d-onboarding" style={{ justifyContent: "center", alignItems: "center" }}>
+        <div className="glow-orb glow-amber glow-1" />
+        <div className="glow-orb glow-rose glow-2" />
+        <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 42, background: "linear-gradient(135deg, #d4a050, #e08848, #e07048, #d05860, #b84878)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", opacity: 0.6 }}>cooked</div>
+      </div>
+    );
+  }
 
   return (
     <div className="d-onboarding">
@@ -192,8 +207,8 @@ function CardFanSlide({ onNext, onSignIn }) {
       <div className="ob-hero-cards">
         {/* First child = glow div */}
         <div className="ob-hero-card" />
-        {/* 24 photo cards — only animate once all preloaded */}
-        {photosReady && HERO_PHOTOS.map((src, i) => (
+        {/* 24 photo cards — all preloaded before render */}
+        {HERO_PHOTOS.map((src, i) => (
           <div
             key={i}
             className={`ob-hero-card ${i % 2 === 0 ? "from-left" : "from-right"}`}
