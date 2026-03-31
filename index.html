@@ -13,11 +13,30 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400&display=block" rel="stylesheet" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>cooked</title>
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Prevent double-tap zoom and reset zoom after keyboard dismisses
+      document.addEventListener('touchend', function(e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        // Reset any accidental zoom
+        if (window.visualViewport && window.visualViewport.scale > 1) {
+          document.querySelector('meta[name=viewport]').setAttribute('content',
+            'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
+        }
+      }, { passive: true });
+      // Also reset on blur (keyboard dismiss)
+      document.addEventListener('focusout', function() {
+        setTimeout(function() {
+          if (window.visualViewport && window.visualViewport.scale > 1) {
+            window.scrollTo(0, window.scrollY);
+          }
+        }, 100);
+      });
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -17,6 +17,9 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
 
+/* Prevent iOS auto-zoom on focus — must be >= 16px */
+input, textarea, select { font-size: 16px !important; }
+
 a {
   font-weight: 500;
   color: #ff9632;
