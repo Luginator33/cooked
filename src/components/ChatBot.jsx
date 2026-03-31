@@ -608,7 +608,7 @@ export default function ChatBot({
         </div>
 
         {/* Input */}
-        <div style={{ padding: "8px 12px 16px", background: C.cream, borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
+        <div style={{ padding: "8px 12px calc(16px + env(safe-area-inset-bottom, 0px))", background: C.cream, borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8, background: "#fff", borderRadius: 22, border: `1.5px solid ${C.border}`, padding: "4px 4px 4px 14px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}>
             <textarea ref={textareaRef} value={input} onChange={handleTextareaInput} onKeyDown={handleKeyDown} placeholder="Ask anything..." rows={1} style={{ flex: 1, border: "none", outline: "none", resize: "none", fontSize: 15, lineHeight: "1.45", color: C.espresso, background: "transparent", fontFamily: "'Inter', -apple-system, sans-serif", height: 36, maxHeight: 120, paddingTop: 8, paddingBottom: 8, overflowY: "auto" }} />
             <button onClick={() => sendMessage()} disabled={!input.trim() || loading} style={{ width: 32, height: 32, borderRadius: "50%", border: "none", background: input.trim() && !loading ? "#007aff" : "#c7c7cc", color: "#fff", cursor: input.trim() && !loading ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginBottom: 2 }}>
