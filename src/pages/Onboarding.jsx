@@ -60,7 +60,6 @@ const HERO_PHOTOS = [
   "onboarding-photos/thumbs/2table-to-book-may-2021-issue-chris-schalkx.jpg",
   "onboarding-photos/thumbs/10 © Oliver Pilcher_Lighting by Adam Klimaszewski.jpg",
   "onboarding-photos/thumbs/soho-farmhouse-wonderflaw-places-3-1024x684.jpg",
-  "onboarding-photos/thumbs/Screenshot 2026-03-28 at 12.50.20 PM.jpg",
   "onboarding-photos/thumbs/taqueria-cover.jpg",
 ];
 
