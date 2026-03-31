@@ -1040,14 +1040,15 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [homeChatKey, setHomeChatKey] = useState(0);
   const [recentChatsOpen, setRecentChatsOpen] = useState(false);
   const headerRef = useRef(null);
-  const [headerHeight, setHeaderHeight] = useState(52);
+  const [headerHeight, setHeaderHeight] = useState(90);
   useLayoutEffect(() => {
-    if (tab !== "discover") {
+    if (tab !== "discover" && tab !== "home" && tab !== "map") {
       if (discoverSearchMode !== "restaurants") setDiscoverSearchMode("restaurants");
       return;
     }
     if (headerRef.current) {
-      setHeaderHeight(headerRef.current.getBoundingClientRect().height);
+      const h = headerRef.current.getBoundingClientRect().height;
+      if (h > 0) setHeaderHeight(h);
     }
   }, [tab, discoverSearchMode]);
   const [heatIndex, setHeatIndex] = useState(0);

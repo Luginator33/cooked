@@ -1952,7 +1952,7 @@ a.det-info-val:hover { color: #ff9632; }
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   max-width: 480px; margin: 0 auto;
   display: flex; justify-content: space-between; align-items: center;
-  background: linear-gradient(180deg, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.85) 70%, transparent 100%);
+  background: linear-gradient(180deg, #0a0a0f 0%, rgba(10,10,15,0.97) 80%, transparent 100%);
 }
 .d-home-header .header-left { display: flex; align-items: center; }
 .d-home-header .header-right { display: flex; align-items: center; gap: 10px; }
