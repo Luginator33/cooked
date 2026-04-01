@@ -235,16 +235,16 @@ function CardFanSlide({ onNext, onSignIn }) {
         ))}
       </div>
 
-      <div className="logo-big">cooked</div>
-      <div style={{ textAlign: "center", position: "relative", zIndex: 2, marginTop: 10 }}>
+      <div className="logo-big" style={{ opacity: 0, animation: "fadeSlideUp 0.6s ease 0.3s forwards" }}>cooked</div>
+      <div style={{ textAlign: "center", position: "relative", zIndex: 2, marginTop: 10, opacity: 0, animation: "fadeSlideUp 0.6s ease 0.5s forwards" }}>
         <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 22, color: "#f5f0eb", marginBottom: 10 }}>Your personal concierge</div>
         <div style={{ fontSize: 14, color: "rgba(240,235,226,0.5)", fontFamily: "'Inter', -apple-system, sans-serif", letterSpacing: "0.02em" }}>
           Not crowd-sourced. Not algorithmic. <span style={{ color: "#ff9632" }}>Curated by taste.</span>
         </div>
       </div>
 
-      <button className="d-btn-gradient" style={{ marginTop: 32 }} onClick={onNext}>Let's Go</button>
-      <button className="d-btn-ghost" onClick={onSignIn}>Already a member? <span style={{ color: "#ff9632" }}>Sign in</span></button>
+      <button className="d-btn-gradient" style={{ marginTop: 32, opacity: 0, animation: "fadeSlideUp 0.6s ease 0.7s forwards" }} onClick={onNext}>Let's Go</button>
+      <button className="d-btn-ghost" style={{ opacity: 0, animation: "fadeSlideUp 0.6s ease 0.8s forwards" }} onClick={onSignIn}>Already a member? <span style={{ color: "#ff9632" }}>Sign in</span></button>
     </div>
   );
 }

@@ -384,6 +384,11 @@ button:focus-visible {
 }
 .ob-hero-card:first-child::after { display: none; }
 
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* Onboarding logo + tagline + dots + buttons */
 .logo-big {
   font-family: 'Playfair Display', Georgia, serif; font-style: italic;
