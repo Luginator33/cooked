@@ -217,7 +217,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
             const { data } = await getUserProfile(id);
             return {
               clerk_user_id: id,
-              profile_name: data?.profile_name || "User",
+              profile_name: (data?.profile_name && data.profile_name !== "User") ? data.profile_name : (data?.profile_username || "New Member"),
               profile_username: data?.profile_username || "",
               profile_photo: data?.profile_photo || null,
             };
@@ -248,7 +248,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
             const { data } = await getUserProfile(id);
             return {
               clerk_user_id: id,
-              profile_name: data?.profile_name || "User",
+              profile_name: (data?.profile_name && data.profile_name !== "User") ? data.profile_name : (data?.profile_username || "New Member"),
               profile_username: data?.profile_username || "",
               profile_photo: data?.profile_photo || null,
             };
@@ -332,7 +332,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
 
   const avatar = profile?.profile_photo || profile?.profile_image_url || null;
   const banner = profile?.banner_photo || null;
-  const name = profile?.profile_name || "User";
+  const name = (profile?.profile_name && profile.profile_name !== "User") ? profile.profile_name : (profile?.profile_username || "New Member");
   const username = profile?.profile_username || "";
 
   return createPortal(

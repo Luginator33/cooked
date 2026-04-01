@@ -463,10 +463,13 @@ export default function Profile({
       .filter(Boolean);
     const profiles = await Promise.all(ids.map(async (id) => {
       const { data } = await getUserProfile(id);
+      const rawName = data?.profile_name;
+      const username = data?.profile_username || "";
+      const displayName = (rawName && rawName !== "User") ? rawName : (username || "New Member");
       return {
         clerk_user_id: id,
-        profile_name: data?.profile_name || "User",
-        profile_username: data?.profile_username || "",
+        profile_name: displayName,
+        profile_username: username,
         profile_photo: data?.profile_photo || null,
       };
     }));
