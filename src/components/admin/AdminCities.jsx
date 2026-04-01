@@ -65,11 +65,17 @@ const REGION_OPTIONS = [
   "Oceania",
 ];
 
-// Flag lookup by region (for new cities)
+// Flag lookup by region (for new cities — auto-fill when selecting region)
 const REGION_FLAG_HINT = {
   "United States": "🇺🇸",
   "Canada": "🇨🇦",
   "Mexico & Caribbean": "🇲🇽",
+  "Asia": "🌏",
+  "Europe": "🇪🇺",
+  "Africa": "🌍",
+  "Middle East": "🌍",
+  "South America": "🌎",
+  "Oceania": "🌏",
 };
 
 export default function AdminCities({ allRestaurants, onRestaurantsChanged }) {

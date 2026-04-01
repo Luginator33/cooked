@@ -192,11 +192,11 @@ export const CITY_REGIONS = [
 
 export const CITY_FLAGS = {
   // United States
-  "Aspen":"🇺🇸","Atlanta":"🇺🇸","Austin":"🇺🇸","Boise":"🇺🇸","Chicago":"🇺🇸","Dallas":"🇺🇸","Denver":"🇺🇸","Detroit":"🇺🇸","Las Vegas":"🇺🇸","Los Angeles":"🇺🇸","Malibu":"🇺🇸","Maui":"🇺🇸","Miami":"🇺🇸","Napa Valley":"🇺🇸","Nashville":"🇺🇸","New Orleans":"🇺🇸","New York":"🇺🇸","Ojai":"🇺🇸","Portland":"🇺🇸","Sacramento":"🇺🇸","San Diego":"🇺🇸","San Francisco":"🇺🇸","Santa Barbara":"🇺🇸","Savannah":"🇺🇸","Scottsdale":"🇺🇸","Seattle":"🇺🇸","St. Louis":"🇺🇸","Vail":"🇺🇸","Ventura County":"🇺🇸",
+  "Aspen":"🇺🇸","Atlanta":"🇺🇸","Austin":"🇺🇸","Boise":"🇺🇸","Boston":"🇺🇸","Bozeman":"🇺🇸","Charleston":"🇺🇸","Chicago":"🇺🇸","Dallas":"🇺🇸","Denver":"🇺🇸","Detroit":"🇺🇸","Houston":"🇺🇸","Las Vegas":"🇺🇸","Los Angeles":"🇺🇸","Malibu":"🇺🇸","Maui":"🇺🇸","Miami":"🇺🇸","Napa Valley":"🇺🇸","Nashville":"🇺🇸","New Orleans":"🇺🇸","New York":"🇺🇸","Ojai":"🇺🇸","Palm Springs":"🇺🇸","Philadelphia":"🇺🇸","Portland":"🇺🇸","Sacramento":"🇺🇸","San Diego":"🇺🇸","San Francisco":"🇺🇸","Santa Barbara":"🇺🇸","Savannah":"🇺🇸","Scottsdale":"🇺🇸","Seattle":"🇺🇸","St. Louis":"🇺🇸","Vail":"🇺🇸","Ventura County":"🇺🇸","Washington D.C.":"🇺🇸",
   // Europe
   "Amsterdam":"🇳🇱","Barcelona":"🇪🇸","Berlin":"🇩🇪","Cannes":"🇫🇷","Copenhagen":"🇩🇰","Frankfurt":"🇩🇪","Ibiza":"🇪🇸","Istanbul":"🇹🇷","Lisbon":"🇵🇹","London":"🇬🇧","Madrid":"🇪🇸","Mallorca":"🇪🇸","Malta":"🇲🇹","Munich":"🇩🇪","Mykonos":"🇬🇷","Paris":"🇫🇷","Prague":"🇨🇿","Rome":"🇮🇹","Sardinia":"🇮🇹","Stockholm":"🇸🇪","Taormina":"🇮🇹","UK":"🇬🇧","Vienna":"🇦🇹",
   // Asia
-  "Bali":"🇮🇩","Bangkok":"🇹🇭","Hong Kong":"🇨🇳","Mumbai":"🇮🇳","Seoul":"🇰🇷","Singapore":"🇸🇬","Tokyo":"🇯🇵",
+  "Almaty":"🇰🇿","Bali":"🇮🇩","Bangkok":"🇹🇭","Bengaluru":"🇮🇳","Hong Kong":"🇨🇳","Kyoto":"🇯🇵","Mumbai":"🇮🇳","Osaka":"🇯🇵","Seoul":"🇰🇷","Singapore":"🇸🇬","Tokyo":"🇯🇵",
   // Mexico & Caribbean
   "Canouan Island":"🇻🇨","Guadalajara":"🇲🇽","Los Cabos":"🇲🇽","Mexico City":"🇲🇽","Playa del Carmen":"🇲🇽","San Juan":"🇵🇷",
   // Africa
