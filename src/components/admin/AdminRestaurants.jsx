@@ -28,23 +28,30 @@ const BAR_KEYWORDS = ["bar", "cocktail", "wine bar", "lounge", "pub", "speakeasy
 const COFFEE_KEYWORDS = ["coffee", "cafe", "café", "espresso", "tea house", "matcha", "bakery cafe"];
 const HOTEL_KEYWORDS = ["hotel", "resort", "lodge", "hostel", "guesthouse", "bed and breakfast", "b&b", "motel"];
 const HOTEL_NAME_KEYWORDS = ["hotel", "resort"];
-const HOTEL_BRANDS = ["four seasons", "ritz-carlton", "ritz carlton", "mandarin oriental", "rosewood", "park hyatt",
-  "hyatt regency", "hyatt ziva", "hyatt zilara", "hyatt centric", "waldorf astoria", "st. regis", "st regis",
-  "w hotel", "edition hotel", "peninsula", "aman ", "amangiri", "amanpuri", "amankora", "amanoi", "amanzoe",
-  "shangri-la", "fairmont", "sofitel", "belmond", "six senses", "one&only", "como hotels", "nobu hotel",
-  "1 hotel", "ace hotel", "soho house", "canopy by hilton", "curio collection", "lxr hotels",
-  "auberge resorts", "montage ", "pendry ", "proper hotel", "virgin hotels",
-  "the standard", "nomad hotel", "graduate hotel", "citizenm", "moxy hotel"];
+const HOTEL_BRANDS = ["four seasons", "ritz-carlton", "ritz carlton", "mandarin oriental", "rosewood ",
+  "park hyatt", "hyatt regency", "hyatt ziva", "hyatt zilara", "hyatt centric", "waldorf astoria",
+  "st. regis", "st regis", "w hotel", "edition hotel", "aman ", "amangiri", "amanpuri", "amankora",
+  "amanoi", "amanzoe", "shangri-la", "fairmont", "sofitel", "belmond", "six senses", "one&only",
+  "como hotels", "nobu hotel", "1 hotel", "ace hotel", "canopy by hilton", "curio collection",
+  "lxr hotels", "auberge resorts", "pendry ", "proper hotel", "virgin hotels",
+  "nomad hotel", "citizenm", "moxy hotel"];
+const NOT_HOTEL_CUISINE = ["bar", "cocktail", "pub", "lounge", "speakeasy", "nightclub", "dive",
+  "tavern", "grill", "steakhouse", "pizza", "sushi", "ramen", "bakery", "cafe", "café", "coffee",
+  "taco", "burger", "deli", "diner", "bbq", "brewery", "wine bar", "tapas"];
 
 function checkIsHotel(r) {
   if (r.isHotel === true) return true;
   const c = (r.cuisine || "").toLowerCase();
   if (HOTEL_KEYWORDS.some(k => c.includes(k))) return true;
-  const n = (r.name || "").toLowerCase();
-  if (HOTEL_NAME_KEYWORDS.some(k => n.includes(k))) return true;
-  if (HOTEL_BRANDS.some(b => n.includes(b))) return true;
   const tags = Array.isArray(r.tags) ? r.tags.map(t => t.toLowerCase()) : [];
   if (tags.some(t => HOTEL_KEYWORDS.some(k => t.includes(k)))) return true;
+  // Name/brand matching only when cuisine is NOT clearly a bar or restaurant
+  const cuisineIsBarOrFood = r.isBar || NOT_HOTEL_CUISINE.some(k => c.includes(k));
+  if (!cuisineIsBarOrFood) {
+    const n = (r.name || "").toLowerCase();
+    if (HOTEL_NAME_KEYWORDS.some(k => n.includes(k))) return true;
+    if (HOTEL_BRANDS.some(b => n.includes(b))) return true;
+  }
   return false;
 }
 

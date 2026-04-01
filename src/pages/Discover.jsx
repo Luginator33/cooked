@@ -2119,26 +2119,37 @@ export default function Discover({ tasteProfile, initialTab }) {
   });
 
   // Tier 1: filter by venue type (All / Restaurants / Bars & Nightlife / Coffee & Cafes / Hotels)
-  // Hotels detected via: cuisine, tags, name, brand names, or isHotel flag
+  // Hotels: cuisine/tags/isHotel are strong signals. Name/brand matching only applies
+  // when the cuisine is NOT clearly a bar or restaurant (to avoid false positives like
+  // "Rosewood Tavern", "The Standard Grill", "Lafayette Hotel Lobby Bar").
   const HOTEL_KW = ["hotel", "resort", "lodge", "hostel", "guesthouse", "bed and breakfast", "b&b", "motel"];
   const HOTEL_NAME_KW = ["hotel", "resort"];
-  // Major hotel brands that don't always say "Hotel" in their name
-  const HOTEL_BRANDS = ["four seasons", "ritz-carlton", "ritz carlton", "mandarin oriental", "rosewood", "park hyatt",
-    "hyatt regency", "hyatt ziva", "hyatt zilara", "hyatt centric", "waldorf astoria", "st. regis", "st regis",
-    "w hotel", "edition hotel", "peninsula", "aman ", "amangiri", "amanpuri", "amankora", "amanoi", "amanzoe",
-    "shangri-la", "fairmont", "sofitel", "belmond", "six senses", "one&only", "como hotels", "nobu hotel",
-    "1 hotel", "ace hotel", "soho house", "canopy by hilton", "curio collection", "lxr hotels",
-    "auberge resorts", "montage ", "pendry ", "proper hotel", "virgin hotels",
-    "the standard", "nomad hotel", "graduate hotel", "citizenm", "moxy hotel"];
+  const HOTEL_BRANDS = ["four seasons", "ritz-carlton", "ritz carlton", "mandarin oriental", "rosewood ",
+    "park hyatt", "hyatt regency", "hyatt ziva", "hyatt zilara", "hyatt centric", "waldorf astoria",
+    "st. regis", "st regis", "w hotel", "edition hotel", "aman ", "amangiri", "amanpuri", "amankora",
+    "amanoi", "amanzoe", "shangri-la", "fairmont", "sofitel", "belmond", "six senses", "one&only",
+    "como hotels", "nobu hotel", "1 hotel", "ace hotel", "canopy by hilton", "curio collection",
+    "lxr hotels", "auberge resorts", "pendry ", "proper hotel", "virgin hotels",
+    "nomad hotel", "citizenm", "moxy hotel"];
+  // Cuisine values that mean "this is a bar/restaurant, not a hotel" even if the name suggests hotel
+  const NOT_HOTEL_CU = ["bar", "cocktail", "pub", "lounge", "speakeasy", "nightclub", "dive",
+    "tavern", "grill", "steakhouse", "pizza", "sushi", "ramen", "bakery", "cafe", "café", "coffee",
+    "taco", "burger", "deli", "diner", "bbq", "brewery", "wine bar", "tapas"];
   const checkIsHotel = (r) => {
     if (r.isHotel === true) return true;
     const cu = (r.cuisine || "").toLowerCase();
+    // Cuisine explicitly says hotel/resort → always a hotel
     if (HOTEL_KW.some(k => cu.includes(k))) return true;
-    const n = (r.name || "").toLowerCase();
-    if (HOTEL_NAME_KW.some(k => n.includes(k))) return true;
-    if (HOTEL_BRANDS.some(b => n.includes(b))) return true;
+    // Tags explicitly say hotel → always a hotel
     const tags = Array.isArray(r.tags) ? r.tags : [];
     if (tags.some(t => HOTEL_KW.some(k => t.toLowerCase().includes(k)))) return true;
+    // Name/brand matching — but ONLY if cuisine doesn't clearly indicate a bar/restaurant
+    const cuisineIsBarOrFood = r.isBar || NOT_HOTEL_CU.some(k => cu.includes(k));
+    if (!cuisineIsBarOrFood) {
+      const n = (r.name || "").toLowerCase();
+      if (HOTEL_NAME_KW.some(k => n.includes(k))) return true;
+      if (HOTEL_BRANDS.some(b => n.includes(b))) return true;
+    }
     return false;
   };
   const passesVenueType = (r) => {
