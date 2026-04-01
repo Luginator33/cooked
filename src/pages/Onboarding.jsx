@@ -515,7 +515,7 @@ function FollowCitiesSlide({ onNext, onSelect }) {
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={4} />
       <div className="ob-title">Where do you travel?</div>
-      <div className="ob-desc">Follow cities to discover restaurants there</div>
+      <div className="ob-desc">Plan your next weekend getaway or summer world tour.</div>
 
       <div className="ob-city-grid">
         {TRAVEL_CITIES.map(city => (
