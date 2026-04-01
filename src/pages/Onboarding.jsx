@@ -433,7 +433,7 @@ function CuisinesVibesSlide({ onNext, onSelect }) {
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={3} />
       <div className="ob-title">What do you love?</div>
-      <div className="ob-desc">Pick as many as you want</div>
+      <div className="ob-desc">Pick as many as you want. We'll find you new places before you <em style={{ color: "#ff9632", fontStyle: "normal" }}>search for them.</em></div>
 
       <div className="ob-picker-section">
         <div className="ob-picker-label">Cuisines</div>
