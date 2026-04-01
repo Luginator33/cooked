@@ -2138,12 +2138,9 @@ export default function Discover({ tasteProfile, initialTab }) {
   const checkIsHotel = (r) => {
     if (r.isHotel === true) return true;
     const cu = (r.cuisine || "").toLowerCase();
-    // Cuisine explicitly says hotel/resort → always a hotel
     if (HOTEL_KW.some(k => cu.includes(k))) return true;
-    // Tags explicitly say hotel → always a hotel
     const tags = Array.isArray(r.tags) ? r.tags : [];
     if (tags.some(t => HOTEL_KW.some(k => t.toLowerCase().includes(k)))) return true;
-    // Name/brand matching — but ONLY if cuisine doesn't clearly indicate a bar/restaurant
     const cuisineIsBarOrFood = r.isBar || NOT_HOTEL_CU.some(k => cu.includes(k));
     if (!cuisineIsBarOrFood) {
       const n = (r.name || "").toLowerCase();
@@ -2152,30 +2149,53 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
     return false;
   };
+
+  // ── MULTI-TYPE VENUE DETECTION ──
+  // A venue can appear in multiple categories (e.g. a hotel bar shows in Hotels AND Bars)
+  const FOOD_CU = ["restaurant", "italian", "japanese", "mexican", "french", "chinese", "thai",
+    "indian", "korean", "mediterranean", "american", "seafood", "steakhouse", "sushi", "pizza",
+    "ramen", "bbq", "burger", "deli", "diner", "bakery", "brunch", "fine dining", "contemporary",
+    "new american", "tapas", "greek", "turkish", "vietnamese", "peruvian", "brazilian", "spanish",
+    "middle eastern", "gastropub", "bistro", "grill", "southern", "cajun", "hawaiian", "caribbean",
+    "vegan", "vegetarian", "dim sum", "omakase", "noodle", "taco", "farm", "brasserie",
+    "trattoria", "osteria", "izakaya", "taqueria", "cantina", "argentinian", "african",
+    "ethiopian", "lebanese", "moroccan", "filipino", "malaysian", "indonesian", "cuban",
+    "salvadoran", "colombian", "peruvian", "dumplings", "poke", "acai", "bowl"];
+  const BAR_CU = ["bar", "cocktail", "pub", "lounge", "speakeasy", "nightclub", "dive", "brewery", "taproom"];
+
+  const getVenueTypes = (r) => {
+    const types = new Set();
+    const cu = (r.cuisine || "").toLowerCase();
+    const tags = Array.isArray(r.tags) ? r.tags.map(t => t.toLowerCase()) : [];
+
+    // Hotel?
+    if (checkIsHotel(r)) types.add("hotel");
+
+    // Bar?
+    if (r.isBar === true || BAR_CU.some(k => cu.includes(k))) types.add("bar");
+
+    // Coffee?
+    if (cu.includes("coffee") || (cu.includes("cafe") && !cu.includes("american cafe"))) types.add("coffee");
+
+    // Restaurant? — positive detection via food-related cuisine, tags, or explicit "restaurant" in cuisine
+    const hasFood = FOOD_CU.some(k => cu.includes(k)) ||
+      cu.includes("& restaurant") || cu.includes("/ restaurant") ||
+      tags.some(t => ["dining", "restaurant", "fine dining", "brunch", "dinner"].some(k => t.includes(k)));
+    if (hasFood) types.add("restaurant");
+
+    // Default: if nothing matched at all, it's a restaurant
+    if (types.size === 0) types.add("restaurant");
+
+    return types;
+  };
+
   const passesVenueType = (r) => {
     if (venueType === "all") return true;
-    const cu = (r.cuisine || "").toLowerCase();
-    const isHotel = checkIsHotel(r);
-    if (venueType === "restaurants") {
-      if (r.isBar === true) return false;
-      if (cu.includes("coffee")) return false;
-      if (isHotel) return false;
-      return true;
-    }
-    if (venueType === "bars") {
-      if (isHotel) return false;
-      if (r.isBar === true) return true;
-      if (cu.includes("bar")) return true;
-      if (cu.includes("nightclub")) return true;
-      if (cu.includes("lounge")) return true;
-      return false;
-    }
-    if (venueType === "coffee") {
-      return cu.includes("coffee") || cu.includes("cafe");
-    }
-    if (venueType === "hotels") {
-      return isHotel;
-    }
+    const types = getVenueTypes(r);
+    if (venueType === "restaurants") return types.has("restaurant");
+    if (venueType === "bars") return types.has("bar");
+    if (venueType === "hotels") return types.has("hotel");
+    if (venueType === "coffee") return types.has("coffee");
     return true;
   };
   const filteredByVenue = filteredByCity.filter(passesVenueType);

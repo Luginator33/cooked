@@ -49,16 +49,39 @@ function checkIsHotel(r) {
   return false;
 }
 
+// Multi-type: a venue can appear in multiple categories (hotel bar → Hotels + Bars)
+const FOOD_CUISINE = ["restaurant", "italian", "japanese", "mexican", "french", "chinese", "thai",
+  "indian", "korean", "mediterranean", "american", "seafood", "steakhouse", "sushi", "pizza",
+  "ramen", "bbq", "burger", "deli", "diner", "bakery", "brunch", "fine dining", "contemporary",
+  "new american", "tapas", "greek", "turkish", "vietnamese", "peruvian", "brazilian", "spanish",
+  "middle eastern", "gastropub", "bistro", "grill", "southern", "cajun", "hawaiian", "caribbean",
+  "vegan", "vegetarian", "dim sum", "omakase", "noodle", "taco", "farm", "brasserie",
+  "trattoria", "osteria", "izakaya", "taqueria", "cantina", "argentinian", "african",
+  "ethiopian", "lebanese", "moroccan", "filipino", "malaysian", "indonesian", "cuban",
+  "salvadoran", "colombian", "dumplings", "poke", "acai", "bowl"];
+
+function getVenueTypes(r) {
+  const types = new Set();
+  const c = (r.cuisine || "").toLowerCase();
+  const tags = Array.isArray(r.tags) ? r.tags.map(t => t.toLowerCase()) : [];
+  if (checkIsHotel(r)) types.add("hotel");
+  if (r.isBar || BAR_KEYWORDS.some(k => c.includes(k))) types.add("bar");
+  if (COFFEE_KEYWORDS.some(k => c.includes(k))) types.add("coffee");
+  const hasFood = FOOD_CUISINE.some(k => c.includes(k)) ||
+    c.includes("& restaurant") || c.includes("/ restaurant") ||
+    tags.some(t => ["dining", "restaurant", "fine dining", "brunch", "dinner"].some(k => t.includes(k)));
+  if (hasFood) types.add("restaurant");
+  if (types.size === 0) types.add("restaurant");
+  return types;
+}
+
 function matchesVenueType(r, type) {
   if (type === "all") return true;
-  const c = (r.cuisine || "").toLowerCase();
-  const isBar = r.isBar || BAR_KEYWORDS.some(k => c.includes(k));
-  const isCoffee = COFFEE_KEYWORDS.some(k => c.includes(k));
-  const isHotel = checkIsHotel(r);
-  if (type === "bars") return isBar && !isHotel;
-  if (type === "coffee") return isCoffee;
-  if (type === "hotels") return isHotel;
-  if (type === "restaurants") return !isBar && !isCoffee && !isHotel;
+  const types = getVenueTypes(r);
+  if (type === "restaurants") return types.has("restaurant");
+  if (type === "bars") return types.has("bar");
+  if (type === "hotels") return types.has("hotel");
+  if (type === "coffee") return types.has("coffee");
   return true;
 }
 
