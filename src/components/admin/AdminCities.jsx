@@ -1,11 +1,53 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { C, cardStyle, inputStyle, btnPrimary, btnSmall, sectionHeader, Toast, ConfirmDialog } from "./adminHelpers";
 import {
   CITY_REGIONS, CITY_FLAGS, normalizeCity,
   getFullCityRegions, getAllApprovedCities,
   addCustomApprovedCity, removeCustomApprovedCity, getCustomApprovedCities,
 } from "../../data/restaurants";
-import { deleteCommunityRestaurant } from "../../lib/supabase";
+import { deleteCommunityRestaurant, updateCommunityRestaurant } from "../../lib/supabase";
+
+const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_PLACES_KEY;
+
+/**
+ * Look up a restaurant on Google Places and return city + coords.
+ */
+async function fetchCityFromGoogle(restaurantName) {
+  if (!GOOGLE_KEY) return null;
+  try {
+    const searchRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_KEY,
+        "X-Goog-FieldMask": "places.id,places.displayName,places.addressComponents,places.location,places.formattedAddress",
+      },
+      body: JSON.stringify({ textQuery: restaurantName, maxResultCount: 1 }),
+    });
+    if (!searchRes.ok) return null;
+    const data = await searchRes.json();
+    const place = data.places?.[0];
+    if (!place) return null;
+
+    // Extract city from addressComponents
+    let city = null;
+    let neighborhood = null;
+    for (const comp of (place.addressComponents || [])) {
+      if (comp.types?.includes("locality")) city = comp.longText;
+      if (comp.types?.includes("sublocality_level_1") || comp.types?.includes("neighborhood")) neighborhood = comp.longText;
+    }
+
+    return {
+      city: city || null,
+      neighborhood: neighborhood || null,
+      lat: place.location?.latitude || null,
+      lng: place.location?.longitude || null,
+      address: place.formattedAddress || null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // AdminCities — manage approved cities, review unapproved ones, assign regions
@@ -443,37 +485,141 @@ function UnapprovedPanel({ cities, allRestaurants, noCityRestaurants, flash, onA
         </div>
       ))}
 
-      {/* No-city restaurants */}
+      {/* No-city restaurants — auto-fix with Google Places */}
       {noCityRestaurants && noCityRestaurants.length > 0 && (
-        <div style={{ ...cardStyle, marginTop: 16, marginBottom: 8 }}>
-          <div
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
-            onClick={() => setShowNoCity(!showNoCity)}
-          >
-            <div>
-              <span style={{ color: "#e0a050", fontSize: 14, fontWeight: 600 }}>No City Assigned</span>
-              <span style={{ color: C.muted, fontSize: 12, marginLeft: 8 }}>{noCityRestaurants.length} restaurant{noCityRestaurants.length !== 1 ? "s" : ""}</span>
-            </div>
-            <span style={{ color: C.muted, fontSize: 12 }}>{showNoCity ? "▾" : "▸"}</span>
+        <NoCityPanel
+          restaurants={noCityRestaurants}
+          flash={flash}
+          onRestaurantsChanged={onRestaurantsChanged}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NoCityPanel — restaurants with no city, auto-fix via Google Places
+// ---------------------------------------------------------------------------
+function NoCityPanel({ restaurants, flash, onRestaurantsChanged }) {
+  const [fixing, setFixing] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0, fixed: 0, failed: 0 });
+  const [results, setResults] = useState([]); // [{id, name, city, status}]
+  const [showResults, setShowResults] = useState(false);
+
+  const handleFixAll = useCallback(async () => {
+    if (!GOOGLE_KEY) {
+      flash("Missing VITE_GOOGLE_PLACES_KEY", "error");
+      return;
+    }
+
+    setFixing(true);
+    const total = restaurants.length;
+    setProgress({ done: 0, total, fixed: 0, failed: 0 });
+    const fixResults = [];
+    let fixed = 0;
+    let failed = 0;
+
+    // Process in batches of 5 with small delay to avoid rate limiting
+    for (let i = 0; i < restaurants.length; i++) {
+      const r = restaurants[i];
+      const data = await fetchCityFromGoogle(r.name);
+
+      if (data?.city) {
+        const normalizedCity = normalizeCity(data.city);
+        const updates = { city: normalizedCity };
+        if (data.neighborhood) updates.neighborhood = data.neighborhood;
+        if (data.lat) updates.lat = data.lat;
+        if (data.lng) updates.lng = data.lng;
+        if (data.address && !r.address) updates.address = data.address;
+
+        // Only update community restaurants (id >= 100000)
+        if (r.id >= 100000) {
+          await updateCommunityRestaurant(r.id, updates);
+        }
+
+        fixResults.push({ id: r.id, name: r.name, city: normalizedCity, neighborhood: data.neighborhood, status: "fixed" });
+        fixed++;
+      } else {
+        fixResults.push({ id: r.id, name: r.name, city: null, status: "not_found" });
+        failed++;
+      }
+
+      setProgress({ done: i + 1, total, fixed, failed });
+
+      // Small delay every 5 requests to avoid rate limits
+      if ((i + 1) % 5 === 0) await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    setResults(fixResults);
+    setShowResults(true);
+    setFixing(false);
+    flash(`Fixed ${fixed} of ${total} restaurants`);
+    if (fixed > 0 && onRestaurantsChanged) onRestaurantsChanged();
+  }, [restaurants, flash, onRestaurantsChanged]);
+
+  return (
+    <div style={{ ...cardStyle, marginTop: 16, marginBottom: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <span style={{ color: "#e0a050", fontSize: 14, fontWeight: 600 }}>No City Assigned</span>
+          <span style={{ color: C.muted, fontSize: 12, marginLeft: 8 }}>{restaurants.length} restaurant{restaurants.length !== 1 ? "s" : ""}</span>
+        </div>
+        <button
+          type="button"
+          onClick={handleFixAll}
+          disabled={fixing}
+          style={{
+            ...btnPrimary,
+            fontSize: 11,
+            padding: "6px 14px",
+            opacity: fixing ? 0.5 : 1,
+          }}
+        >
+          {fixing ? `Fixing... ${progress.done}/${progress.total}` : "Auto-Fix All"}
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      {fixing && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ background: C.bg, borderRadius: 4, height: 6, overflow: "hidden" }}>
+            <div style={{
+              width: `${(progress.done / progress.total) * 100}%`,
+              height: "100%",
+              background: C.terracotta,
+              borderRadius: 4,
+              transition: "width 0.2s",
+            }} />
           </div>
-          {showNoCity && (
-            <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10, maxHeight: 300, overflowY: "auto" }}>
-              <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
-                These restaurants have no city. Find them in Restaurants → Search to add a city.
-              </div>
-              {noCityRestaurants.slice(0, 50).map(r => (
-                <div key={r.id} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 12 }}>
-                  <span style={{ color: C.text }}>{r.name}</span>
-                  <span style={{ color: C.dim }}>{r.cuisine || "—"}</span>
-                </div>
-              ))}
-              {noCityRestaurants.length > 50 && (
-                <div style={{ fontSize: 11, color: C.muted, marginTop: 6, textAlign: "center" }}>
-                  ...and {noCityRestaurants.length - 50} more
-                </div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+            {progress.fixed} fixed, {progress.failed} not found
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      {showResults && results.length > 0 && (
+        <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10, maxHeight: 400, overflowY: "auto" }}>
+          {results.map(r => (
+            <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", fontSize: 12 }}>
+              <span style={{ color: C.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+              {r.status === "fixed" ? (
+                <span style={{ color: "#50c878", fontSize: 11, flexShrink: 0, marginLeft: 8 }}>→ {r.city}</span>
+              ) : (
+                <span style={{ color: "#e05050", fontSize: 11, flexShrink: 0, marginLeft: 8 }}>not found</span>
               )}
             </div>
-          )}
+          ))}
+        </div>
+      )}
+
+      {/* Preview list when not fixing */}
+      {!showResults && !fixing && (
+        <div
+          style={{ marginTop: 8, fontSize: 11, color: C.dim, cursor: "pointer" }}
+          onClick={() => setShowResults(!showResults)}
+        >
+          Uses Google Places API to look up each restaurant and assign a city automatically.
         </div>
       )}
     </div>
