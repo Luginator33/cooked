@@ -440,8 +440,17 @@ export default function Profile({
         getFollowing(user.id),
       ]);
       if (cancelled) return;
-      setFollowersCount(followersRes?.data?.length || 0);
-      setFollowingCount(followingRes?.data?.length || 0);
+      // Filter out deleted users (no profile in user_data) before counting
+      const followerIds = (followersRes?.data || []).map(r => r.follower_id).filter(Boolean);
+      const followingIds = (followingRes?.data || []).map(r => r.following_id).filter(Boolean);
+      const allIds = [...new Set([...followerIds, ...followingIds])];
+      const existingIds = new Set();
+      await Promise.all(allIds.map(async (id) => {
+        const { data } = await getUserProfile(id);
+        if (data) existingIds.add(id);
+      }));
+      setFollowersCount(followerIds.filter(id => existingIds.has(id)).length);
+      setFollowingCount(followingIds.filter(id => existingIds.has(id)).length);
     })();
     return () => { cancelled = true; };
   }, [user?.id]);
