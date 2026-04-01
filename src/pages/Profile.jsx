@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useUser, useClerk } from "@clerk/clerk-react";
 import { getFollowers, getFollowing, getUserProfile, saveSharedPhoto, saveUserData, saveUserPhotos, supabase, followCity, unfollowCity, getFollowedCities } from "../lib/supabase";
 import { CITIES, CITY_FLAGS, sortCityRegions, getFullCityRegions } from "../data/restaurants";
-import { getCookedScore, getCityReadiness } from "../lib/neo4j";
+import { getCookedScore, getCityReadiness, getRecentLovesForUser } from "../lib/neo4j";
 import { ProfilePhoto, parseProfilePhoto } from "../components/AvatarIcon";
 import AdminPanel from "../components/admin/AdminPanel";
 
@@ -122,6 +122,7 @@ export default function Profile({
   const [photoSyncMessage, setPhotoSyncMessage] = useState(null);
   const [cookedScore, setCookedScore] = useState(0);
   const [cityReadiness, setCityReadiness] = useState([]);
+  const [recentActivity, setRecentActivity] = useState([]);
   const [followedCitiesList, setFollowedCitiesList] = useState([]);
   const [showCityFollowPicker, setShowCityFollowPicker] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
@@ -451,6 +452,7 @@ export default function Profile({
     getFollowedCities(user.id).then(({ data }) => {
       setFollowedCitiesList((data || []).map(r => r.city));
     });
+    getRecentLovesForUser(user.id, 5).then((data) => setRecentActivity(data || []));
   }, [user?.id]);
 
   const openSocialList = async (kind) => {
@@ -816,25 +818,54 @@ export default function Profile({
       })()}
 
       {/* Recent Activity */}
-      {lovedRestaurants.length > 0 && (
-        <div className="d-activity-section">
-          <div className="p-section-label">Recent Activity</div>
-          {lovedRestaurants.slice(0, 3).map(r => {
-            const imgSrc = (photoCache && (photoCache[r.id] || photoCache[String(r.id)])) || r.img;
-            const score = Math.min(5, r.googleRating || (r.rating ? r.rating / 2 : 3));
-            return (
-              <div key={r.id} className="d-activity-item" onClick={() => onOpenDetail && onOpenDetail(r)} style={{ cursor:"pointer" }}>
-                {imgSrc && <img className="d-activity-img" src={imgSrc} alt={r.name} />}
-                <div className="d-activity-info">
-                  <div className="d-activity-text">Loved <strong>{r.name}</strong></div>
-                  <div className="d-activity-time">Recently</div>
+      {(() => {
+        // Use Neo4j timestamped data if available, fall back to lovedRestaurants
+        const activityItems = recentActivity.length > 0
+          ? recentActivity.slice(0, 5).map(a => {
+              const r = allRestaurants.find(rest => String(rest.id) === String(a.id));
+              return r ? { ...r, lovedAt: a.timestamp } : null;
+            }).filter(Boolean)
+          : lovedRestaurants.slice(0, 3);
+        if (activityItems.length === 0) return null;
+
+        const formatTime = (ts) => {
+          if (!ts) return "";
+          try {
+            const d = new Date(ts);
+            const now = new Date();
+            const diffMs = now - d;
+            const diffMin = Math.floor(diffMs / 60000);
+            if (diffMin < 1) return "Just now";
+            if (diffMin < 60) return `${diffMin}m ago`;
+            const diffHr = Math.floor(diffMin / 60);
+            if (diffHr < 24) return `${diffHr}h ago`;
+            const diffDay = Math.floor(diffHr / 24);
+            if (diffDay < 7) return `${diffDay}d ago`;
+            if (diffDay < 30) return `${Math.floor(diffDay / 7)}w ago`;
+            return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          } catch { return ""; }
+        };
+
+        return (
+          <div className="d-activity-section">
+            <div className="p-section-label">Recent Activity</div>
+            {activityItems.map(r => {
+              const imgSrc = (photoCache && (photoCache[r.id] || photoCache[String(r.id)])) || r.img;
+              const score = Math.min(5, r.googleRating || (r.rating ? r.rating / 2 : 3));
+              return (
+                <div key={r.id} className="d-activity-item" onClick={() => onOpenDetail && onOpenDetail(r)} style={{ cursor:"pointer" }}>
+                  {imgSrc && <img className="d-activity-img" src={imgSrc} alt={r.name} />}
+                  <div className="d-activity-info">
+                    <div className="d-activity-text">Loved <strong>{r.name}</strong></div>
+                    <div className="d-activity-time">{formatTime(r.lovedAt)}</div>
+                  </div>
+                  <div className="d-activity-flame">🔥 {score.toFixed(1)}</div>
                 </div>
-                <div className="d-activity-flame">🔥 {score.toFixed(1)}</div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Stats list modal */}
       {listModal && (

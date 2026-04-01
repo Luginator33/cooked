@@ -124,6 +124,22 @@ export async function removeLove(clerkUserId, restaurantId) {
   );
 }
 
+export async function getRecentLovesForUser(clerkUserId, limit = 5) {
+  if (!clerkUserId) return [];
+  const result = await runQuery(
+    `MATCH (u:User {id: $userId})-[l:LOVED]->(r:Restaurant)
+     WHERE l.timestamp IS NOT NULL
+     RETURN r.id AS id, l.timestamp AS timestamp
+     ORDER BY l.timestamp DESC
+     LIMIT $limit`,
+    { userId: clerkUserId, limit: neo4j.int(limit) }
+  );
+  return (result?.records || []).map(rec => ({
+    id: rec.get('id'),
+    timestamp: rec.get('timestamp').toString(),
+  }));
+}
+
 export async function syncFollow(followerClerkId, followingClerkId) {
   if (!followerClerkId || !followingClerkId) return;
   await runQuery(
