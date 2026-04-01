@@ -134,7 +134,7 @@ export async function getRecentLovesForUser(clerkUserId, limit = 5) {
      LIMIT $limit`,
     { userId: clerkUserId, limit: neo4j.int(limit) }
   );
-  return (result?.records || []).map(rec => ({
+  return (result || []).map(rec => ({
     id: rec.get('id'),
     timestamp: rec.get('timestamp').toString().replace(/(\.\d{3})\d+/, '$1'),
   }));
