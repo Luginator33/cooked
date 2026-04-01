@@ -46,7 +46,7 @@ export default function AdminAnalytics({ allRestaurants }) {
         // Compute most loved restaurants
         const loveCounts = {};
         users.forEach(u => {
-          const loved = Array.isArray(u.loved) ? u.loved : [];
+          const loved = Array.isArray(u.loved) ? u.loved : (u.loved?.loved || []);
           loved.forEach(id => { loveCounts[id] = (loveCounts[id] || 0) + 1; });
         });
         const topLoved = Object.entries(loveCounts)
@@ -69,7 +69,7 @@ export default function AdminAnalytics({ allRestaurants }) {
 
         // Most active users
         const activeUsers = users
-          .map(u => ({ ...u, loveCount: Array.isArray(u.loved) ? u.loved.length : 0 }))
+          .map(u => ({ ...u, loveCount: (Array.isArray(u.loved) ? u.loved : (u.loved?.loved || [])).length }))
           .sort((a, b) => b.loveCount - a.loveCount)
           .slice(0, 20);
 

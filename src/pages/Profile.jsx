@@ -85,6 +85,7 @@ export default function Profile({
   onSharedPhotoSaved,
   onOpenIgImport,
   onRestaurantsChanged,
+  getFlameScore,
 }) {
   const { user } = useUser();
   const { signOut } = useClerk();
@@ -463,8 +464,10 @@ export default function Profile({
     const ids = rows
       .map((row) => (kind === "followers" ? row.follower_id : row.following_id))
       .filter(Boolean);
-    const profiles = await Promise.all(ids.map(async (id) => {
+    const profileResults = await Promise.all(ids.map(async (id) => {
       const { data } = await getUserProfile(id);
+      // Skip deleted users (no profile in user_data)
+      if (!data) return null;
       const rawName = data?.profile_name;
       const username = data?.profile_username || "";
       const displayName = (rawName && rawName !== "User") ? rawName : (username || "New Member");
@@ -475,6 +478,7 @@ export default function Profile({
         profile_photo: data?.profile_photo || null,
       };
     }));
+    const profiles = profileResults.filter(Boolean);
     setSocialModal({ title: kind === "followers" ? "Followers" : "Following", users: profiles, loading: false });
   };
 
@@ -750,7 +754,7 @@ export default function Profile({
           <div className="d-loved-scroll" style={{ padding:"0 20px" }}>
             {activeItems.map(r => {
               const imgSrc = (photoCache && (photoCache[r.id] || photoCache[String(r.id)])) || r.img;
-              const score = Math.min(5, r.googleRating || (r.rating ? r.rating / 2 : 3));
+              const score = getFlameScore ? getFlameScore(r) : Math.min(5, r.googleRating || (r.rating ? r.rating / 2 : 3));
               return (
                 <div key={r.id} className="d-loved-card" onClick={() => onOpenDetail && onOpenDetail(r)}>
                   {imgSrc && <img src={imgSrc} alt={r.name} />}
@@ -831,7 +835,10 @@ export default function Profile({
         const formatTime = (ts) => {
           if (!ts) return "";
           try {
-            const d = new Date(ts);
+            // Sanitize Neo4j nanosecond timestamps to millisecond precision
+            const sanitized = String(ts).replace(/(\.\d{3})\d+/, '$1');
+            const d = new Date(sanitized);
+            if (isNaN(d.getTime())) return "";
             const now = new Date();
             const diffMs = now - d;
             const diffMin = Math.floor(diffMs / 60000);
@@ -846,12 +853,18 @@ export default function Profile({
           } catch { return ""; }
         };
 
+        const computeFlame = (r) => {
+          if (getFlameScore) return getFlameScore(r);
+          const ext = r.googleRating || (r.rating ? r.rating / 2 : 3);
+          return Math.min(5, Math.max(1, Math.round(ext * 2) / 2));
+        };
+
         return (
           <div className="d-activity-section">
             <div className="p-section-label">Recent Activity</div>
             {activityItems.map(r => {
               const imgSrc = (photoCache && (photoCache[r.id] || photoCache[String(r.id)])) || r.img;
-              const score = Math.min(5, r.googleRating || (r.rating ? r.rating / 2 : 3));
+              const score = computeFlame(r);
               return (
                 <div key={r.id} className="d-activity-item" onClick={() => onOpenDetail && onOpenDetail(r)} style={{ cursor:"pointer" }}>
                   {imgSrc && <img className="d-activity-img" src={imgSrc} alt={r.name} />}

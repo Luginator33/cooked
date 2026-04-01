@@ -136,7 +136,7 @@ export async function getRecentLovesForUser(clerkUserId, limit = 5) {
   );
   return (result?.records || []).map(rec => ({
     id: rec.get('id'),
-    timestamp: rec.get('timestamp').toString(),
+    timestamp: rec.get('timestamp').toString().replace(/(\.\d{3})\d+/, '$1'),
   }));
 }
 

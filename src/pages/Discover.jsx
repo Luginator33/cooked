@@ -1174,7 +1174,7 @@ export default function Discover({ tasteProfile, initialTab }) {
         .filter(Boolean);
       setHiddenGems(matched);
     }).catch(e => console.error("[Neo4j] hiddenGems error:", e));
-  }, [user?.id, feedRefreshKey]);
+  }, [user?.id, feedRefreshKey, allRestaurants.length]);
 
   // Auto-refresh feeds every 30 minutes while the app is open
   useEffect(() => {
@@ -1651,6 +1651,8 @@ export default function Discover({ tasteProfile, initialTab }) {
   }, [refreshCommunityRestaurants]);
 
   // Apply admin overrides (edits/deletions) from Supabase
+  const [overrideRefreshKey, setOverrideRefreshKey] = useState(0);
+  const refreshAdminOverrides = useCallback(() => setOverrideRefreshKey(k => k + 1), []);
   useEffect(() => {
     getAdminOverrides().then(overrides => {
       if (!overrides || overrides.length === 0) return;
@@ -1667,7 +1669,7 @@ export default function Discover({ tasteProfile, initialTab }) {
         return result;
       });
     });
-  }, []);
+  }, [overrideRefreshKey]);
 
   useEffect(() => { safeSetItem("cooked_ratings", JSON.stringify(userRatings)); }, [userRatings]);
   useEffect(() => { safeSetItem("cooked_notes", JSON.stringify(userNotes)); }, [userNotes]);
@@ -2279,10 +2281,20 @@ export default function Discover({ tasteProfile, initialTab }) {
     const ext = r.googleRating || (r.rating ? r.rating / 2 : 3);
     return Math.min(3, Math.max(1, Math.round(ext * 2) / 2));
   };
-  const filteredSorted = [...filteredForDiscover].sort((a, b) => {
+  const filteredSorted = useMemo(() => {
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+    const arr = [...filteredForDiscover];
     const score = (r) => (userRatings[r.id] || 0) * 0.3 + getFlameScore(r) * 0.7;
-    return score(b) - score(a);
-  });
+    arr.sort((a, b) => {
+      const diff = score(b) - score(a);
+      if (Math.abs(diff) > 0.1) return diff;
+      // Within same score tier, rotate daily using ID + day
+      const ha = ((Number(a.id) || 0) * 2654435761 + dayOfYear) >>> 0;
+      const hb = ((Number(b.id) || 0) * 2654435761 + dayOfYear) >>> 0;
+      return ha - hb;
+    });
+    return arr;
+  }, [filteredForDiscover.length, userRatings, city, activeFilter, secondaryCuisine, searchQuery, filterMood]);
   const heatCityRestaurants = heatCity === "All" ? allRestaurants : allRestaurants.filter(r => {
     const group = CITY_GROUPS[heatCity] || [heatCity];
     return group.includes(r.city) || group.includes(r.neighborhood);
@@ -2294,7 +2306,12 @@ export default function Discover({ tasteProfile, initialTab }) {
   // but different each day and between users
   const heatDeck = useMemo(() => {
     const arr = [...heatActive, ...heatSkippedRecycled];
-    const seed = ((user?.id || "x").charCodeAt(0) * 31 + new Date().toDateString().length) % 2147483647;
+    // Hash full user ID for a proper per-user seed, use day-of-year for daily variation
+    const uid = user?.id || "x";
+    let h = 0;
+    for (let i = 0; i < uid.length; i++) h = ((h << 5) - h + uid.charCodeAt(i)) | 0;
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+    const seed = ((Math.abs(h) + dayOfYear * 2654435761) >>> 0) % 2147483647 || 1;
     let s = seed;
     for (let i = arr.length - 1; i > 0; i--) {
       s = (s * 16807) % 2147483647;
@@ -4494,13 +4511,14 @@ Return a JSON object with exactly these fields:
             allRestaurants={allRestaurants}
             heatResults={heatResults}
             watchlist={watchlist}
+            getFlameScore={getFlameScore}
             onOpenDetail={setDetailRestaurant}
             onFixPhotos={rePickPhotosForAll}
             clerkName={user?.fullName}
             clerkImageUrl={user?.imageUrl}
             onViewUser={setViewingUserId}
             allCitiesFromDb={dynamicAllCities}
-            onRestaurantsChanged={refreshCommunityRestaurants}
+            onRestaurantsChanged={() => { refreshCommunityRestaurants(); refreshAdminOverrides(); }}
             onOpenIgImport={() => { setIgError(null); setIgAddedRestaurants([]); setIgDone(false); setIgImporting(false); setPickerMode("ig-import"); setIgModal(true); }}
             onSharedPhotoSaved={(restaurantId, photoUrl) => {
               setPhotoResolved((prev) => [...new Set([...prev, restaurantId])]);

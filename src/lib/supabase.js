@@ -273,10 +273,10 @@ export async function getAdminOverrides() {
   return data || [];
 }
 
-export async function upsertAdminOverride(restaurantId, action, overrideData, adminId) {
+export async function upsertAdminOverride(restaurantId, action, overrideData, adminId, mergedIntoId = null) {
   const { error } = await supabase.from('admin_overrides').upsert({
     restaurant_id: String(restaurantId), action, override_data: overrideData || null,
-    merged_into_id: null, created_by: adminId, updated_at: new Date().toISOString(),
+    merged_into_id: mergedIntoId ? String(mergedIntoId) : null, created_by: adminId, updated_at: new Date().toISOString(),
   }, { onConflict: 'restaurant_id' });
   if (error) console.error('upsertAdminOverride:', error);
   return { error };

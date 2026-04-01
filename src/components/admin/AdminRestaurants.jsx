@@ -577,7 +577,7 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
     if (!mergeFrom || !mergeTo || mergeFrom === mergeTo) return;
     await transferLoves(mergeFrom, mergeTo);
     if (isCommunity(mergeFrom)) await deleteCommunityRestaurant(Number(mergeFrom));
-    else await upsertAdminOverride(mergeFrom, "merge_into", null, userId);
+    else await upsertAdminOverride(mergeFrom, "merge_into", null, userId, mergeTo);
     await logAdminAction("restaurant_merge", userId, "restaurant", mergeFrom, { merged_into: mergeTo });
     showToast("Restaurants merged");
     setMergeFrom(""); setMergeTo("");

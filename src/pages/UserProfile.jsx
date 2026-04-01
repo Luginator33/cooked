@@ -212,9 +212,10 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
         const res = await getFollowers(clerkUserId);
         const rows = res?.data || [];
         const ids = rows.map((row) => row.follower_id).filter(Boolean);
-        const profiles = await Promise.all(
+        const profileResults = await Promise.all(
           ids.map(async (id) => {
             const { data } = await getUserProfile(id);
+            if (!data) return null; // Skip deleted users
             return {
               clerk_user_id: id,
               profile_name: (data?.profile_name && data.profile_name !== "User") ? data.profile_name : (data?.profile_username || "New Member"),
@@ -223,7 +224,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
             };
           })
         );
-        if (!cancelled) setFollowersSheetUsers(profiles);
+        if (!cancelled) setFollowersSheetUsers(profileResults.filter(Boolean));
       } finally {
         if (!cancelled) setSheetLoading(false);
       }
@@ -243,9 +244,10 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
         const res = await getFollowing(clerkUserId);
         const rows = res?.data || [];
         const ids = rows.map((row) => row.following_id).filter(Boolean);
-        const profiles = await Promise.all(
+        const profileResults = await Promise.all(
           ids.map(async (id) => {
             const { data } = await getUserProfile(id);
+            if (!data) return null; // Skip deleted users
             return {
               clerk_user_id: id,
               profile_name: (data?.profile_name && data.profile_name !== "User") ? data.profile_name : (data?.profile_username || "New Member"),
@@ -254,7 +256,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
             };
           })
         );
-        if (!cancelled) setFollowingSheetUsers(profiles);
+        if (!cancelled) setFollowingSheetUsers(profileResults.filter(Boolean));
       } finally {
         if (!cancelled) setSheetLoading(false);
       }
