@@ -1494,11 +1494,12 @@ export default function Discover({ tasteProfile, initialTab }) {
       (profiles || []).forEach(p => { profileMap[p.clerk_user_id] = p; });
       inbox.forEach(c => {
         const p = profileMap[c.partnerId];
-        if (p) { c.partnerName = p.profile_name || p.profile_username || "User"; c.partnerPhoto = p.profile_photo; c.partnerUsername = p.profile_username; }
-        else { c.partnerName = "User"; c.partnerPhoto = null; }
+        if (p) { c.partnerName = p.profile_name || p.profile_username || "User"; c.partnerPhoto = p.profile_photo; c.partnerUsername = p.profile_username; c._exists = true; }
+        else { c.partnerName = "User"; c.partnerPhoto = null; c._exists = false; }
       });
     }
-    setDmInbox(inbox);
+    // Filter out deleted users from inbox
+    setDmInbox(inbox.filter(c => c._exists !== false));
   };
 
   const openDmInbox = async () => {

@@ -38,6 +38,14 @@ export default function TasteProfile({ onBack, onViewUser, onOpenDetail, allRest
   const [loading, setLoading] = useState(true);
   const [cuisineBarsReady, setCuisineBarsReady] = useState(false);
 
+  // Push history state so browser/PWA back-swipe works
+  useEffect(() => {
+    window.history.pushState({ tasteProfile: true }, "");
+    const handlePop = () => onBack?.();
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [onBack]);
+
   useEffect(() => {
     if (!user?.id) return;
     Promise.all([
