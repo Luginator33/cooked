@@ -2119,15 +2119,24 @@ export default function Discover({ tasteProfile, initialTab }) {
   });
 
   // Tier 1: filter by venue type (All / Restaurants / Bars & Nightlife / Coffee & Cafes / Hotels)
-  // Hotels detected via: cuisine, tags, name ("Hotel"/"Resort"), or isHotel flag
+  // Hotels detected via: cuisine, tags, name, brand names, or isHotel flag
   const HOTEL_KW = ["hotel", "resort", "lodge", "hostel", "guesthouse", "bed and breakfast", "b&b", "motel"];
   const HOTEL_NAME_KW = ["hotel", "resort"];
+  // Major hotel brands that don't always say "Hotel" in their name
+  const HOTEL_BRANDS = ["four seasons", "ritz-carlton", "ritz carlton", "mandarin oriental", "rosewood", "park hyatt",
+    "hyatt regency", "hyatt ziva", "hyatt zilara", "hyatt centric", "waldorf astoria", "st. regis", "st regis",
+    "w hotel", "edition hotel", "peninsula", "aman ", "amangiri", "amanpuri", "amankora", "amanoi", "amanzoe",
+    "shangri-la", "fairmont", "sofitel", "belmond", "six senses", "one&only", "como hotels", "nobu hotel",
+    "1 hotel", "ace hotel", "soho house", "canopy by hilton", "curio collection", "lxr hotels",
+    "auberge resorts", "montage ", "pendry ", "proper hotel", "virgin hotels",
+    "the standard", "nomad hotel", "graduate hotel", "citizenm", "moxy hotel"];
   const checkIsHotel = (r) => {
     if (r.isHotel === true) return true;
     const cu = (r.cuisine || "").toLowerCase();
     if (HOTEL_KW.some(k => cu.includes(k))) return true;
     const n = (r.name || "").toLowerCase();
     if (HOTEL_NAME_KW.some(k => n.includes(k))) return true;
+    if (HOTEL_BRANDS.some(b => n.includes(b))) return true;
     const tags = Array.isArray(r.tags) ? r.tags : [];
     if (tags.some(t => HOTEL_KW.some(k => t.toLowerCase().includes(k)))) return true;
     return false;
