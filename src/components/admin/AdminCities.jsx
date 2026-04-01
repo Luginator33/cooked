@@ -94,10 +94,14 @@ export default function AdminCities({ allRestaurants, onRestaurantsChanged }) {
   const totalUnapprovedRestaurants = useMemo(() => {
     return unapprovedCities.reduce((sum, [, count]) => sum + count, 0);
   }, [unapprovedCities]);
+  const noCityRestaurants = useMemo(() => {
+    return allRestaurants.filter(r => !r.city || !r.city.trim());
+  }, [allRestaurants]);
   const totalAllRestaurants = allRestaurants.length;
+  const totalUnassigned = totalUnapprovedRestaurants + noCityRestaurants.length;
 
   const sections = [
-    { key: "unapproved", label: "Needs Review", icon: "⚠", count: unapprovedCities.length },
+    { key: "unapproved", label: "Needs Review", icon: "⚠", count: unapprovedCities.length + (noCityRestaurants.length > 0 ? 1 : 0) },
     { key: "approved", label: `Approved (${totalApprovedCityCount})`, icon: "✓" },
     { key: "denied", label: "Denied", icon: "✕", count: deniedCities.length },
   ];
@@ -146,7 +150,7 @@ export default function AdminCities({ allRestaurants, onRestaurantsChanged }) {
           <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em" }}>In Approved Cities</div>
         </div>
         <div style={{ textAlign: "center", flex: 1 }}>
-          <div style={{ fontSize: 20, fontWeight: 700, color: totalUnapprovedRestaurants > 0 ? "#e0a050" : C.dim, fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic" }}>{totalUnapprovedRestaurants.toLocaleString()}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: totalUnassigned > 0 ? "#e0a050" : C.dim, fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic" }}>{totalUnassigned.toLocaleString()}</div>
           <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em" }}>Unassigned</div>
         </div>
       </div>
@@ -174,6 +178,7 @@ export default function AdminCities({ allRestaurants, onRestaurantsChanged }) {
         <UnapprovedPanel
           cities={unapprovedCities}
           allRestaurants={allRestaurants}
+          noCityRestaurants={noCityRestaurants}
           flash={flash}
           onApprove={handleApprove}
           onDeny={addDenied}
@@ -203,7 +208,7 @@ export default function AdminCities({ allRestaurants, onRestaurantsChanged }) {
 // ---------------------------------------------------------------------------
 // UnapprovedPanel — cities in the data that aren't in approved list
 // ---------------------------------------------------------------------------
-function UnapprovedPanel({ cities, allRestaurants, flash, onApprove, onDeny, onRestaurantsChanged, effectiveRegions }) {
+function UnapprovedPanel({ cities, allRestaurants, noCityRestaurants, flash, onApprove, onDeny, onRestaurantsChanged, effectiveRegions }) {
   const [assignCity, setAssignCity] = useState(null);
   const [assignRegion, setAssignRegion] = useState("");
   const [assignTarget, setAssignTarget] = useState("");
@@ -211,8 +216,9 @@ function UnapprovedPanel({ cities, allRestaurants, flash, onApprove, onDeny, onR
   const [mode, setMode] = useState("");
   const [confirmDeny, setConfirmDeny] = useState(null);
   const [denyDeleting, setDenyDeleting] = useState(false);
+  const [showNoCity, setShowNoCity] = useState(false);
 
-  if (cities.length === 0) {
+  if (cities.length === 0 && (!noCityRestaurants || noCityRestaurants.length === 0)) {
     return (
       <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
         All cities are approved or denied. Nothing to review.
@@ -436,6 +442,40 @@ function UnapprovedPanel({ cities, allRestaurants, flash, onApprove, onDeny, onR
           )}
         </div>
       ))}
+
+      {/* No-city restaurants */}
+      {noCityRestaurants && noCityRestaurants.length > 0 && (
+        <div style={{ ...cardStyle, marginTop: 16, marginBottom: 8 }}>
+          <div
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+            onClick={() => setShowNoCity(!showNoCity)}
+          >
+            <div>
+              <span style={{ color: "#e0a050", fontSize: 14, fontWeight: 600 }}>No City Assigned</span>
+              <span style={{ color: C.muted, fontSize: 12, marginLeft: 8 }}>{noCityRestaurants.length} restaurant{noCityRestaurants.length !== 1 ? "s" : ""}</span>
+            </div>
+            <span style={{ color: C.muted, fontSize: 12 }}>{showNoCity ? "▾" : "▸"}</span>
+          </div>
+          {showNoCity && (
+            <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10, maxHeight: 300, overflowY: "auto" }}>
+              <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
+                These restaurants have no city. Find them in Restaurants → Search to add a city.
+              </div>
+              {noCityRestaurants.slice(0, 50).map(r => (
+                <div key={r.id} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 12 }}>
+                  <span style={{ color: C.text }}>{r.name}</span>
+                  <span style={{ color: C.dim }}>{r.cuisine || "—"}</span>
+                </div>
+              ))}
+              {noCityRestaurants.length > 50 && (
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 6, textAlign: "center" }}>
+                  ...and {noCityRestaurants.length - 50} more
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
