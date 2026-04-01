@@ -5,7 +5,7 @@ import { syncFollow } from "../lib/neo4j";
 import { AvatarIcon, STOCK_AVATARS } from "../components/AvatarIcon";
 
 // Auto-follow the app owner on signup — UPDATE THIS with your Clerk user ID from the Clerk dashboard
-const OWNER_CLERK_ID = "REPLACE_WITH_YOUR_CLERK_USER_ID";
+const OWNER_CLERK_ID = "user_3B9bXI2JCTGmvdVl6lRtjQ276W3";
 
 const FLAME_PATH =
   "M91.583336,1 C94.858902,4.038088 94.189636,6.998662 92.316727,10.376994 C86.895416,20.155888 85.394997,30.387159 91.844238,40.137669 C94.758018,44.542976 99.042587,48.235645 103.260361,51.543896 C111.956841,58.365055 117.641266,67.217140 120.816948,77.480293 C122.970314,84.439537 123.615982,91.865288 124.990936,99.383125 C125.884773,97.697456 127.039993,95.775894 127.944977,93.742935 C128.933945,91.521332 129.326263,88.947304 130.661072,86.992996 C131.803146,85.320847 133.925720,83.260689 135.585968,83.285553 C137.393021,83.312607 140.050140,85.157921 140.808014,86.882332 C144.849472,96.078102 149.743393,104.919754 151.119156,115.202736 C152.871628,128.301437 152.701294,141.175125 147.925400,153.556519 C139.636047,175.046417 124.719681,190.729568 102.956436,198.024307 C93.917976,201.053894 83.325455,199.328156 73.460648,200.051529 C66.457748,200.565033 60.038956,198.566650 54.104954,195.470612 C35.696693,185.866180 23.564285,170.592270 20.351917,150.306000 C17.271206,130.851151 16.262779,110.901123 26.722290,92.532166 C29.376348,87.871117 31.035656,82.643089 33.696789,77.986916 C34.711685,76.211151 37.195370,74.463982 39.125217,74.326584 C40.279823,74.244370 42.065300,77.132980 42.850647,78.989388 C44.449970,82.769890 45.564117,86.755646 47.322094,90.502388 C43.896488,53.348236 54.672562,22.806646 86.900139,1.333229 Z";
@@ -91,6 +91,10 @@ const TRAVEL_CITIES = [
   { name: "Copenhagen", img: "https://images.unsplash.com/photo-1538332576228-eb5b4c4de6f5?w=200&q=70" },
   { name: "Austin", img: "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=200&q=70" },
   { name: "Seoul", img: "https://images.unsplash.com/photo-1547981609-4b6bfe67ca0b?w=200&q=70" },
+  { name: "Chicago", img: "https://images.unsplash.com/photo-1494522855154-9297ac14b55f?w=200&q=70" },
+  { name: "San Francisco", img: "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=200&q=70" },
+  { name: "Nashville", img: "https://images.unsplash.com/photo-1587162146766-e06b1189b907?w=200&q=70" },
+  { name: "Lisbon", img: "https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=200&q=70" },
 ];
 
 const CUISINES = [
@@ -103,7 +107,7 @@ const CUISINES = [
 const VIBES = [
   "Date Night", "Late Night", "Group Dinner",
   "Chef's Table", "Hidden Gem", "Instagram Worthy",
-  "Business Dinner", "Outdoor",
+  "Business Dinner", "Outdoor", "Casual Meal",
 ];
 
 const BARS = [
@@ -240,7 +244,7 @@ function CardFanSlide({ onNext, onSignIn }) {
       </div>
 
       <button className="d-btn-gradient" onClick={onNext}>Let's Go</button>
-      <button className="d-btn-ghost" onClick={onSignIn}>Already a member? Sign in</button>
+      <button className="d-btn-ghost" onClick={onSignIn}>Already a member? <span style={{ color: "#ff9632" }}>Sign in</span></button>
     </div>
   );
 }
@@ -373,9 +377,9 @@ function PickHomeCitySlide({ onNext, onSelect }) {
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={2} />
       <div className="ob-title">Where's home?</div>
-      <div className="ob-desc">Pick the city you eat in most</div>
+      <div className="ob-desc">Pick the city where you spend the most time</div>
 
-      <div className="ob-city-grid">
+      <div className="ob-city-grid three-col">
         {HOME_CITIES.map(city => (
           <div
             key={city.name}
@@ -680,6 +684,7 @@ function SwipeGameSlide({ onNext, onSwipeResult }) {
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={5} />
       <div className="ob-title">Swipe to build your taste</div>
+      <div className="ob-desc" style={{ marginBottom: 12 }}>We serve you places one by one. <em style={{ color: "#ff9632", fontStyle: "normal" }}>Heat it up</em>, pass on it or skip it — your taste profile builds with every swipe.</div>
 
       <div className="ob-card-stack">
         {/* Next card — static, full size, always behind, ready to be revealed */}
@@ -711,7 +716,7 @@ function SwipeGameSlide({ onNext, onSwipeResult }) {
             PASS
           </div>
           <div className="ob-stamp ob-stamp-been" style={{ opacity: stampVisible === "watch" ? 1 : 0, transform: "translate(-50%, -50%) rotate(0deg)" }}>
-            HAVEN'T BEEN
+            SKIP FOR NOW
           </div>
         </div>
 
@@ -726,7 +731,7 @@ function SwipeGameSlide({ onNext, onSwipeResult }) {
                   <path d="M21.5 12.5a10 10 0 0 1-16.5 5.7L2.5 16" />
                 </svg>
               </div>
-              <div className="ob-zone-label been-l">HAVEN'T BEEN</div>
+              <div className="ob-zone-label been-l">SKIP FOR NOW</div>
               <div className="ob-zone-sub">Save for later</div>
             </div>
             <div className="ob-zone">
@@ -791,8 +796,8 @@ function FindFriendsSlide({ onNext }) {
       <div className="glow-orb glow-amber glow-1" />
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={6} />
-      <div className="ob-title">Find your people</div>
-      <div className="ob-desc">Follow friends whose taste you trust</div>
+      <div className="ob-title">Better with friends</div>
+      <div className="ob-desc">Follow people whose taste you trust. Their hidden gems <em style={{ color: "#ff9632", fontStyle: "normal" }}>become yours.</em></div>
 
       <input
         className="ob-search-input"
@@ -877,9 +882,9 @@ function ChatConciergeSlide({ onNext }) {
       <div className="glow-orb glow-amber glow-1" />
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={7} />
-      <div className="ob-title">Meet your concierge</div>
+      <div className="ob-title">Meet, Taste Buddy</div>
       <div className="ob-chat-intro">
-        Your personal food AI that knows your taste. Ask it anything &mdash; where to eat tonight, the best date spot, a late-night craving. Try it now.
+        Ask him anything — a vibe, a craving, a neighborhood. He knows your taste, your friends, and where to find the best martini in town.
       </div>
 
       <div className="ob-chat">
@@ -943,7 +948,19 @@ function ChatConciergeSlide({ onNext }) {
 
 // ─── Slide 7: Taste Reveal ───
 
-function TasteRevealSlide({ onNext }) {
+function TasteRevealSlide({ onNext, cuisinesVibes = [], swipeResults = {} }) {
+  // Dynamic score based on actual engagement
+  const picks = cuisinesVibes.length || 0;
+  const swipes = (swipeResults?.loved?.length || 0) + (swipeResults?.noped?.length || 0);
+  const baseScore = 20 + Math.min(picks * 2, 20) + Math.min(swipes * 3, 15);
+  // Add a little randomness so not everyone gets the same number
+  const score = useMemo(() => baseScore + Math.floor(Math.random() * 8), [baseScore]);
+
+  // Show the user's actual top picks (up to 5)
+  const topPills = cuisinesVibes.slice(0, 5);
+  const fallbackPills = ["Italian", "Late Night", "Japanese", "Date Night", "Cocktails"];
+  const pills = topPills.length >= 3 ? topPills : fallbackPills;
+
   return (
     <div className="d-onboarding d-ob-slide" style={{ paddingTop: 60 }}>
       <div className="glow-orb glow-amber glow-1" style={{ opacity: 0.3 }} />
@@ -952,16 +969,14 @@ function TasteRevealSlide({ onNext }) {
 
       <div className="ob-reveal">
         <div className="logo-big" style={{ fontSize: 48, marginBottom: 20 }}>You're cookin'</div>
-        <div className="ob-reveal-score">42</div>
+        <div className="ob-reveal-score">{score}</div>
         <div className="ob-reveal-label">Your starting cooked score</div>
       </div>
 
       <div className="ob-taste-pills">
-        <div className="ob-taste-pill top">Italian</div>
-        <div className="ob-taste-pill top">Late Night</div>
-        <div className="ob-taste-pill top">Japanese</div>
-        <div className="ob-taste-pill other">Date Night</div>
-        <div className="ob-taste-pill other">Cocktails</div>
+        {pills.map((p, i) => (
+          <div key={p} className={`ob-taste-pill ${i < 3 ? "top" : "other"}`}>{p}</div>
+        ))}
       </div>
 
       <div className="ob-desc" style={{ marginTop: 20 }}>
@@ -1375,9 +1390,16 @@ function ProfilePhotoSlide({ onFinish, homeCity, cuisinesVibes, followCities, sw
       // Build profile data from Clerk user + form metadata
       const meta = user.unsafeMetadata || {};
       const dob = meta.dateOfBirth || "";
-      const profileName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User";
+      const profileName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.primaryEmailAddress?.emailAddress?.split("@")[0] || "New Member";
       const username = meta.username || user.username || user.primaryEmailAddress?.emailAddress?.split("@")[0] || "";
       const email = user.primaryEmailAddress?.emailAddress || "";
+
+      // Get the profile photo from localStorage (set during photo slide or earlier)
+      let photoData;
+      try {
+        const saved = localStorage.getItem("cooked_profile_photo");
+        photoData = saved || null;
+      } catch {}
 
       // Save ALL onboarding data to Supabase in one call
       await saveUserData(user.id, {
@@ -1390,6 +1412,7 @@ function ProfilePhotoSlide({ onFinish, homeCity, cuisinesVibes, followCities, sw
         cuisines_vibes: cuisinesVibes || [],
         loved: swipeResults?.loved || [],
         noped: swipeResults?.noped || [],
+        profile_photo: photoData || null,
       });
 
       // Follow selected cities
@@ -1502,7 +1525,7 @@ export default function Onboarding({ onComplete, isGoogleSignup = false }) {
       // Build profile data from Clerk user
       const meta = user.unsafeMetadata || {};
       const dob = meta.dateOfBirth || "";
-      const profileName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User";
+      const profileName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.primaryEmailAddress?.emailAddress?.split("@")[0] || "New Member";
       // Read username from multiple sources: unsafeMetadata > Clerk username > localStorage fallback > email prefix
       const username = meta.username || user.username || localStorage.getItem("cooked_signup_username") || user.primaryEmailAddress?.emailAddress?.split("@")[0] || "";
       const email = user.primaryEmailAddress?.emailAddress || "";
@@ -1512,13 +1535,19 @@ export default function Onboarding({ onComplete, isGoogleSignup = false }) {
         localStorage.setItem("cooked_profile_username", username);
       } catch {}
 
-      // Assign a random avatar
-      const randomAvatar = STOCK_AVATARS[Math.floor(Math.random() * STOCK_AVATARS.length)];
+      // Assign a random avatar (or use one already selected during onboarding)
+      let profilePhoto;
       try {
-        localStorage.setItem("cooked_profile_photo", JSON.stringify({ type: "stock", id: randomAvatar.id, icon: randomAvatar.icon }));
+        const saved = localStorage.getItem("cooked_profile_photo");
+        profilePhoto = saved ? JSON.parse(saved) : null;
       } catch {}
+      if (!profilePhoto) {
+        const randomAvatar = STOCK_AVATARS[Math.floor(Math.random() * STOCK_AVATARS.length)];
+        profilePhoto = { type: "stock", id: randomAvatar.id, icon: randomAvatar.icon };
+        try { localStorage.setItem("cooked_profile_photo", JSON.stringify(profilePhoto)); } catch {}
+      }
 
-      // Save ALL onboarding data to Supabase
+      // Save ALL onboarding data to Supabase (including profile photo!)
       await saveUserData(user.id, {
         profile_name: profileName,
         profile_username: username,
@@ -1529,6 +1558,7 @@ export default function Onboarding({ onComplete, isGoogleSignup = false }) {
         cuisines_vibes: cuisinesVibes || [],
         loved: swipeResults?.loved || [],
         noped: swipeResults?.noped || [],
+        profile_photo: JSON.stringify(profilePhoto),
       });
 
       // Follow selected cities
@@ -1610,7 +1640,7 @@ export default function Onboarding({ onComplete, isGoogleSignup = false }) {
       {slide === 6 && <FindFriendsSlide onNext={goNext} />}
       {slide === 7 && <ChatConciergeSlide onNext={goNext} />}
       {slide === 8 && (
-        <TasteRevealSlide onNext={() => { finishAndSave(); }} />
+        <TasteRevealSlide onNext={() => { finishAndSave(); }} cuisinesVibes={cuisinesVibes} swipeResults={swipeResults} />
       )}
     </div>
   );

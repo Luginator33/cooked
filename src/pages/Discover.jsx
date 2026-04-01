@@ -2079,6 +2079,20 @@ export default function Discover({ tasteProfile, initialTab }) {
     setShowTagPicker(false);
   }, [detailRestaurant]);
 
+  // Push history state for modals so browser back / mobile swipe-back works
+  useEffect(() => {
+    if (!detailRestaurant) return;
+    window.history.pushState({ restaurantDetail: true }, "");
+    const handlePop = () => {
+      setDetailRestaurant(null);
+      setSixDegreesResult(null);
+      setSixDegreesTarget(null);
+      setSixDegreesLoading(false);
+    };
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [detailRestaurant?.id]);
+
   useEffect(() => {
     if (window.google?.maps) { setMapsReady(true); return; }
     if (document.getElementById("gmaps-script")) return;
@@ -4783,7 +4797,7 @@ Return a JSON object with exactly these fields:
               <div className="det-hero-grad" />
               {/* top bar */}
               <div className="det-hero-top">
-                <button type="button" className="det-back-btn" onClick={() => { setDetailRestaurant(null); setSixDegreesResult(null); setSixDegreesTarget(null); setSixDegreesLoading(false); }}>‹</button>
+                <button type="button" className="det-back-btn" onClick={() => window.history.back()}>‹</button>
                 <div className="det-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span></div>
               </div>
               {/* bottom overlay */}

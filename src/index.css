@@ -463,8 +463,11 @@ button:focus-visible {
 
 /* City grid (Step 2 — pick home city) */
 .ob-city-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
   width: 100%; position: relative; z-index: 2; margin-bottom: 20px;
+}
+.ob-city-grid.three-col {
+  grid-template-columns: repeat(3, 1fr); gap: 10px;
 }
 .ob-city-tile {
   border-radius: 14px; overflow: hidden; position: relative;
@@ -1242,7 +1245,7 @@ button:focus-visible {
   display: flex; justify-content: space-between; align-items: center;
 }
 .det-back-btn {
-  width: 34px; height: 34px; min-width: 34px; min-height: 34px;
+  width: 44px; height: 44px; min-width: 44px; min-height: 44px;
   border-radius: 50%; border: none; position: relative;
   background: linear-gradient(170deg, rgba(255,220,180,0.06) 0%, rgba(255,255,255,0.02) 100%);
   backdrop-filter: blur(30px) saturate(1.5); -webkit-backdrop-filter: blur(30px) saturate(1.5);
@@ -1321,6 +1324,9 @@ button:focus-visible {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   border: none; cursor: pointer; position: relative;
   box-shadow: inset 0 0.5px 0 rgba(255,220,180,0.06);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  min-height: 44px;
 }
 .det-action-btn::before {
   content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;

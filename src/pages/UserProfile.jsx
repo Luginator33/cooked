@@ -112,6 +112,18 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
   const { user } = useUser();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
+
+  // Push a history entry so browser back / mobile swipe-back closes this profile
+  useEffect(() => {
+    window.history.pushState({ userProfile: clerkUserId }, "");
+    const handlePop = (e) => {
+      onClose?.();
+    };
+    window.addEventListener("popstate", handlePop);
+    return () => {
+      window.removeEventListener("popstate", handlePop);
+    };
+  }, [clerkUserId, onClose]);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [isFollowingUser, setIsFollowingUser] = useState(false);
@@ -336,8 +348,8 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
 
           <button
             type="button"
-            onClick={onClose}
-            style={{ position: "absolute", top: 16, left: 16, width: 30, height: 30, borderRadius: "50%", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.22)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#ffffff", fontSize: 16, lineHeight: 1, padding: 0 }}
+            onClick={() => window.history.back()}
+            style={{ position: "absolute", top: 16, left: 16, width: 44, height: 44, borderRadius: "50%", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.22)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#ffffff", fontSize: 20, lineHeight: 1, padding: 0, zIndex: 5 }}
           >
             ‹
           </button>
