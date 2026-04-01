@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useClerk, useSignUp, useSignIn, useUser } from "@clerk/clerk-react";
-import { loadSharedPhotos, saveUserData, followCity, followUser } from "../lib/supabase";
+import { loadSharedPhotos, saveUserData, followCity, followUser, getAllUsers, supabase } from "../lib/supabase";
 import { syncFollow } from "../lib/neo4j";
 import { AvatarIcon, STOCK_AVATARS } from "../components/AvatarIcon";
 
@@ -236,7 +236,11 @@ function CardFanSlide({ onNext, onSignIn }) {
       </div>
 
       <div className="logo-big">cooked</div>
-      <p className="tagline">Know where to go <em>tonight</em></p>
+      <p className="tagline" style={{ fontSize: 14, lineHeight: 1.6, maxWidth: 260, margin: "12px auto 0", textAlign: "center", color: "rgba(240,235,226,0.7)" }}>
+        Your personal concierge.<br />
+        Not crowd-sourced. Not algorithmic.<br />
+        <em style={{ color: "#ff9632", fontStyle: "normal" }}>Curated by taste.</em>
+      </p>
 
       <div className="d-dots">
         <div className="d-dot active" />
@@ -779,16 +783,57 @@ function SwipeGameSlide({ onNext, onSwipeResult }) {
 
 // ─── Slide 5: Find Friends ───
 
-function FindFriendsSlide({ onNext }) {
+function FindFriendsSlide({ onNext, onFollowUser }) {
+  const { user } = useUser();
   const [following, setFollowing] = useState(new Set());
+  const [realUsers, setRealUsers] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loadingUsers, setLoadingUsers] = useState(true);
 
-  const toggleFollow = (name) => {
+  // Load real users from the app
+  useEffect(() => {
+    (async () => {
+      try {
+        const users = await getAllUsers(50);
+        // Filter out the current user and the owner (shown separately)
+        const filtered = users.filter(u =>
+          u.clerk_user_id !== user?.id &&
+          u.clerk_user_id !== OWNER_CLERK_ID &&
+          u.profile_name && u.profile_name !== "New Member"
+        );
+        setRealUsers(filtered);
+      } catch (e) { console.warn("Failed to load users:", e); }
+      setLoadingUsers(false);
+    })();
+  }, [user?.id]);
+
+  // Use real users if we have 5+, otherwise show fake friends as placeholder
+  const showUsers = realUsers.length >= 5 ? realUsers : [];
+  const showFakes = realUsers.length < 5;
+
+  const filteredUsers = searchQuery.trim()
+    ? showUsers.filter(u =>
+        (u.profile_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (u.profile_username || "").toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : showUsers;
+
+  const toggleFollow = (id) => {
     setFollowing(prev => {
       const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
+    // Actually follow/unfollow in the backend
+    if (user?.id && id) {
+      if (following.has(id)) {
+        // Already following — unfollow (toggle off)
+      } else {
+        followUser(user.id, id).catch(() => {});
+        syncFollow(user.id, id).catch(() => {});
+      }
+    }
   };
 
   return (
@@ -802,10 +847,12 @@ function FindFriendsSlide({ onNext }) {
       <input
         className="ob-search-input"
         placeholder="Search by name or username..."
+        value={searchQuery}
+        onChange={e => setSearchQuery(e.target.value)}
         style={{ position: "relative", zIndex: 2 }}
       />
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, position: "relative", zIndex: 2, marginBottom: 16 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, position: "relative", zIndex: 2, marginBottom: 16, maxHeight: 360, overflowY: "auto" }}>
         {/* Luga - always following */}
         <div className="ob-friend-card glass">
           <div className="ob-friend-av" style={{ background: "linear-gradient(135deg, #ff9632, #e07850, #c44060)" }}>L</div>
@@ -816,7 +863,29 @@ function FindFriendsSlide({ onNext }) {
           <button className="ob-follow-btn following" style={{ pointerEvents: "none", opacity: 0.7 }}>Following</button>
         </div>
 
-        {FRIENDS.map(f => (
+        {/* Real users from the app */}
+        {!loadingUsers && filteredUsers.map(u => (
+          <div key={u.clerk_user_id} className="ob-friend-card glass">
+            <div className="ob-friend-av" style={{ background: "#8b5e3c", overflow: "hidden" }}>
+              {u.profile_photo ? (() => {
+                try { const p = JSON.parse(u.profile_photo); return p.url ? <img src={p.url} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : (p.icon ? p.icon.charAt(0).toUpperCase() : (u.profile_name||"?").charAt(0)); } catch { return (u.profile_name||"?").charAt(0); }
+              })() : (u.profile_name||"?").charAt(0)}
+            </div>
+            <div className="ob-friend-info">
+              <div className="ob-friend-name">{u.profile_name}</div>
+              <div className="ob-friend-meta">{u.profile_username ? `@${u.profile_username}` : ""}</div>
+            </div>
+            <button
+              className={`ob-follow-btn${following.has(u.clerk_user_id) ? " following" : ""}`}
+              onClick={() => toggleFollow(u.clerk_user_id)}
+            >
+              {following.has(u.clerk_user_id) ? "Following" : "Follow"}
+            </button>
+          </div>
+        ))}
+
+        {/* Fallback fake friends (only shown when < 5 real users exist) */}
+        {showFakes && FRIENDS.map(f => (
           <div key={f.name} className="ob-friend-card glass">
             <div className="ob-friend-av" style={{ background: f.bg }}>{f.initial}</div>
             <div className="ob-friend-info">
@@ -1026,6 +1095,13 @@ function SignUpSlide({ onNext, onSignIn }) {
     setError("");
     setLoading(true);
     try {
+      // Check username uniqueness
+      const { data: existing } = await supabase.from("user_data").select("clerk_user_id").eq("profile_username", form.username.trim()).limit(1);
+      if (existing?.length > 0) {
+        setError("That username is already taken. Please choose another.");
+        setLoading(false);
+        return;
+      }
       await signUp.create({
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
@@ -1103,6 +1179,13 @@ function SignUpSlide({ onNext, onSignIn }) {
     setError("");
     setLoading(true);
     try {
+      // Check username uniqueness
+      const { data: existing } = await supabase.from("user_data").select("clerk_user_id").eq("profile_username", form.username.trim()).limit(1);
+      if (existing?.length > 0) {
+        setError("That username is already taken. Please choose another.");
+        setLoading(false);
+        return;
+      }
       await user.update({
         unsafeMetadata: {
           username: form.username.trim(),
