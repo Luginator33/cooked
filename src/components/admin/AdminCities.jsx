@@ -85,11 +85,20 @@ export default function AdminCities({ allRestaurants, onRestaurantsChanged }) {
     }));
   }, [allCitiesInData, effectiveRegions, customCities]);
 
-  const totalApproved = useMemo(() => effectiveRegions.reduce((sum, r) => sum + r.cities.length, 0), [effectiveRegions]);
+  const totalApprovedCityCount = useMemo(() => effectiveRegions.reduce((sum, r) => sum + r.cities.length, 0), [effectiveRegions]);
+  const totalApprovedRestaurants = useMemo(() => {
+    return Object.entries(allCitiesInData)
+      .filter(([city]) => approvedCities.has(city))
+      .reduce((sum, [, count]) => sum + count, 0);
+  }, [allCitiesInData, approvedCities]);
+  const totalUnapprovedRestaurants = useMemo(() => {
+    return unapprovedCities.reduce((sum, [, count]) => sum + count, 0);
+  }, [unapprovedCities]);
+  const totalAllRestaurants = allRestaurants.length;
 
   const sections = [
     { key: "unapproved", label: "Needs Review", icon: "⚠", count: unapprovedCities.length },
-    { key: "approved", label: `Approved (${totalApproved})`, icon: "✓" },
+    { key: "approved", label: `Approved (${totalApprovedCityCount})`, icon: "✓" },
     { key: "denied", label: "Denied", icon: "✕", count: deniedCities.length },
   ];
 
@@ -125,6 +134,22 @@ export default function AdminCities({ allRestaurants, onRestaurantsChanged }) {
   return (
     <div>
       {toast && <Toast {...toast} />}
+
+      {/* Summary stats */}
+      <div style={{ ...cardStyle, display: "flex", justifyContent: "space-between", marginBottom: 12, padding: "10px 14px" }}>
+        <div style={{ textAlign: "center", flex: 1 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.terracotta, fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic" }}>{totalAllRestaurants.toLocaleString()}</div>
+          <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em" }}>Total Places</div>
+        </div>
+        <div style={{ textAlign: "center", flex: 1 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic" }}>{totalApprovedRestaurants.toLocaleString()}</div>
+          <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em" }}>In Approved Cities</div>
+        </div>
+        <div style={{ textAlign: "center", flex: 1 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: totalUnapprovedRestaurants > 0 ? "#e0a050" : C.dim, fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic" }}>{totalUnapprovedRestaurants.toLocaleString()}</div>
+          <div style={{ fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em" }}>Unassigned</div>
+        </div>
+      </div>
 
       {/* Sub-nav */}
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
