@@ -343,9 +343,22 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
   };
 
   const saveEdit = async () => {
-    const data = { ...editForm, rating: Number(editForm.rating) || 0, lat: Number(editForm.lat) || 0, lng: Number(editForm.lng) || 0, tags: editForm.tags.split(",").map(t => t.trim()).filter(Boolean) };
-    if (isCommunity(editing.id)) await updateCommunityRestaurant(editing.id, data);
-    else await upsertAdminOverride(editing.id, "edit", data, userId);
+    // Map editForm fields to valid Supabase column names
+    const { desc, ...rest } = editForm;
+    const data = {
+      ...rest,
+      description: desc || "",
+      rating: Number(editForm.rating) || 0,
+      lat: Number(editForm.lat) || 0,
+      lng: Number(editForm.lng) || 0,
+      tags: editForm.tags.split(",").map(t => t.trim()).filter(Boolean),
+    };
+    if (isCommunity(editing.id)) {
+      const { error } = await updateCommunityRestaurant(editing.id, data);
+      if (error) { showToast(`Save failed: ${error.message}`, "error"); return; }
+    } else {
+      await upsertAdminOverride(editing.id, "edit", data, userId);
+    }
     await logAdminAction("restaurant_edit", userId, "restaurant", String(editing.id), { name: data.name });
     showToast(`Updated ${data.name}`);
     setEditing(null);
