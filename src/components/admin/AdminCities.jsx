@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
-import { C, cardStyle, inputStyle, btnPrimary, btnSmall, sectionHeader, Toast } from "./adminHelpers";
+import { C, cardStyle, inputStyle, btnPrimary, btnSmall, sectionHeader, Toast, ConfirmDialog } from "./adminHelpers";
 import { CITY_REGIONS, CITY_FLAGS, normalizeCity } from "../../data/restaurants";
+import { deleteCommunityRestaurant } from "../../lib/supabase";
 
 // ---------------------------------------------------------------------------
 // AdminCities — manage approved cities, review unapproved ones, assign regions
@@ -16,22 +17,19 @@ const REGION_OPTIONS = [
   "Canada",
 ];
 
-export default function AdminCities({ allRestaurants }) {
+export default function AdminCities({ allRestaurants, onRestaurantsChanged }) {
   const [section, setSection] = useState("unapproved");
   const [toast, setToast] = useState(null);
+  const [denied, setDenied] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("cooked_denied_cities") || "[]"); }
+    catch { return []; }
+  });
 
   // Build the set of approved cities from CITY_REGIONS
   const approvedCities = useMemo(() => {
     const set = new Set();
     CITY_REGIONS.forEach(r => r.cities.forEach(c => set.add(c)));
     return set;
-  }, []);
-
-  // Build a map: city → region for approved cities
-  const cityToRegion = useMemo(() => {
-    const map = {};
-    CITY_REGIONS.forEach(r => r.cities.forEach(c => { map[c] = r.region; }));
-    return map;
   }, []);
 
   // Find all unique cities in restaurant data
@@ -46,12 +44,20 @@ export default function AdminCities({ allRestaurants }) {
     return counts;
   }, [allRestaurants]);
 
-  // Split into approved vs unapproved
+  // Split into approved vs unapproved (exclude denied)
+  const deniedSet = useMemo(() => new Set(denied), [denied]);
   const unapprovedCities = useMemo(() => {
     return Object.entries(allCitiesInData)
-      .filter(([city]) => !approvedCities.has(city))
-      .sort((a, b) => b[1] - a[1]); // sort by count desc
-  }, [allCitiesInData, approvedCities]);
+      .filter(([city]) => !approvedCities.has(city) && !deniedSet.has(city))
+      .sort((a, b) => b[1] - a[1]);
+  }, [allCitiesInData, approvedCities, deniedSet]);
+
+  // Denied cities with counts
+  const deniedCities = useMemo(() => {
+    return denied
+      .map(c => [c, allCitiesInData[c] || 0])
+      .filter(([, count]) => count > 0);
+  }, [denied, allCitiesInData]);
 
   // Approved cities with counts
   const approvedWithCounts = useMemo(() => {
@@ -65,11 +71,24 @@ export default function AdminCities({ allRestaurants }) {
   const sections = [
     { key: "unapproved", label: "Needs Review", icon: "⚠", count: unapprovedCities.length },
     { key: "approved", label: "Approved", icon: "✓" },
+    { key: "denied", label: "Denied", icon: "✕", count: deniedCities.length },
   ];
 
   const flash = (msg, type = "success") => {
     setToast({ message: msg, type });
     setTimeout(() => setToast(null), 2500);
+  };
+
+  const addDenied = (cityName) => {
+    const updated = [...denied, cityName];
+    setDenied(updated);
+    localStorage.setItem("cooked_denied_cities", JSON.stringify(updated));
+  };
+
+  const removeDenied = (cityName) => {
+    const updated = denied.filter(c => c !== cityName);
+    setDenied(updated);
+    localStorage.setItem("cooked_denied_cities", JSON.stringify(updated));
   };
 
   return (
@@ -98,14 +117,24 @@ export default function AdminCities({ allRestaurants }) {
       {section === "unapproved" && (
         <UnapprovedPanel
           cities={unapprovedCities}
-          approvedCities={approvedCities}
           allRestaurants={allRestaurants}
           flash={flash}
+          onDeny={addDenied}
+          onRestaurantsChanged={onRestaurantsChanged}
         />
       )}
 
       {section === "approved" && (
         <ApprovedPanel regions={approvedWithCounts} />
+      )}
+
+      {section === "denied" && (
+        <DeniedPanel
+          cities={deniedCities}
+          allRestaurants={allRestaurants}
+          flash={flash}
+          onUndeny={removeDenied}
+        />
       )}
     </div>
   );
@@ -114,16 +143,18 @@ export default function AdminCities({ allRestaurants }) {
 // ---------------------------------------------------------------------------
 // UnapprovedPanel — cities in the data that aren't in CITY_REGIONS
 // ---------------------------------------------------------------------------
-function UnapprovedPanel({ cities, approvedCities, allRestaurants, flash }) {
-  const [assignCity, setAssignCity] = useState(null); // city being assigned
+function UnapprovedPanel({ cities, allRestaurants, flash, onDeny, onRestaurantsChanged }) {
+  const [assignCity, setAssignCity] = useState(null);
   const [assignRegion, setAssignRegion] = useState("");
-  const [assignTarget, setAssignTarget] = useState(""); // for "group under existing"
-  const [mode, setMode] = useState(""); // "new" or "group"
+  const [assignTarget, setAssignTarget] = useState("");
+  const [mode, setMode] = useState("");
+  const [confirmDeny, setConfirmDeny] = useState(null);
+  const [denyDeleting, setDenyDeleting] = useState(false);
 
   if (cities.length === 0) {
     return (
       <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
-        All cities are approved. Nothing to review.
+        All cities are approved or denied. Nothing to review.
       </div>
     );
   }
@@ -135,7 +166,6 @@ function UnapprovedPanel({ cities, approvedCities, allRestaurants, flash }) {
     setAssignTarget("");
   };
 
-  // Get sample restaurants for a given city
   const getSamples = (cityName) => {
     return allRestaurants
       .filter(r => {
@@ -146,16 +176,54 @@ function UnapprovedPanel({ cities, approvedCities, allRestaurants, flash }) {
       .map(r => r.name);
   };
 
+  const getRestaurantsForCity = (cityName) => {
+    return allRestaurants.filter(r => {
+      const normalized = normalizeCity(r.city);
+      return normalized === cityName || r.city === cityName;
+    });
+  };
+
+  const handleDenyConfirm = async (cityName) => {
+    setDenyDeleting(true);
+    // Delete community restaurants in this city (IDs >= 100000 are community)
+    const cityRestaurants = getRestaurantsForCity(cityName);
+    const communityOnes = cityRestaurants.filter(r => r.id >= 100000);
+
+    let deleted = 0;
+    for (const r of communityOnes) {
+      const { error } = await deleteCommunityRestaurant(r.id);
+      if (!error) deleted++;
+    }
+
+    // Add to denied list (hides from "Needs Review", hides static ones from app)
+    onDeny(cityName);
+    setConfirmDeny(null);
+    setDenyDeleting(false);
+
+    if (deleted > 0) {
+      flash(`Denied "${cityName}" — deleted ${deleted} imported restaurant${deleted !== 1 ? "s" : ""}`);
+      if (onRestaurantsChanged) onRestaurantsChanged();
+    } else {
+      flash(`Denied "${cityName}" — hidden from app`);
+    }
+  };
+
   return (
     <div>
+      {confirmDeny && (
+        <ConfirmDialog
+          message={`Deny "${confirmDeny}"?\n\nImported restaurants in this city will be deleted. Static restaurants will be hidden from the app.`}
+          onConfirm={() => handleDenyConfirm(confirmDeny)}
+          onCancel={() => setConfirmDeny(null)}
+        />
+      )}
+
       <div style={{ ...sectionHeader, marginBottom: 14 }}>
-        Cities in data not in approved list — assign or group them
+        Cities in data not in approved list
       </div>
 
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 16, lineHeight: 1.5 }}>
-        These cities were imported from research or Google Places. Assign each to a region as a new city, or group it under an existing approved city.
-        <br /><br />
-        <strong style={{ color: C.terra2 }}>Note:</strong> To add aliases (so these auto-map in the future), update the <code>CITY_ALIAS_MAP</code> in <code>restaurants.js</code>.
+        Assign to a region, group under an existing city, or deny to remove.
       </div>
 
       {cities.map(([cityName, count]) => (
@@ -165,17 +233,31 @@ function UnapprovedPanel({ cities, approvedCities, allRestaurants, flash }) {
               <span style={{ color: C.text, fontSize: 14, fontWeight: 600 }}>{cityName}</span>
               <span style={{ color: C.muted, fontSize: 12, marginLeft: 8 }}>{count} restaurant{count !== 1 ? "s" : ""}</span>
             </div>
-            <button
-              type="button"
-              onClick={() => handleStartAssign(cityName)}
-              style={{
-                ...btnSmall,
-                color: C.terracotta,
-                borderColor: "rgba(255,150,50,0.25)",
-              }}
-            >
-              Assign
-            </button>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => setConfirmDeny(cityName)}
+                disabled={denyDeleting}
+                style={{
+                  ...btnSmall,
+                  color: "#e05050",
+                  borderColor: "rgba(224,80,80,0.25)",
+                }}
+              >
+                Deny
+              </button>
+              <button
+                type="button"
+                onClick={() => handleStartAssign(cityName)}
+                style={{
+                  ...btnSmall,
+                  color: C.terracotta,
+                  borderColor: "rgba(255,150,50,0.25)",
+                }}
+              >
+                Assign
+              </button>
+            </div>
           </div>
 
           {/* Sample restaurants */}
@@ -298,6 +380,52 @@ function UnapprovedPanel({ cities, approvedCities, allRestaurants, flash }) {
               </button>
             </div>
           )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DeniedPanel — cities you've rejected
+// ---------------------------------------------------------------------------
+function DeniedPanel({ cities, allRestaurants, flash, onUndeny }) {
+  if (cities.length === 0) {
+    return (
+      <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
+        No denied cities.
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ ...sectionHeader, marginBottom: 14 }}>
+        Denied cities — restaurants removed or hidden
+      </div>
+
+      {cities.map(([cityName, count]) => (
+        <div key={cityName} style={{ ...cardStyle, marginBottom: 8, opacity: 0.6 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <span style={{ color: C.text, fontSize: 14, fontWeight: 600, textDecoration: "line-through" }}>{cityName}</span>
+              <span style={{ color: C.muted, fontSize: 12, marginLeft: 8 }}>{count} remaining</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onUndeny(cityName);
+                flash(`${cityName} moved back to review`);
+              }}
+              style={{
+                ...btnSmall,
+                color: C.terracotta,
+                borderColor: "rgba(255,150,50,0.25)",
+              }}
+            >
+              Undo
+            </button>
+          </div>
         </div>
       ))}
     </div>
