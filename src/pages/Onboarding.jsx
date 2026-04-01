@@ -4,7 +4,7 @@ import { loadSharedPhotos, saveUserData, followCity, followUser, getAllUsers, su
 import { syncFollow } from "../lib/neo4j";
 import { AvatarIcon, STOCK_AVATARS } from "../components/AvatarIcon";
 
-// Auto-follow the app owner on signup — UPDATE THIS with your Clerk user ID from the Clerk dashboard
+// Auto-follow the app owner on signup - UPDATE THIS with your Clerk user ID from the Clerk dashboard
 const OWNER_CLERK_ID = "user_3B9bXI2JCTGmvdVl6lRtjQ276W3";
 
 const FLAME_PATH =
@@ -186,7 +186,7 @@ function CardFanSlide({ onNext, onSignIn }) {
       };
       img.src = src;
     });
-    // Fallback — show after 4s even if some haven't loaded
+    // Fallback - show after 4s even if some haven't loaded
     const t = setTimeout(() => { setPhotosReady(true); setShowPage(true); }, 4000);
     return () => clearTimeout(t);
   }, []);
@@ -224,7 +224,7 @@ function CardFanSlide({ onNext, onSignIn }) {
       <div className="ob-hero-cards">
         {/* First child = glow div */}
         <div className="ob-hero-card" />
-        {/* 24 photo cards — all preloaded before render */}
+        {/* 24 photo cards - all preloaded before render */}
         {HERO_PHOTOS.map((src, i) => (
           <div
             key={i}
@@ -243,12 +243,7 @@ function CardFanSlide({ onNext, onSignIn }) {
         </div>
       </div>
 
-      <div className="d-dots">
-        <div className="d-dot active" />
-        {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="d-dot" />)}
-      </div>
-
-      <button className="d-btn-gradient" onClick={onNext}>Let's Go</button>
+      <button className="d-btn-gradient" style={{ marginTop: 32 }} onClick={onNext}>Let's Go</button>
       <button className="d-btn-ghost" onClick={onSignIn}>Already a member? <span style={{ color: "#ff9632" }}>Sign in</span></button>
     </div>
   );
@@ -551,7 +546,7 @@ function SwipeGameSlide({ onNext, onSwipeResult }) {
   const [dragDelta, setDragDelta] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [showTasteLocked, setShowTasteLocked] = useState(false);
-  const [flyDir, setFlyDir] = useState(null); // 'right' | 'left' | 'up' — current card flying out
+  const [flyDir, setFlyDir] = useState(null); // 'right' | 'left' | 'up' - current card flying out
   const [stampVisible, setStampVisible] = useState(null);
   const dragStart = useRef(null);
   const dragDeltaRef = useRef({ x: 0, y: 0 });
@@ -689,15 +684,15 @@ function SwipeGameSlide({ onNext, onSwipeResult }) {
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={5} />
       <div className="ob-title">Swipe to build your taste</div>
-      <div className="ob-desc" style={{ marginBottom: 12 }}>We serve you places one by one. <em style={{ color: "#ff9632", fontStyle: "normal" }}>Heat it up</em>, pass on it or skip it — your taste profile builds with every swipe.</div>
+      <div className="ob-desc" style={{ marginBottom: 12 }}>We serve you places one by one. <em style={{ color: "#ff9632", fontStyle: "normal" }}>Heat it up</em>, pass on it or skip it - your taste profile builds with every swipe.</div>
 
       <div className="ob-card-stack">
-        {/* Next card — static, full size, always behind, ready to be revealed */}
+        {/* Next card - static, full size, always behind, ready to be revealed */}
         <div className="ob-swipe-card" style={{ zIndex: 1 }}>
           {renderCard(nextR, nextR.rating)}
         </div>
 
-        {/* Current/top card — draggable, flies out on swipe */}
+        {/* Current/top card - draggable, flies out on swipe */}
         <div
           className="ob-swipe-card"
           onPointerDown={handlePointerDown}
@@ -829,7 +824,7 @@ function FindFriendsSlide({ onNext, onFollowUser }) {
     // Actually follow/unfollow in the backend
     if (user?.id && id) {
       if (following.has(id)) {
-        // Already following — unfollow (toggle off)
+        // Already following - unfollow (toggle off)
       } else {
         followUser(user.id, id).catch(() => {});
         syncFollow(user.id, id).catch(() => {});
@@ -954,7 +949,7 @@ function ChatConciergeSlide({ onNext }) {
       <ProgressDots step={7} />
       <div className="ob-title">Meet, Taste Buddy</div>
       <div className="ob-chat-intro">
-        Ask him anything — a vibe, a craving, a neighborhood. He knows your taste, your friends, and where to find the best martini in town.
+        Ask him anything - a vibe, a craving, a neighborhood. He knows your taste, your friends, and where to find the best martini in town.
       </div>
 
       <div className="ob-chat">
@@ -1050,7 +1045,7 @@ function TasteRevealSlide({ onNext, cuisinesVibes = [], swipeResults = {} }) {
       </div>
 
       <div className="ob-desc" style={{ marginTop: 20 }}>
-        Your taste profile is just getting started. The more you swipe, the smarter it gets.
+        Build up your Cooked Score, track your cities and watch your <em style={{ color: "#ff9632", fontStyle: "normal" }}>taste profile evolve</em> with every restaurant you love.
       </div>
 
       <button
@@ -1433,7 +1428,7 @@ function SignUpSlide({ onNext, onSignIn }) {
   );
 }
 
-// ─── Slide 9: Profile Photo (final slide — saves ALL onboarding data) ───
+// ─── Slide 9: Profile Photo (final slide - saves ALL onboarding data) ───
 
 function ProfilePhotoSlide({ onFinish, homeCity, cuisinesVibes, followCities, swipeResults }) {
   const { user } = useUser();
@@ -1678,13 +1673,13 @@ export default function Onboarding({ onComplete, isGoogleSignup = false }) {
   };
 
   const handleSignInSuccess = () => {
-    // User signed in successfully — go straight to Discover
+    // User signed in successfully - go straight to Discover
     localStorage.setItem("cooked_onboarding_v3", "1");
     localStorage.setItem("cooked_onboarding_done", "1");
     onComplete?.();
   };
 
-  // If user returned from Google OAuth — go to slide 1 (SignUpSlide shows "Complete your profile")
+  // If user returned from Google OAuth - go to slide 1 (SignUpSlide shows "Complete your profile")
   useEffect(() => {
     if (isGoogleSignup && slide === 0) {
       setSlide(1);

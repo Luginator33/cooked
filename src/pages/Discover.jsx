@@ -4407,8 +4407,8 @@ Return a JSON object with exactly these fields:
 
                     {/* PASS stamp */}
                     <div style={{ position:"absolute", top:32, right:24, padding:"8px 18px", borderRadius:8, border:"3px solid #f87171", color:"#f87171", fontFamily:"'Inter', sans-serif", fontSize:22, fontWeight:700, letterSpacing:"3px", transform:"rotate(18deg)", opacity: heatFlyDir === 'left' ? 1 : Math.min(1, Math.max(0, -swipeDelta.x - 20) / 60), transition:"opacity 0.05s", pointerEvents:"none", zIndex:8 }}>PASS</div>
-                    {/* HAVEN'T BEEN stamp */}
-                    <div style={{ position:"absolute", top:"40%", left:"50%", transform:"translateX(-50%) rotate(-5deg)", padding:"8px 18px", borderRadius:8, border:"3px solid #facc15", color:"#facc15", fontFamily:"'Inter', sans-serif", fontSize:22, fontWeight:700, letterSpacing:"3px", opacity: heatFlyDir === 'up' ? 1 : Math.min(1, Math.max(0, -swipeDelta.y - 40) / 60), transition:"opacity 0.05s", pointerEvents:"none", zIndex:8 }}>HAVEN'T BEEN</div>
+                    {/* SKIP FOR NOW stamp */}
+                    <div style={{ position:"absolute", top:"40%", left:"50%", transform:"translateX(-50%) rotate(-5deg)", padding:"8px 18px", borderRadius:8, border:"3px solid #facc15", color:"#facc15", fontFamily:"'Inter', sans-serif", fontSize:22, fontWeight:700, letterSpacing:"3px", opacity: heatFlyDir === 'up' ? 1 : Math.min(1, Math.max(0, -swipeDelta.y - 40) / 60), transition:"opacity 0.05s", pointerEvents:"none", zIndex:8 }}>SKIP FOR NOW</div>
 
                     {/* Card info */}
                     <div className="heat-card-info">
@@ -4425,8 +4425,8 @@ Return a JSON object with exactly these fields:
                 </div>
               )}
 
-              {/* Haven't Been label */}
-              {card && <div className="heat-havent-been">↑ HAVEN'T BEEN</div>}
+              {/* Skip For Now label */}
+              {card && <div className="heat-havent-been">↑ SKIP FOR NOW</div>}
 
               {/* Action buttons */}
               {card && (
