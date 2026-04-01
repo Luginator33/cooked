@@ -8,9 +8,11 @@ import AdminContent from "./AdminContent";
 import AdminAnalytics from "./AdminAnalytics";
 import AdminSystem from "./AdminSystem";
 import AdminImports from "./AdminImports";
+import AdminCities from "./AdminCities";
 const TABS = [
   { key: "restaurants", label: "Restaurants" },
   { key: "imports", label: "Imports" },
+  { key: "cities", label: "Cities" },
   { key: "users", label: "Users" },
   { key: "photos", label: "Photos" },
   { key: "content", label: "Content" },
@@ -61,6 +63,7 @@ export default function AdminPanel({ onClose, allRestaurants, userId, onRestaura
         <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 20px 40px" }}>
           {tab === "restaurants" && <AdminRestaurants {...tabProps} />}
           {tab === "imports" && <AdminImports {...tabProps} />}
+          {tab === "cities" && <AdminCities {...tabProps} />}
           {tab === "users" && <AdminUsers {...tabProps} />}
           {tab === "photos" && <AdminPhotos {...tabProps} />}
           {tab === "content" && <AdminContent {...tabProps} />}

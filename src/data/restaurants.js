@@ -274,6 +274,173 @@ const CITY_ALIAS_MAP = {
   "praga": "Prague",
   "estocolmo": "Stockholm",
   "viena": "Vienna",
+  // Google Places localized names (non-Latin scripts)
+  "münchen": "Munich",
+  "frankfurt am main": "Frankfurt",
+  "wien": "Vienna",
+  "tel aviv-yafo": "Tel Aviv",
+  "tel aviv-jaffa": "Tel Aviv",
+  "tel aviv yafo": "Tel Aviv",
+  "montréal": "Montreal",
+  "køben havn": "Copenhagen",
+  "københavn": "Copenhagen",
+  "lisboa": "Lisbon",
+  "bayrut": "Beirut",
+  "الرياض": "Riyadh",
+  "دبي": "Dubai",
+  "بيروت": "Beirut",
+  "תל אביב-יפו": "Tel Aviv",
+  // Miami area
+  "miami beach": "Miami",
+  "sunny isles beach": "Miami",
+  "south miami": "Miami",
+  "surfside": "Miami",
+  "kendall": "Miami",
+  "key biscayne": "Miami",
+  "doral": "Miami",
+  // Scottsdale / Phoenix area
+  "phoenix": "Scottsdale",
+  "chandler": "Scottsdale",
+  "paradise valley": "Scottsdale",
+  // LA metro
+  "south el monte": "Los Angeles",
+  "costa mesa": "Los Angeles",
+  // NY metro
+  "mamaroneck": "New York",
+  "garden city": "New York",
+  // San Diego suburbs
+  "del mar": "San Diego",
+  "bonita": "San Diego",
+  // Sacramento
+  "west sacramento": "Sacramento",
+  // New Orleans
+  "metairie": "New Orleans",
+  // Santa Barbara wine country
+  "los alamos": "Santa Barbara",
+  "los olivos": "Santa Barbara",
+  "santa ynez": "Santa Barbara",
+  "buellton": "Santa Barbara",
+  // Dallas metro
+  "coppell": "Dallas",
+  // Detroit metro
+  "grosse pointe farms": "Detroit",
+  "grosse pointe park": "Detroit",
+  "okemos": "Detroit",
+  "clawson": "Detroit",
+  // Atlanta metro
+  "avondale estates": "Atlanta",
+  // SF area
+  "los gatos": "San Francisco",
+  // Boise area
+  "ketchum": "Boise",
+  // Taormina area
+  "mazzarò": "Taormina",
+  "isola bella": "Taormina",
+  // Sardinia towns
+  "baja sardinia": "Sardinia",
+  "porto rotondo": "Sardinia",
+  "santa margherita di pula": "Sardinia",
+  "carloforte": "Sardinia",
+  "san pantaleo": "Sardinia",
+  "villamassargia": "Sardinia",
+  "castelsardo": "Sardinia",
+  "lu fraili di sotto": "Sardinia",
+  "santa reparata": "Sardinia",
+  "capo d'orso": "Sardinia",
+  "golfo pevero": "Sardinia",
+  "valle dell'erica": "Sardinia",
+  "platamona": "Sardinia",
+  "setti ballas": "Sardinia",
+  "lotzorai": "Sardinia",
+  "liscia di vacca": "Sardinia",
+  "posada": "Sardinia",
+  "la maddalena": "Sardinia",
+  "perdaxius": "Sardinia",
+  "abbasanta": "Sardinia",
+  "tramatza": "Sardinia",
+  // Mallorca towns
+  "cas català-illetes": "Mallorca",
+  "pollença": "Mallorca",
+  "port de sóller": "Mallorca",
+  "cala blava-llucmajor": "Mallorca",
+  "biniaraix": "Mallorca",
+  "bunyola": "Mallorca",
+  "portocolom": "Mallorca",
+  "portopetro": "Mallorca",
+  "magaluf": "Mallorca",
+  "es capdellà": "Mallorca",
+  // Ibiza towns
+  "santa gertrudis de fruitera": "Ibiza",
+  "sant antoni de portmany": "Ibiza",
+  "ses salines": "Ibiza",
+  // UK countryside
+  "kingham": "UK",
+  "kirkby lonsdale": "UK",
+  "north leigh": "UK",
+  "hardway": "UK",
+  "deepcut": "UK",
+  "cowley": "UK",
+  "cartmel": "UK",
+  "hetton": "UK",
+  "charlbury": "UK",
+  "cleeve hill": "UK",
+  "seasalter": "UK",
+  "pensford": "UK",
+  "binsey": "UK",
+  "newby bridge": "UK",
+  "ynyshir": "UK",
+  // Germany suburbs
+  "oberding": "Munich",
+  "eschborn": "Frankfurt",
+  // Spain
+  "san lorenzo de el escorial": "Madrid",
+  // Saudi Arabia
+  "diriyah": "Riyadh",
+  "jeddah": "Riyadh",
+  // Denmark
+  "vejle": "Copenhagen",
+  // Mexico
+  "calvillo": "Guadalajara",
+  "aguascalientes": "Guadalajara",
+  "san pedro tlaquepaque": "Guadalajara",
+  "baja california sur": "Los Cabos",
+  "la ribera": "Los Cabos",
+  "bucerías": "Los Cabos",
+  "puerto nuevo": "Los Cabos",
+  "la paz": "Los Cabos",
+  // Puerto Rico
+  "juncos": "San Juan",
+  "vieques": "San Juan",
+  "culebra": "San Juan",
+  // Costa Rica → Liberia
+  "bagaces": "Liberia",
+  "curubandé de liberia": "Liberia",
+  // South Africa
+  "sandton": "South Africa",
+  "paternoster": "South Africa",
+  "hout bay": "South Africa",
+  // Kalahari region
+  "kuruman": "Kalahari",
+  "mariental": "Kalahari",
+  "maun": "Kalahari",
+  // Tokyo wards
+  "chuo city": "Tokyo",
+  "chiyoda city": "Tokyo",
+  "shinagawa city": "Tokyo",
+  "shinjuku city": "Tokyo",
+  "sumida city": "Tokyo",
+  "bunkyo city": "Tokyo",
+  // Canada
+  "westmount": "Montreal",
+  "burnaby": "Vancouver",
+  "banff": "Whistler",
+  // France
+  "saint-barthélemy-d'anjou": "Paris",
+  // US → nearby approved city
+  "spokane": "Seattle",
+  "cheyenne": "Denver",
+  "palm springs": "Los Angeles",
+  "bilbao": "Barcelona",
 };
 
 // Build a reverse lookup from CITY_GROUPS: neighborhood -> canonical city
