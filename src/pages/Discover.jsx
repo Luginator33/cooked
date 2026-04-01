@@ -4847,7 +4847,7 @@ Return a JSON object with exactly these fields:
               <div className="det-hero-grad" />
               {/* top bar */}
               <div className="det-hero-top">
-                <button type="button" className="det-back-btn" onClick={() => window.history.back()}>‹</button>
+                <button type="button" className="det-back-btn" onClick={() => { setDetailRestaurant(null); setSixDegreesResult(null); setSixDegreesTarget(null); setSixDegreesLoading(false); }}>‹</button>
                 <div className="det-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span></div>
               </div>
               {/* bottom overlay */}

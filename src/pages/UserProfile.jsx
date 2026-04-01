@@ -350,7 +350,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
 
           <button
             type="button"
-            onClick={() => window.history.back()}
+            onClick={() => onClose?.()}
             style={{ position: "absolute", top: 16, left: 16, width: 44, height: 44, borderRadius: "50%", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.22)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#ffffff", fontSize: 20, lineHeight: 1, padding: 0, zIndex: 5 }}
           >
             ‹
