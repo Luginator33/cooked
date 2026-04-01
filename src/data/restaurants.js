@@ -207,6 +207,75 @@ export const CITY_FLAGS = {
   "Montreal":"🇨🇦","Toronto":"🇨🇦","Vancouver":"🇨🇦","Whistler":"🇨🇦",
 };
 
+// ---------------------------------------------------------------------------
+// Custom-approved cities — saved in localStorage by admin, merged at runtime.
+// ---------------------------------------------------------------------------
+const CUSTOM_CITIES_KEY = "cooked_approved_cities";
+
+/**
+ * Read custom-approved cities from localStorage.
+ * Returns array of { city, region, flag } objects.
+ */
+export function getCustomApprovedCities() {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_CITIES_KEY) || "[]"); }
+  catch { return []; }
+}
+
+/**
+ * Save a new custom-approved city.
+ */
+export function addCustomApprovedCity(city, region, flag = "") {
+  const existing = getCustomApprovedCities();
+  if (existing.some(c => c.city === city)) return; // already exists
+  existing.push({ city, region, flag });
+  localStorage.setItem(CUSTOM_CITIES_KEY, JSON.stringify(existing));
+  // Also add to runtime CITY_FLAGS so it shows immediately
+  CITY_FLAGS[city] = flag;
+}
+
+/**
+ * Remove a custom-approved city (undo).
+ */
+export function removeCustomApprovedCity(city) {
+  const existing = getCustomApprovedCities().filter(c => c.city !== city);
+  localStorage.setItem(CUSTOM_CITIES_KEY, JSON.stringify(existing));
+}
+
+/**
+ * Get the full city regions list — base CITY_REGIONS + any custom-approved cities.
+ * This is the function everything should use instead of CITY_REGIONS directly.
+ */
+export function getFullCityRegions() {
+  const custom = getCustomApprovedCities();
+  if (custom.length === 0) return CITY_REGIONS;
+
+  // Deep copy base regions
+  const merged = CITY_REGIONS.map(r => ({ region: r.region, cities: [...r.cities] }));
+
+  for (const { city, region } of custom) {
+    let found = merged.find(r => r.region === region);
+    if (!found) {
+      found = { region, cities: [] };
+      merged.push(found);
+    }
+    if (!found.cities.includes(city)) {
+      found.cities.push(city);
+      found.cities.sort();
+    }
+  }
+  return merged;
+}
+
+/**
+ * Get a flat set of all approved city names (base + custom).
+ */
+export function getAllApprovedCities() {
+  const set = new Set();
+  CITY_REGIONS.forEach(r => r.cities.forEach(c => set.add(c)));
+  getCustomApprovedCities().forEach(c => set.add(c.city));
+  return set;
+}
+
 /**
  * Sort cities within each region: user's followed cities first, then alphabetical.
  * Returns a new array of { region, cities } with the same structure.

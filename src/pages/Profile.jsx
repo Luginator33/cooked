@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useUser, useClerk } from "@clerk/clerk-react";
 import { getFollowers, getFollowing, getUserProfile, saveSharedPhoto, saveUserData, saveUserPhotos, supabase, followCity, unfollowCity, getFollowedCities } from "../lib/supabase";
-import { CITIES, CITY_REGIONS, CITY_FLAGS, sortCityRegions } from "../data/restaurants";
+import { CITIES, CITY_FLAGS, sortCityRegions, getFullCityRegions } from "../data/restaurants";
 import { getCookedScore, getCityReadiness } from "../lib/neo4j";
 import { ProfilePhoto, parseProfilePhoto } from "../components/AvatarIcon";
 import AdminPanel from "../components/admin/AdminPanel";
@@ -677,7 +677,7 @@ export default function Profile({
             </div>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, fontFamily: "'Inter', -apple-system, sans-serif" }}>Tap cities you want to follow. These will show up in your city filter and city readiness.</div>
             <div>
-              {sortCityRegions(CITY_REGIONS, followedCitiesList).map(({ region, cities }) => (
+              {sortCityRegions(getFullCityRegions(), followedCitiesList).map(({ region, cities }) => (
                 <div key={region}>
                   <div style={{ padding:"10px 0 6px", fontFamily:"'Inter', sans-serif", fontSize:8, color:"#ff9632", letterSpacing:"1.8px", textTransform:"uppercase" }}>{region}</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>

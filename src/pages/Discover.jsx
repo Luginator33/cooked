@@ -3,10 +3,10 @@ import { createPortal } from "react-dom";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { SignInButton, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
-import { RESTAURANTS, ALL_TAGS, normalizeCity, CITY_REGIONS as CANONICAL_CITY_REGIONS, sortCityRegions } from "../data/restaurants";
+import { RESTAURANTS, ALL_TAGS, normalizeCity, CITY_REGIONS as CANONICAL_CITY_REGIONS, sortCityRegions, getFullCityRegions } from "../data/restaurants";
 
-/** All cities — imported from restaurants.js single source of truth */
-const BASE_CITY_REGIONS = CANONICAL_CITY_REGIONS;
+/** All cities — base + any admin-approved custom cities */
+const BASE_CITY_REGIONS = getFullCityRegions();
 
 // Auto-classify a city into a region based on keywords/known patterns
 const REGION_HINTS = {

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { C, cardStyle, sectionHeader, StatCard, btnSmall, SearchBar } from "./adminHelpers";
 import { getAnalytics, getActivityLog, getAllUsers, getCommunityRestaurants } from "../../lib/supabase";
 import { getGraphStats, runQuery } from "../../lib/neo4j";
-import { RESTAURANTS, CITIES, CITY_REGIONS, normalizeCity } from "../../data/restaurants";
+import { RESTAURANTS, CITIES, normalizeCity, getFullCityRegions } from "../../data/restaurants";
 
 export default function AdminAnalytics({ allRestaurants }) {
   const [section, setSection] = useState("dashboard");
@@ -146,7 +146,7 @@ export default function AdminAnalytics({ allRestaurants }) {
               </div>
               <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
                 <div onClick={() => setDrillDown({ type: "cities", title: "Restaurants by City" })} style={{ flex: 1, cursor: "pointer" }}>
-                  <StatCard label="Cities" value={CITY_REGIONS.reduce((sum, r) => sum + r.cities.length, 0)} />
+                  <StatCard label="Cities" value={getFullCityRegions().reduce((sum, r) => sum + r.cities.length, 0)} />
                 </div>
                 <div onClick={() => setDrillDown({ type: "cuisines", title: "Cuisines" })} style={{ flex: 1, cursor: "pointer" }}>
                   <StatCard label="Cuisines" value={analytics.cuisineSorted.length} />

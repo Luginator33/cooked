@@ -1,6 +1,10 @@
 import { useState, useMemo } from "react";
 import { C, cardStyle, inputStyle, btnPrimary, btnSmall, sectionHeader, Toast, ConfirmDialog } from "./adminHelpers";
-import { CITY_REGIONS, CITY_FLAGS, normalizeCity } from "../../data/restaurants";
+import {
+  CITY_REGIONS, CITY_FLAGS, normalizeCity,
+  getFullCityRegions, getAllApprovedCities,
+  addCustomApprovedCity, removeCustomApprovedCity, getCustomApprovedCities,
+} from "../../data/restaurants";
 import { deleteCommunityRestaurant } from "../../lib/supabase";
 
 // ---------------------------------------------------------------------------
@@ -15,22 +19,31 @@ const REGION_OPTIONS = [
   "Africa",
   "Middle East",
   "Canada",
+  "South America",
+  "Oceania",
 ];
+
+// Flag lookup by region (for new cities)
+const REGION_FLAG_HINT = {
+  "United States": "🇺🇸",
+  "Canada": "🇨🇦",
+  "Mexico & Caribbean": "🇲🇽",
+};
 
 export default function AdminCities({ allRestaurants, onRestaurantsChanged }) {
   const [section, setSection] = useState("unapproved");
   const [toast, setToast] = useState(null);
+  const [version, setVersion] = useState(0); // bump to re-render after approve/deny
+
   const [denied, setDenied] = useState(() => {
     try { return JSON.parse(localStorage.getItem("cooked_denied_cities") || "[]"); }
     catch { return []; }
   });
 
-  // Build the set of approved cities from CITY_REGIONS
-  const approvedCities = useMemo(() => {
-    const set = new Set();
-    CITY_REGIONS.forEach(r => r.cities.forEach(c => set.add(c)));
-    return set;
-  }, []);
+  // Get effective city regions (base + custom approved)
+  const effectiveRegions = useMemo(() => getFullCityRegions(), [version]);
+  const approvedCities = useMemo(() => getAllApprovedCities(), [version]);
+  const customCities = useMemo(() => getCustomApprovedCities(), [version]);
 
   // Find all unique cities in restaurant data
   const allCitiesInData = useMemo(() => {
@@ -59,24 +72,42 @@ export default function AdminCities({ allRestaurants, onRestaurantsChanged }) {
       .filter(([, count]) => count > 0);
   }, [denied, allCitiesInData]);
 
-  // Approved cities with counts
+  // Approved cities with counts (using effective regions)
   const approvedWithCounts = useMemo(() => {
-    return CITY_REGIONS.map(r => ({
+    return effectiveRegions.map(r => ({
       region: r.region,
-      cities: r.cities.map(c => ({ name: c, count: allCitiesInData[c] || 0, flag: CITY_FLAGS[c] || "" }))
-        .sort((a, b) => b.count - a.count),
+      cities: r.cities.map(c => ({
+        name: c,
+        count: allCitiesInData[c] || 0,
+        flag: CITY_FLAGS[c] || "",
+        isCustom: customCities.some(cc => cc.city === c),
+      })).sort((a, b) => b.count - a.count),
     }));
-  }, [allCitiesInData]);
+  }, [allCitiesInData, effectiveRegions, customCities]);
+
+  const totalApproved = useMemo(() => effectiveRegions.reduce((sum, r) => sum + r.cities.length, 0), [effectiveRegions]);
 
   const sections = [
     { key: "unapproved", label: "Needs Review", icon: "⚠", count: unapprovedCities.length },
-    { key: "approved", label: "Approved", icon: "✓" },
+    { key: "approved", label: `Approved (${totalApproved})`, icon: "✓" },
     { key: "denied", label: "Denied", icon: "✕", count: deniedCities.length },
   ];
 
   const flash = (msg, type = "success") => {
     setToast({ message: msg, type });
     setTimeout(() => setToast(null), 2500);
+  };
+
+  const handleApprove = (cityName, region, flag) => {
+    addCustomApprovedCity(cityName, region, flag);
+    setVersion(v => v + 1);
+    flash(`${cityName} added to ${region}`);
+  };
+
+  const handleUnapprove = (cityName) => {
+    removeCustomApprovedCity(cityName);
+    setVersion(v => v + 1);
+    flash(`${cityName} removed from approved list`);
   };
 
   const addDenied = (cityName) => {
@@ -119,19 +150,23 @@ export default function AdminCities({ allRestaurants, onRestaurantsChanged }) {
           cities={unapprovedCities}
           allRestaurants={allRestaurants}
           flash={flash}
+          onApprove={handleApprove}
           onDeny={addDenied}
           onRestaurantsChanged={onRestaurantsChanged}
+          effectiveRegions={effectiveRegions}
         />
       )}
 
       {section === "approved" && (
-        <ApprovedPanel regions={approvedWithCounts} />
+        <ApprovedPanel
+          regions={approvedWithCounts}
+          onUnapprove={handleUnapprove}
+        />
       )}
 
       {section === "denied" && (
         <DeniedPanel
           cities={deniedCities}
-          allRestaurants={allRestaurants}
           flash={flash}
           onUndeny={removeDenied}
         />
@@ -141,12 +176,13 @@ export default function AdminCities({ allRestaurants, onRestaurantsChanged }) {
 }
 
 // ---------------------------------------------------------------------------
-// UnapprovedPanel — cities in the data that aren't in CITY_REGIONS
+// UnapprovedPanel — cities in the data that aren't in approved list
 // ---------------------------------------------------------------------------
-function UnapprovedPanel({ cities, allRestaurants, flash, onDeny, onRestaurantsChanged }) {
+function UnapprovedPanel({ cities, allRestaurants, flash, onApprove, onDeny, onRestaurantsChanged, effectiveRegions }) {
   const [assignCity, setAssignCity] = useState(null);
   const [assignRegion, setAssignRegion] = useState("");
   const [assignTarget, setAssignTarget] = useState("");
+  const [assignFlag, setAssignFlag] = useState("");
   const [mode, setMode] = useState("");
   const [confirmDeny, setConfirmDeny] = useState(null);
   const [denyDeleting, setDenyDeleting] = useState(false);
@@ -164,6 +200,7 @@ function UnapprovedPanel({ cities, allRestaurants, flash, onDeny, onRestaurantsC
     setMode("");
     setAssignRegion("");
     setAssignTarget("");
+    setAssignFlag("");
   };
 
   const getSamples = (cityName) => {
@@ -185,7 +222,6 @@ function UnapprovedPanel({ cities, allRestaurants, flash, onDeny, onRestaurantsC
 
   const handleDenyConfirm = async (cityName) => {
     setDenyDeleting(true);
-    // Delete community restaurants in this city (IDs >= 100000 are community)
     const cityRestaurants = getRestaurantsForCity(cityName);
     const communityOnes = cityRestaurants.filter(r => r.id >= 100000);
 
@@ -195,16 +231,15 @@ function UnapprovedPanel({ cities, allRestaurants, flash, onDeny, onRestaurantsC
       if (!error) deleted++;
     }
 
-    // Add to denied list (hides from "Needs Review", hides static ones from app)
     onDeny(cityName);
     setConfirmDeny(null);
     setDenyDeleting(false);
 
     if (deleted > 0) {
-      flash(`Denied "${cityName}" — deleted ${deleted} imported restaurant${deleted !== 1 ? "s" : ""}`);
+      flash(`Denied "${cityName}" — deleted ${deleted} restaurant${deleted !== 1 ? "s" : ""}`);
       if (onRestaurantsChanged) onRestaurantsChanged();
     } else {
-      flash(`Denied "${cityName}" — hidden from app`);
+      flash(`Denied "${cityName}"`);
     }
   };
 
@@ -212,18 +247,18 @@ function UnapprovedPanel({ cities, allRestaurants, flash, onDeny, onRestaurantsC
     <div>
       {confirmDeny && (
         <ConfirmDialog
-          message={`Deny "${confirmDeny}"?\n\nImported restaurants in this city will be deleted. Static restaurants will be hidden from the app.`}
+          message={`Deny "${confirmDeny}"?\n\nImported restaurants in this city will be deleted.`}
           onConfirm={() => handleDenyConfirm(confirmDeny)}
           onCancel={() => setConfirmDeny(null)}
         />
       )}
 
       <div style={{ ...sectionHeader, marginBottom: 14 }}>
-        Cities in data not in approved list
+        Cities in data not yet approved
       </div>
 
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 16, lineHeight: 1.5 }}>
-        Assign to a region, group under an existing city, or deny to remove.
+        Approve to add to the city list, group under an existing city, or deny to remove restaurants.
       </div>
 
       {cities.map(([cityName, count]) => (
@@ -238,22 +273,14 @@ function UnapprovedPanel({ cities, allRestaurants, flash, onDeny, onRestaurantsC
                 type="button"
                 onClick={() => setConfirmDeny(cityName)}
                 disabled={denyDeleting}
-                style={{
-                  ...btnSmall,
-                  color: "#e05050",
-                  borderColor: "rgba(224,80,80,0.25)",
-                }}
+                style={{ ...btnSmall, color: "#e05050", borderColor: "rgba(224,80,80,0.25)" }}
               >
                 Deny
               </button>
               <button
                 type="button"
                 onClick={() => handleStartAssign(cityName)}
-                style={{
-                  ...btnSmall,
-                  color: C.terracotta,
-                  borderColor: "rgba(255,150,50,0.25)",
-                }}
+                style={{ ...btnSmall, color: C.terracotta, borderColor: "rgba(255,150,50,0.25)" }}
               >
                 Assign
               </button>
@@ -273,8 +300,7 @@ function UnapprovedPanel({ cities, allRestaurants, flash, onDeny, onRestaurantsC
                   type="button"
                   onClick={() => setMode("new")}
                   style={{
-                    ...btnSmall,
-                    flex: 1,
+                    ...btnSmall, flex: 1,
                     background: mode === "new" ? "rgba(255,150,50,0.12)" : "transparent",
                     color: mode === "new" ? C.terracotta : C.muted,
                     borderColor: mode === "new" ? "rgba(255,150,50,0.25)" : C.border,
@@ -286,8 +312,7 @@ function UnapprovedPanel({ cities, allRestaurants, flash, onDeny, onRestaurantsC
                   type="button"
                   onClick={() => setMode("group")}
                   style={{
-                    ...btnSmall,
-                    flex: 1,
+                    ...btnSmall, flex: 1,
                     background: mode === "group" ? "rgba(255,150,50,0.12)" : "transparent",
                     color: mode === "group" ? C.terracotta : C.muted,
                     borderColor: mode === "group" ? "rgba(255,150,50,0.25)" : C.border,
@@ -302,7 +327,10 @@ function UnapprovedPanel({ cities, allRestaurants, flash, onDeny, onRestaurantsC
                   <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>Select region:</div>
                   <select
                     value={assignRegion}
-                    onChange={e => setAssignRegion(e.target.value)}
+                    onChange={e => {
+                      setAssignRegion(e.target.value);
+                      setAssignFlag(REGION_FLAG_HINT[e.target.value] || "");
+                    }}
                     style={{ ...inputStyle, fontSize: 13, marginBottom: 8 }}
                   >
                     <option value="">Choose region...</option>
@@ -311,21 +339,26 @@ function UnapprovedPanel({ cities, allRestaurants, flash, onDeny, onRestaurantsC
                     ))}
                   </select>
                   {assignRegion && (
-                    <div style={{ fontSize: 11, color: C.dim, marginBottom: 8 }}>
-                      Will add "{cityName}" to {assignRegion} in CITY_REGIONS.
-                      <br />You'll need to add it to <code>restaurants.js</code> manually.
-                    </div>
+                    <>
+                      <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>Flag emoji (optional):</div>
+                      <input
+                        value={assignFlag}
+                        onChange={e => setAssignFlag(e.target.value)}
+                        placeholder="e.g. 🇺🇸"
+                        style={{ ...inputStyle, fontSize: 13, marginBottom: 10 }}
+                      />
+                    </>
                   )}
                   <button
                     type="button"
                     disabled={!assignRegion}
                     onClick={() => {
-                      flash(`${cityName} approved for ${assignRegion}. Add to CITY_REGIONS in restaurants.js`);
+                      onApprove(cityName, assignRegion, assignFlag);
                       setAssignCity(null);
                     }}
                     style={{ ...btnPrimary, width: "100%", opacity: assignRegion ? 1 : 0.4, fontSize: 12 }}
                   >
-                    Approve as New City
+                    Approve "{cityName}" → {assignRegion || "..."}
                   </button>
                 </div>
               )}
@@ -339,29 +372,25 @@ function UnapprovedPanel({ cities, allRestaurants, flash, onDeny, onRestaurantsC
                     style={{ ...inputStyle, fontSize: 13, marginBottom: 8 }}
                   >
                     <option value="">Choose city...</option>
-                    {REGION_OPTIONS.map(region => {
-                      const regionData = CITY_REGIONS.find(r => r.region === region);
-                      if (!regionData) return null;
-                      return (
-                        <optgroup key={region} label={region}>
-                          {regionData.cities.map(c => (
-                            <option key={c} value={c}>{CITY_FLAGS[c] || ""} {c}</option>
-                          ))}
-                        </optgroup>
-                      );
-                    })}
+                    {effectiveRegions.map(regionObj => (
+                      <optgroup key={regionObj.region} label={regionObj.region}>
+                        {regionObj.cities.map(c => (
+                          <option key={c} value={c}>{CITY_FLAGS[c] || ""} {c}</option>
+                        ))}
+                      </optgroup>
+                    ))}
                   </select>
                   {assignTarget && (
                     <div style={{ fontSize: 11, color: C.dim, marginBottom: 8 }}>
-                      Will add "{cityName.toLowerCase()}" → "{assignTarget}" to CITY_ALIAS_MAP.
-                      <br />You'll need to update <code>restaurants.js</code> manually.
+                      All "{cityName}" restaurants will be re-labeled as "{assignTarget}".
                     </div>
                   )}
                   <button
                     type="button"
                     disabled={!assignTarget}
                     onClick={() => {
-                      flash(`${cityName} → ${assignTarget}. Add alias to restaurants.js`);
+                      // TODO: bulk update community_restaurants city field
+                      flash(`${cityName} → ${assignTarget}. Add alias to restaurants.js to make permanent.`);
                       setAssignCity(null);
                     }}
                     style={{ ...btnPrimary, width: "100%", opacity: assignTarget ? 1 : 0.4, fontSize: 12 }}
@@ -389,7 +418,7 @@ function UnapprovedPanel({ cities, allRestaurants, flash, onDeny, onRestaurantsC
 // ---------------------------------------------------------------------------
 // DeniedPanel — cities you've rejected
 // ---------------------------------------------------------------------------
-function DeniedPanel({ cities, allRestaurants, flash, onUndeny }) {
+function DeniedPanel({ cities, flash, onUndeny }) {
   if (cities.length === 0) {
     return (
       <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
@@ -401,7 +430,7 @@ function DeniedPanel({ cities, allRestaurants, flash, onUndeny }) {
   return (
     <div>
       <div style={{ ...sectionHeader, marginBottom: 14 }}>
-        Denied cities — restaurants removed or hidden
+        Denied cities — restaurants removed
       </div>
 
       {cities.map(([cityName, count]) => (
@@ -413,15 +442,8 @@ function DeniedPanel({ cities, allRestaurants, flash, onUndeny }) {
             </div>
             <button
               type="button"
-              onClick={() => {
-                onUndeny(cityName);
-                flash(`${cityName} moved back to review`);
-              }}
-              style={{
-                ...btnSmall,
-                color: C.terracotta,
-                borderColor: "rgba(255,150,50,0.25)",
-              }}
+              onClick={() => { onUndeny(cityName); flash(`${cityName} moved back to review`); }}
+              style={{ ...btnSmall, color: C.terracotta, borderColor: "rgba(255,150,50,0.25)" }}
             >
               Undo
             </button>
@@ -435,7 +457,7 @@ function DeniedPanel({ cities, allRestaurants, flash, onUndeny }) {
 // ---------------------------------------------------------------------------
 // ApprovedPanel — view all approved cities by region with restaurant counts
 // ---------------------------------------------------------------------------
-function ApprovedPanel({ regions }) {
+function ApprovedPanel({ regions, onUnapprove }) {
   const [expanded, setExpanded] = useState(null);
 
   return (
@@ -462,15 +484,27 @@ function ApprovedPanel({ regions }) {
             </div>
 
             {isExpanded && (
-              <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+              <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10 }} onClick={e => e.stopPropagation()}>
                 {r.cities.map(c => (
                   <div key={c.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0" }}>
                     <span style={{ color: c.count > 0 ? C.text : C.dim, fontSize: 13 }}>
                       {c.flag} {c.name}
+                      {c.isCustom && <span style={{ fontSize: 9, color: C.terracotta, marginLeft: 6 }}>ADDED</span>}
                     </span>
-                    <span style={{ color: c.count > 0 ? C.muted : C.dim, fontSize: 12 }}>
-                      {c.count}
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ color: c.count > 0 ? C.muted : C.dim, fontSize: 12 }}>
+                        {c.count}
+                      </span>
+                      {c.isCustom && (
+                        <button
+                          type="button"
+                          onClick={() => onUnapprove(c.name)}
+                          style={{ ...btnSmall, fontSize: 9, padding: "2px 6px", color: "#e05050", borderColor: "rgba(224,80,80,0.2)" }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
