@@ -236,11 +236,12 @@ function CardFanSlide({ onNext, onSignIn }) {
       </div>
 
       <div className="logo-big">cooked</div>
-      <p className="tagline" style={{ fontSize: 14, lineHeight: 1.6, maxWidth: 260, margin: "12px auto 0", textAlign: "center", color: "rgba(240,235,226,0.7)" }}>
-        Your personal concierge.<br />
-        Not crowd-sourced. Not algorithmic.<br />
-        <em style={{ color: "#ff9632", fontStyle: "normal" }}>Curated by taste.</em>
-      </p>
+      <div style={{ textAlign: "center", position: "relative", zIndex: 2, marginTop: 10 }}>
+        <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 22, color: "#f5f0eb", marginBottom: 10 }}>Your personal concierge</div>
+        <div style={{ fontSize: 14, color: "rgba(240,235,226,0.5)", fontFamily: "'Inter', -apple-system, sans-serif", letterSpacing: "0.02em" }}>
+          Not crowd-sourced. Not algorithmic. <span style={{ color: "#ff9632" }}>Curated by taste.</span>
+        </div>
+      </div>
 
       <div className="d-dots">
         <div className="d-dot active" />

@@ -1137,8 +1137,13 @@ export default function Discover({ tasteProfile, initialTab }) {
   }, [allRestaurants.length]);
 
   // Fetch Neo4j-powered discovery feeds (global, then filter by city client-side)
+  // feedRefreshKey increments when feeds should be refreshed (love action, tab switch, timer)
+  const [feedRefreshKey, setFeedRefreshKey] = useState(0);
+  const refreshFeeds = useCallback(() => setFeedRefreshKey(k => k + 1), []);
+
   useEffect(() => {
     if (!user?.id) return;
+    console.log("[Neo4j] Refreshing discovery feeds...");
     getYoudLoveThis(user.id, 30).then(results => {
       const matched = results
         .map(r => {
@@ -1147,7 +1152,7 @@ export default function Discover({ tasteProfile, initialTab }) {
         })
         .filter(Boolean);
       setYoudLoveThis(matched);
-    });
+    }).catch(e => console.error("[Neo4j] youdLoveThis error:", e));
     getRisingRestaurants(30).then(results => {
       const matched = results
         .map(r => {
@@ -1156,7 +1161,7 @@ export default function Discover({ tasteProfile, initialTab }) {
         })
         .filter(Boolean);
       setRisingRestaurants(matched);
-    });
+    }).catch(e => console.error("[Neo4j] rising error:", e));
     getTasteFingerprint(user.id).then(fp => setChatTasteProfile(fp)).catch(() => {});
     getWhoToFollow(user.id, 8).then(setSuggestedFriends).catch(() => {});
     getPeopleLikeYou(user.id, 8).then(setPeopleLikeYou).catch(() => {});
@@ -1168,8 +1173,19 @@ export default function Discover({ tasteProfile, initialTab }) {
         })
         .filter(Boolean);
       setHiddenGems(matched);
-    });
-  }, [user?.id]);
+    }).catch(e => console.error("[Neo4j] hiddenGems error:", e));
+  }, [user?.id, feedRefreshKey]);
+
+  // Auto-refresh feeds every 30 minutes while the app is open
+  useEffect(() => {
+    const interval = setInterval(refreshFeeds, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [refreshFeeds]);
+
+  // Refresh feeds when switching to home tab (so it feels alive)
+  useEffect(() => {
+    if (tab === "home" && user?.id) refreshFeeds();
+  }, [tab]);
 
   // Filter Neo4j sections by selected city — show nothing if no city matches (don't fall back to global)
   const cityMatchesFilter = (rCity) => {
@@ -2273,7 +2289,20 @@ export default function Discover({ tasteProfile, initialTab }) {
   });
   const heatActive = heatCityRestaurants.filter(r => !isLovedCheck(r.id) && !heatResults.noped.includes(r.id) && !heatResults.skipped.includes(r.id));
   const heatSkippedRecycled = heatCityRestaurants.filter(r => heatResults.skipped.includes(r.id));
-  const heatDeck = [...heatActive, ...heatSkippedRecycled];
+  // Shuffle the deck so users don't always see the same first card
+  // Uses a seeded shuffle based on today's date + user id so it's stable within a session
+  // but different each day and between users
+  const heatDeck = useMemo(() => {
+    const arr = [...heatActive, ...heatSkippedRecycled];
+    const seed = ((user?.id || "x").charCodeAt(0) * 31 + new Date().toDateString().length) % 2147483647;
+    let s = seed;
+    for (let i = arr.length - 1; i > 0; i--) {
+      s = (s * 16807) % 2147483647;
+      const j = s % (i + 1);
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }, [heatActive.length, heatSkippedRecycled.length, heatCity, user?.id]);
   const filtered = filteredByCity;
   const listNames = Object.keys(userLists);
   const toggleList = (listName, restaurantId) => {
@@ -2432,6 +2461,9 @@ export default function Discover({ tasteProfile, initialTab }) {
         loved: nextLoved,
       };
     });
+    // Refresh feeds after a love action (debounced — wait for swiping to settle)
+    clearTimeout(window._feedRefreshTimer);
+    window._feedRefreshTimer = setTimeout(refreshFeeds, 5000);
   };
   const toggleWatch = (id) => {
     const normalizedId = isNaN(id) ? id : Number(id);
