@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react"
 import { getYoudLoveThis, getRisingRestaurants, getHiddenGems, getTrendingInFollowedCities } from "../lib/neo4j"
-import { saveResearch, getResearchEntries, deleteResearch } from "../lib/supabase"
+import { saveResearch, getResearchEntries, deleteResearch, saveNewPlaces } from "../lib/supabase"
 
 function safeSetItem(key, value) {
   try {
@@ -21,12 +21,14 @@ function buildSystemPrompt(dynamicKB, userContext, neo4jContext) {
   return `You are the Cooked concierge — a deeply knowledgeable, opinionated friend who has eaten everywhere AND knows where to stay. You know chefs, restaurant groups, the stories behind places, who trained where, which spots share a kitchen lineage. You also know hotels — the best boutique spots, the iconic grande dames, which neighborhoods to stay in, what's overrated and what's worth it. You're the friend people text when they land in a new city.
 
 PERSONALITY:
-- Warm but not performative. "You're going to love this" not "AMAZING!!!!"
+- You text like a person, not a concierge. Lowercase is fine. Fragments are fine. "honestly that place is unreal" is better than "I would highly recommend this establishment."
+- Warm but chill. Not salesy, not performative. No "AMAZING!!" energy.
 - Opinionated. You have favorites. Steer people toward gems, away from tourist traps.
-- Specific. Name the dish. Describe the light. "Get the black cod miso, ask for the patio" not "the food is good."
-- Conversational. Short messages, like texting a friend. Never walls of text.
+- Specific. Name ONE dish. "get the black cod miso, ask for the patio" — that's all you need.
+- SHORT. Every message should feel like a text, not an email. 2-3 sentences max.
 - If someone is vague, ask ONE follow-up — not a list.
-- If you're genuinely unsure about a restaurant, say so honestly rather than making something up.
+- If you're unsure, say so honestly. "haven't been but I've heard good things" is fine.
+- Don't try to be comprehensive. One great rec > four decent ones.
 
 CRITICAL — ORGANIC, VARIED RESPONSES:
 Never be formulaic. Never use the same framing twice in a conversation. The user data below is context you FEEL, not text you READ ALOUD.
@@ -57,9 +59,10 @@ When recommending, proactively draw connections between restaurants. Use your fo
 - Lineage: "The chef at Smyth trained under Grant Achatz at Alinea"
 
 HOW TO RECOMMEND:
-- When you have enough context, give 2-3 specific picks, each with a one-liner why.
-- Talk like a friend: "honestly I think you'd love ___" or "for that vibe it's gotta be ___"
-- Always mention ONE specific dish to order when recommending a restaurant.
+- Give ONE pick. Maybe two if they're different vibes. Not three. Not four.
+- Talk like a friend: "honestly? _Bavel_. the lamb neck is insane." — done.
+- Mention one dish max. Don't describe the whole menu.
+- If they want more, they'll ask. Then you give one more.
 - For RESTAURANTS: only recommend restaurants from the database below. If a restaurant isn't in the database, don't recommend it.
 - When you mention a restaurant, include its reservation/website link if available (from the database). Put the URL on its own line. If the restaurant has an OpenTable, Resy, Tock, or SevenRooms link, use that. Do NOT guess or construct URLs — only use URLs from the database.
 - When asked to book: "I can't actually make reservations for you (yet 👀)" then provide the link.
@@ -107,17 +110,25 @@ Neighborhood-hotel mapping (know what's around each area):
 - Cross-reference with the restaurant database — if the user's hotel is near restaurants in the DB, recommend those specifically
 - For restaurants NOT in the database, you can mention them casually as part of the neighborhood context but always prioritize DB restaurants
 
-RESPONSE FORMAT:
-- Keep messages SHORT (2-5 sentences max per bubble)
-- Break multiple recommendations into separate thoughts
-- Use natural language: "and also—" or "oh wait, one more—"
+RESPONSE FORMAT — THIS IS CRITICAL:
+- You are texting a friend. Not writing a blog post. Not giving a tour.
+- MAX 2-3 sentences per message. That's it. Tight.
+- Give ONE or TWO recs, not four. Less is more. If they want more they'll ask.
+- Never list restaurants in a row with descriptions for each. Just drop one name and why.
+- WRONG: "République is the gold standard. Charlie Chaplin's old studio turned into LA's most beautiful brunch room. The pastry case alone is worth the trip."
+- RIGHT: "_République_ — get the ricotta toast, sit in the courtyard. it's the one."
+- Even shorter is fine: "for that vibe? _Kismet_. every time."
+- Break up thoughts. Send one rec, then follow up casually: "oh and if you want something more low-key — _Sqirl_."
 - Never use bullet points or numbered lists — conversational prose only
 - For restaurant names use _underscores for italics_: _République_ not **République**
 - Never use **asterisks** for bold
 - Never say "Great question!", "Absolutely!", "Of course!" — just respond
-- Never say "Additionally", "Furthermore", "Moreover"
+- Never say "Additionally", "Furthermore", "Moreover", "Since you're looking at"
+- Never start with "Since you're in [city]" or "Here are the spots" — just get into it
 - Never hedge — "go here" not "you might want to consider"
 - If you can say it in 3 words, don't use 8
+- Sound like a cool friend, not a restaurant critic writing a column
+- Use lowercase energy. "honestly _jyan isaac bread_ is the move rn" not "I'd highly recommend Jyan Isaac Bread for an excellent brunch experience"
 
 LA NEIGHBORHOOD GEOGRAPHY:
 - "Westside" = Venice, Santa Monica, Brentwood, Pacific Palisades, Playa Vista, Marina del Rey, Mar Vista, Culver City
@@ -432,6 +443,7 @@ export default function ChatBot({
   const [researchLoading, setResearchLoading] = useState(false)
   const [researchStatus, setResearchStatus] = useState(null) // { type: 'success'|'error', msg }
   const [researchEntries, setResearchEntries] = useState([])
+  const [researchDeep, setResearchDeep] = useState(false)
   const [chipQuestions] = useState(() => {
     const arr = [...SAMPLE_QUESTIONS]
     for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
@@ -497,6 +509,54 @@ export default function ChatBot({
     return text;
   };
 
+  // Process a single page's text through Claude for knowledge extraction
+  const extractKnowledgeFromText = async (text, sourceUrl) => {
+    const res = await fetch("https://cooked-proxy.luga-podesta.workers.dev/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1500,
+        system: `You are a restaurant/hotel/bar knowledge extractor for the app "Cooked". Given content from a blog, article, Instagram post, or website, do TWO things:
+
+1. KNOWLEDGE SUMMARY: Extract key restaurant, bar, hotel, and nightlife insights into a concise knowledge snippet (3-8 sentences). Focus on: place names, specific dishes, chef names, vibes, neighborhoods, what makes places special, insider tips. Write naturally — like notes a knowledgeable friend would jot down.
+
+2. NEW PLACES: List EVERY restaurant, bar, hotel, or nightlife venue mentioned. Format each as:
+NEW_PLACE: Name | City | Neighborhood | Cuisine/Type | Price ($-$$$$) | One-line description
+
+Be thorough — capture every place name mentioned, even briefly. Put the knowledge summary first, then NEW_PLACE lines at the end.
+
+If the content isn't about food/restaurants/hotels/bars/nightlife, say "NOT_RELEVANT" and nothing else.`,
+        messages: [{ role: "user", content: text.slice(0, 10000) }],
+      }),
+    });
+    if (!res.ok) throw new Error("API error");
+    const data = await res.json();
+    const summary = data.content?.[0]?.text || "";
+    if (summary.includes("NOT_RELEVANT")) return { knowledge: null, places: [] };
+
+    console.log("Claude raw response:", summary);
+
+    const places = [];
+    const knowledgeLines = [];
+    summary.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('NEW_PLACE:') || trimmed.startsWith('NEW_PLACE :') || trimmed.startsWith('- NEW_PLACE:') || trimmed.match(/^\d+\.\s*NEW_PLACE:/)) {
+        const parts = trimmed.replace(/^[-\d.]*\s*NEW_PLACE\s*:\s*/, '').split('|').map(s => s.trim());
+        if (parts.length >= 3) {
+          places.push({
+            name: parts[0], city: parts[1], neighborhood: parts[2],
+            cuisine: parts[3] || '', price: parts[4] || '', description: parts[5] || '',
+            source_url: sourceUrl || null, status: 'pending',
+          });
+        }
+      } else {
+        knowledgeLines.push(line);
+      }
+    });
+    return { knowledge: knowledgeLines.join('\n').trim(), places };
+  };
+
   const handleResearchSubmit = async () => {
     const raw = researchUrl.trim();
     if (!raw || researchLoading) return;
@@ -508,18 +568,118 @@ export default function ChatBot({
       const urlMatch = raw.match(/(https?:\/\/\S+)/);
       const sourceUrl = urlMatch ? urlMatch[1] : null;
       const extraText = sourceUrl ? raw.replace(sourceUrl, '').trim() : '';
-      let contentToSummarize = raw;
 
-      // If a URL is present, always try to fetch the page content
-      if (sourceUrl) {
+      if (!sourceUrl) {
+        // Plain text — just process directly
+        setResearchStatus({ type: "info", msg: "Extracting knowledge..." });
+        const result = await extractKnowledgeFromText(raw);
+        if (!result.knowledge) {
+          setResearchStatus({ type: "error", msg: "Content doesn't seem food-related" });
+          setResearchLoading(false);
+          return;
+        }
+        await saveResearch({ url: null, summary: result.knowledge, source_type: "text", created_by: userId });
+        if (result.places.length > 0) await saveNewPlaces(result.places);
+        const { data: updated } = await getResearchEntries(50);
+        researchCacheRef.current = updated || [];
+        setResearchEntries(updated || []);
+        setResearchUrl("");
+        setResearchStatus({ type: "success", msg: result.places.length > 0 ? `Learned! Found ${result.places.length} new place${result.places.length > 1 ? 's' : ''} to review.` : "Learned!" });
+        setTimeout(() => setResearchStatus(null), 4000);
+        return;
+      }
+
+      // Strip UTM/tracking params
+      let cleanUrl = sourceUrl;
+      try { const u = new URL(sourceUrl); ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','fbclid','igshid'].forEach(p => u.searchParams.delete(p)); cleanUrl = u.toString(); } catch {}
+
+      // Deep crawl if toggled on, or if it's a known link-in-bio page
+      const isHubPage = /(likeshop\.me|linktr\.ee|linkin\.bio|link\.bio|beacons\.ai|campsite\.bio|lnk\.to|tap\.bio|shorby\.com|hoo\.be|snipfeed\.co|stan\.store)/i.test(cleanUrl);
+      const shouldCrawl = researchDeep || isHubPage;
+
+      if (shouldCrawl) {
+        // ── DEEP CRAWL MODE ──────────────────────────────────
+        setResearchStatus({ type: "info", msg: "Crawling all links on page..." });
+
+        const crawlRes = await fetch("https://cooked-proxy.luga-podesta.workers.dev/crawl", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: cleanUrl, max_pages: 20 }),
+          signal: AbortSignal.timeout(90000),
+        });
+
+        if (!crawlRes.ok) throw new Error("Crawl failed");
+        const crawlData = await crawlRes.json();
+
+        const allPages = [crawlData.main_page, ...(crawlData.pages || [])].filter(p => p?.text?.length > 100);
+        if (allPages.length === 0) {
+          setResearchStatus({ type: "error", msg: "Couldn't fetch content from those links" });
+          setResearchLoading(false);
+          return;
+        }
+
+        setResearchStatus({ type: "info", msg: `Processing ${allPages.length} pages...` });
+
+        let totalPlaces = [];
+        let totalKnowledge = [];
+        let processed = 0;
+
+        // Process pages in batches of 3 to avoid rate limits
+        for (let i = 0; i < allPages.length; i += 3) {
+          const batch = allPages.slice(i, i + 3);
+          const results = await Promise.allSettled(
+            batch.map(page => extractKnowledgeFromText(page.text, page.url))
+          );
+          for (const r of results) {
+            if (r.status === "fulfilled" && r.value.knowledge) {
+              totalKnowledge.push(r.value.knowledge);
+              totalPlaces.push(...r.value.places);
+            }
+          }
+          processed += batch.length;
+          setResearchStatus({ type: "info", msg: `Processing ${processed}/${allPages.length} pages...` });
+        }
+
+        // Deduplicate places by name+city
+        const seen = new Set();
+        totalPlaces = totalPlaces.filter(p => {
+          const key = `${p.name.toLowerCase()}|${p.city.toLowerCase()}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        // Save all knowledge entries
+        if (totalKnowledge.length > 0) {
+          const combinedKnowledge = totalKnowledge.join('\n\n---\n\n');
+          await saveResearch({ url: cleanUrl, summary: combinedKnowledge.slice(0, 8000), source_type: "crawl", created_by: userId });
+        }
+
+        // Save new places to import queue
+        if (totalPlaces.length > 0) {
+          console.log("Saving new places:", totalPlaces.length, totalPlaces);
+          const saveResult = await saveNewPlaces(totalPlaces);
+          console.log("Save result:", saveResult);
+          if (saveResult.error) console.error("Save new places error:", saveResult.error);
+        } else {
+          console.log("No new places found from crawl");
+        }
+
+        const { data: updated } = await getResearchEntries(50);
+        researchCacheRef.current = updated || [];
+        setResearchEntries(updated || []);
+        setResearchUrl("");
+
+        const msg = `Deep research done! ${allPages.length} pages crawled${totalPlaces.length > 0 ? `, ${totalPlaces.length} new places found` : ''}`;
+        setResearchStatus({ type: "success", msg });
+        setTimeout(() => setResearchStatus(null), 6000);
+
+      } else {
+        // ── SINGLE PAGE MODE ─────────────────────────────────
         setResearchStatus({ type: "info", msg: "Fetching page..." });
-        let fetched = false;
+        let contentToSummarize = null;
 
-        // Strip UTM params for cleaner fetch
-        let cleanUrl = sourceUrl;
-        try { const u = new URL(sourceUrl); ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','fbclid'].forEach(p => u.searchParams.delete(p)); cleanUrl = u.toString(); } catch {}
-
-        // Try our Cloudflare Worker first (no CORS issues)
+        // Try our Cloudflare Worker first
         try {
           const workerRes = await fetch("https://cooked-proxy.luga-podesta.workers.dev/fetch-url", {
             method: "POST",
@@ -531,120 +691,63 @@ export default function ChatBot({
             const workerData = await workerRes.json();
             if (workerData.text?.length > 100) {
               contentToSummarize = workerData.text.slice(0, 12000);
-              if (extraText) contentToSummarize += `\n\nContext: ${extraText}`;
-              fetched = true;
             }
           }
         } catch {}
 
         // Fallback: try CORS proxies
-        if (!fetched) {
+        if (!contentToSummarize) {
           const proxies = [
             (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
             (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
           ];
           for (const makeProxy of proxies) {
-            if (fetched) break;
+            if (contentToSummarize) break;
             try {
-              const proxyUrl = makeProxy(cleanUrl);
-              const fetchRes = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+              const fetchRes = await fetch(makeProxy(cleanUrl), { signal: AbortSignal.timeout(8000) });
               if (fetchRes.ok) {
                 const html = await fetchRes.text();
                 const extracted = extractTextFromHtml(html);
-                if (extracted.length > 100) {
-                  contentToSummarize = extracted.slice(0, 12000);
-                  if (extraText) contentToSummarize += `\n\nContext: ${extraText}`;
-                  fetched = true;
-                }
+                if (extracted.length > 100) contentToSummarize = extracted.slice(0, 12000);
               }
             } catch {}
           }
         }
 
-        // If fetch failed but user provided extra text, use that
-        if (!fetched && extraText.length > 20) {
+        if (!contentToSummarize && extraText.length > 20) {
           contentToSummarize = extraText;
-        } else if (!fetched) {
+        } else if (!contentToSummarize) {
           setResearchStatus({ type: "error", msg: "Couldn't fetch that page — paste the text/caption directly instead" });
           setResearchLoading(false);
           return;
         }
-      }
 
-      setResearchStatus({ type: "info", msg: "Extracting knowledge..." });
+        if (extraText) contentToSummarize += `\n\nContext: ${extraText}`;
 
-      // Send to Claude to extract restaurant/food knowledge
-      const res = await fetch("https://cooked-proxy.luga-podesta.workers.dev/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          system: `You are a restaurant/hotel knowledge extractor for the app "Cooked". Given content from a blog, article, Instagram post, or website, do TWO things:
+        setResearchStatus({ type: "info", msg: "Extracting knowledge..." });
+        const result = await extractKnowledgeFromText(contentToSummarize, cleanUrl);
 
-1. KNOWLEDGE SUMMARY: Extract key restaurant, bar, and hotel insights into a concise knowledge snippet (3-8 sentences). Focus on: place names, specific dishes, chef names, vibes, neighborhoods, what makes places special, insider tips. Write naturally — like notes a knowledgeable friend would jot down.
-
-2. NEW PLACES: List any restaurants, bars, or hotels mentioned that might be worth adding to our database. Format each as:
-NEW_PLACE: Name | City | Neighborhood | Cuisine/Type | Price ($-$$$$) | One-line description
-
-Put the knowledge summary first, then any NEW_PLACE lines at the end.
-
-If the content isn't about food/restaurants/hotels/bars, say "NOT_RELEVANT" and nothing else.`,
-          messages: [{ role: "user", content: contentToSummarize.slice(0, 10000) }],
-        }),
-      });
-
-      if (!res.ok) throw new Error("API error");
-      const data = await res.json();
-      const summary = data.content?.[0]?.text || "";
-
-      if (summary.includes("NOT_RELEVANT")) {
-        setResearchStatus({ type: "error", msg: "Content doesn't seem food-related" });
-        setResearchLoading(false);
-        return;
-      }
-
-      // Parse out NEW_PLACE entries
-      const newPlaces = [];
-      const knowledgeLines = [];
-      summary.split('\n').forEach(line => {
-        if (line.startsWith('NEW_PLACE:')) {
-          const parts = line.replace('NEW_PLACE:', '').split('|').map(s => s.trim());
-          if (parts.length >= 3) {
-            newPlaces.push({ name: parts[0], city: parts[1], neighborhood: parts[2], cuisine: parts[3] || '', price: parts[4] || '', desc: parts[5] || '' });
-          }
-        } else {
-          knowledgeLines.push(line);
+        if (!result.knowledge) {
+          setResearchStatus({ type: "error", msg: "Content doesn't seem food-related" });
+          setResearchLoading(false);
+          return;
         }
-      });
-      const knowledgeSummary = knowledgeLines.join('\n').trim();
 
-      // Save knowledge to Supabase
-      const { error } = await saveResearch({
-        url: sourceUrl,
-        summary: knowledgeSummary,
-        source_type: sourceUrl ? "link" : "text",
-        created_by: userId,
-      });
+        await saveResearch({ url: cleanUrl, summary: result.knowledge, source_type: "link", created_by: userId });
+        if (result.places.length > 0) await saveNewPlaces(result.places);
 
-      if (error) throw error;
+        const { data: updated } = await getResearchEntries(50);
+        researchCacheRef.current = updated || [];
+        setResearchEntries(updated || []);
+        setResearchUrl("");
 
-      // Refresh cache
-      const { data: updated } = await getResearchEntries(50);
-      researchCacheRef.current = updated || [];
-      setResearchEntries(updated || []);
-      setResearchUrl("");
-
-      const placeCount = newPlaces.length;
-      setResearchStatus({ type: "success", msg: placeCount > 0 ? `Learned! Found ${placeCount} new place${placeCount > 1 ? 's' : ''} to review.` : "Learned!" });
-      // Store new places for admin to review
-      if (newPlaces.length > 0) {
-        try { safeSetItem("cooked_research_new_places", JSON.stringify([...JSON.parse(localStorage.getItem("cooked_research_new_places") || "[]"), ...newPlaces])); } catch {}
+        const placeCount = result.places.length;
+        setResearchStatus({ type: "success", msg: placeCount > 0 ? `Learned! Found ${placeCount} new place${placeCount > 1 ? 's' : ''} to review.` : "Learned!" });
+        setTimeout(() => setResearchStatus(null), 4000);
       }
-      setTimeout(() => setResearchStatus(null), 3000);
     } catch (err) {
       console.error("Research error:", err);
-      setResearchStatus({ type: "error", msg: "Failed to process — try pasting the text directly" });
+      setResearchStatus({ type: "error", msg: "Failed to process — try again or paste the text directly" });
     } finally {
       setResearchLoading(false);
     }
@@ -783,10 +886,14 @@ If the content isn't about food/restaurants/hotels/bars, say "NOT_RELEVANT" and 
         {/* Admin Research Panel — single instance */}
         {isAdmin && showResearch && (
           <div style={{ background: "rgba(255,150,50,0.06)", border: "1px solid rgba(255,150,50,0.15)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: C.terracotta, marginBottom: 8, fontFamily: "'Inter', -apple-system, sans-serif" }}>Feed the bot</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: C.terracotta, marginBottom: 4, fontFamily: "'Inter', -apple-system, sans-serif" }}>Feed the bot</div>
+            <div style={{ fontSize: 10, color: C.muted, marginBottom: 8, fontFamily: "'Inter', -apple-system, sans-serif" }}>Paste a link — articles, link-in-bio pages, blogs.</div>
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-              <textarea value={researchUrl} onChange={e => setResearchUrl(e.target.value)} placeholder="Paste text from an article, IG caption, blog..." rows={2} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif", outline: "none", resize: "vertical", minHeight: 48, maxHeight: 120 }} />
-              <button type="button" onClick={handleResearchSubmit} disabled={!researchUrl.trim() || researchLoading} style={{ background: C.terracotta, border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: researchUrl.trim() && !researchLoading ? "pointer" : "default", opacity: !researchUrl.trim() || researchLoading ? 0.5 : 1, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap", height: 36 }}>{researchLoading ? "Learning..." : "Learn"}</button>
+              <textarea value={researchUrl} onChange={e => setResearchUrl(e.target.value)} placeholder="Paste a URL or text..." rows={2} style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif", outline: "none", resize: "vertical", minHeight: 48, maxHeight: 120 }} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <button type="button" onClick={handleResearchSubmit} disabled={!researchUrl.trim() || researchLoading} style={{ background: C.terracotta, border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: researchUrl.trim() && !researchLoading ? "pointer" : "default", opacity: !researchUrl.trim() || researchLoading ? 0.5 : 1, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap", height: 36 }}>{researchLoading ? "Learning..." : "Learn"}</button>
+                <button type="button" onClick={() => setResearchDeep(v => !v)} style={{ background: researchDeep ? "rgba(255,150,50,0.2)" : "rgba(255,255,255,0.05)", border: researchDeep ? "1px solid rgba(255,150,50,0.4)" : "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: "3px 8px", fontSize: 9, fontWeight: 600, color: researchDeep ? C.terracotta : C.muted, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap", letterSpacing: "0.05em" }}>{researchDeep ? "DEEP ON" : "DEEP"}</button>
+              </div>
             </div>
             {researchStatus && <div style={{ marginTop: 6, fontSize: 11, color: researchStatus.type === "success" ? "#4ade80" : researchStatus.type === "info" ? C.terracotta : "#f87171", fontFamily: "'Inter', -apple-system, sans-serif" }}>{researchStatus.msg}</div>}
             {researchEntries.length > 0 && (

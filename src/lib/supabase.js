@@ -511,3 +511,56 @@ export async function deleteResearch(id) {
   const { error } = await supabase.from('chatbot_research').delete().eq('id', id);
   return { error };
 }
+
+// ── RESEARCH NEW PLACES (Import Queue) ───────────────────
+export async function saveNewPlaces(places) {
+  if (!places?.length) return { data: [], error: null };
+  const { data, error } = await supabase.from('research_new_places').insert(places).select();
+  return { data, error };
+}
+
+export async function getNewPlaces(status = 'pending', limit = 100) {
+  const { data, error } = await supabase
+    .from('research_new_places')
+    .select('*')
+    .eq('status', status)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return { data: data || [], error };
+}
+
+export async function updateNewPlaceStatus(id, status) {
+  const { error } = await supabase.from('research_new_places').update({ status, reviewed_at: new Date().toISOString() }).eq('id', id);
+  return { error };
+}
+
+export async function deleteNewPlace(id) {
+  const { error } = await supabase.from('research_new_places').delete().eq('id', id);
+  return { error };
+}
+
+// ── AUTO-RESEARCH SOURCES ────────────────────────────────
+export async function getResearchSources() {
+  const { data, error } = await supabase
+    .from('research_sources')
+    .select('*')
+    .order('created_at', { ascending: false });
+  return { data: data || [], error };
+}
+
+export async function addResearchSource({ url, name, max_pages = 10 }) {
+  const { data, error } = await supabase.from('research_sources').insert({
+    url, name, max_pages, active: true,
+  }).select().single();
+  return { data, error };
+}
+
+export async function updateResearchSource(id, updates) {
+  const { error } = await supabase.from('research_sources').update(updates).eq('id', id);
+  return { error };
+}
+
+export async function deleteResearchSource(id) {
+  const { error } = await supabase.from('research_sources').delete().eq('id', id);
+  return { error };
+}

@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
         workbox: {
           maximumFileSizeToCacheInBytes: 8 * 1024 * 1024, // 8MB — large bundle
           globPatterns: ['**/*.{js,css,html,svg}'],
+          navigateFallbackDenylist: [/^\/install-guide\.html/],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
