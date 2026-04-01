@@ -16,13 +16,19 @@ const VENUE_TYPES = [
 ];
 
 const CUISINE_OPTIONS = [
-  "American", "Italian", "French", "Japanese", "Sushi", "Ramen", "Korean", "Chinese",
-  "Mexican", "Seafood", "Steakhouse", "Mediterranean", "Spanish", "Thai", "Vietnamese",
-  "Indian", "Pizza", "Peruvian", "Contemporary", "Vegan", "Bakery", "Sandwiches",
+  "African", "American", "Argentine", "Bakery", "Beer Bar", "Boutique Hotel", "Brazilian",
+  "Brewery", "British", "Café", "Caribbean", "Chinese", "Cocktail Bar", "Coffee",
+  "Contemporary", "Cuban", "Design Hotel", "Dive Bar", "Espresso Bar", "Filipino",
+  "French", "German", "Greek", "Hawaiian", "Historic Hotel", "Hookah Lounge", "Hotel",
+  "Hotel Bar", "Indian", "Italian", "Japanese", "Jazz Bar", "Karaoke Bar", "Korean",
+  "Lounge", "Luxury Hotel", "Matcha", "Mediterranean", "Members Club", "Mexican",
+  "Mezcal Bar", "Middle Eastern", "Nightclub", "Peruvian", "Pizza", "Pub", "Ramen",
+  "Resort", "Rooftop Bar", "Sake Bar", "Sandwiches", "Seafood", "Speakeasy", "Spanish",
+  "Steakhouse", "Sushi", "Taiwanese", "Tea House", "Thai", "Tiki Bar", "Turkish",
+  "Vegan", "Vietnamese", "Whiskey Bar", "Wine Bar",
 ];
 
 const PRICE_OPTIONS = ["$", "$$", "$$$", "$$$$"];
-const PAGE_SIZE = 30;
 
 const BAR_KEYWORDS = ["bar", "cocktail", "wine bar", "lounge", "pub", "speakeasy", "nightclub", "brewery", "dive", "jazz", "karaoke", "hookah", "tiki", "rooftop"];
 const COFFEE_KEYWORDS = ["coffee", "cafe", "café", "espresso", "tea house", "matcha", "bakery cafe"];
@@ -175,8 +181,17 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
   const [browseCuisine, setBrowseCuisine] = useState("");
   const [browsePrice, setBrowsePrice] = useState("");
   const [browseSearch, setBrowseSearch] = useState("");
+  const [browseSource, setBrowseSource] = useState("");
   const [browsePage, setBrowsePage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
   const [expandedId, setExpandedId] = useState(null);
+
+  // Bulk edit state
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelected, setBulkSelected] = useState(new Set());
+  const [bulkEditField, setBulkEditField] = useState("city");
+  const [bulkEditValue, setBulkEditValue] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   // Flame score state
   const [allFlameScores, setAllFlameScores] = useState({});
@@ -276,20 +291,28 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
   // ── BROWSE FILTERING ──
   const browseFiltered = useMemo(() => {
     return allRestaurants.filter(r => {
-      if (browseCity && r.city !== browseCity) return false;
+      if (browseCity === "__none__") {
+        if (r.city && r.city.trim()) return false;
+      } else if (browseCity) {
+        if (r.city !== browseCity) return false;
+      }
       if (!matchesVenueType(r, browseVenue)) return false;
       if (browseCuisine && !(r.cuisine || "").toLowerCase().includes(browseCuisine.toLowerCase())) return false;
       if (browsePrice && r.price !== browsePrice) return false;
+      if (browseSource === "original" && Number(r.id) >= 100000) return false;
+      if (browseSource === "Admin Import" && r.source !== "Admin Import") return false;
+      if (browseSource === "research_import" && r.source !== "research_import") return false;
+      if (browseSource === "community" && !(r.source && r.source.startsWith("Found by"))) return false;
       if (browseSearch.trim().length >= 2) {
         const q = browseSearch.toLowerCase();
         if (!(r.name || "").toLowerCase().includes(q) && !String(r.id).includes(browseSearch.trim())) return false;
       }
       return true;
     });
-  }, [allRestaurants, browseCity, browseVenue, browseCuisine, browsePrice, browseSearch]);
+  }, [allRestaurants, browseCity, browseVenue, browseCuisine, browsePrice, browseSource, browseSearch]);
 
-  const totalPages = Math.ceil(browseFiltered.length / PAGE_SIZE);
-  const browsePaged = browseFiltered.slice(browsePage * PAGE_SIZE, (browsePage + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(browseFiltered.length / pageSize);
+  const browsePaged = browseFiltered.slice(browsePage * pageSize, (browsePage + 1) * pageSize);
 
   // ── SEARCH (old mode) ──
   const filtered = useMemo(() => {
@@ -525,6 +548,98 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
     onRestaurantsChanged?.();
   };
 
+  // ── BULK EDIT ──
+  const toggleBulkSelect = (id) => {
+    setBulkSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllOnPage = () => {
+    setBulkSelected(prev => {
+      const next = new Set(prev);
+      browsePaged.forEach(r => next.add(r.id));
+      return next;
+    });
+  };
+
+  const deselectAll = () => setBulkSelected(new Set());
+
+  // For merge mode — which selected item is the "keep" target
+  const [mergeKeepId, setMergeKeepId] = useState(null);
+
+  const bulkApply = async () => {
+    // Merge has its own flow
+    if (bulkEditField === "merge") {
+      if (bulkSelected.size !== 2 || !mergeKeepId) return;
+      const ids = [...bulkSelected];
+      const removeId = ids.find(id => id !== mergeKeepId);
+      if (!removeId) return;
+      setBulkSaving(true);
+      try {
+        await transferLoves(String(removeId), String(mergeKeepId));
+        if (isCommunity(removeId)) await deleteCommunityRestaurant(removeId);
+        else await upsertAdminOverride(removeId, "merge_into", { merged_into: String(mergeKeepId) }, userId);
+        await logAdminAction("restaurant_merge", userId, "restaurant", String(removeId), { merged_into: String(mergeKeepId) });
+        showToast(`Merged into ${allRestaurants.find(r => r.id === mergeKeepId)?.name || mergeKeepId}`);
+      } catch (e) { showToast(`Merge failed: ${e.message}`, "error"); }
+      setBulkSaving(false);
+      setBulkSelected(new Set());
+      setMergeKeepId(null);
+      setBulkEditValue("");
+      onRestaurantsChanged?.();
+      return;
+    }
+
+    if (bulkSelected.size === 0 || !bulkEditField || !bulkEditValue) return;
+    setBulkSaving(true);
+    let count = 0;
+    for (const id of bulkSelected) {
+      const r = allRestaurants.find(ar => ar.id === id);
+      if (!r) continue;
+      try {
+        if (bulkEditField === "flames") {
+          const s = Math.min(5, Math.max(0.5, parseFloat(bulkEditValue)));
+          if (isNaN(s)) continue;
+          await supabase.from("restaurant_flame_scores").upsert({
+            restaurant_id: String(id),
+            flame_score: s,
+            interaction_count: 999,
+            community_score: s,
+            external_score: s,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "restaurant_id" });
+          setAllFlameScores(prev => ({ ...prev, [String(id)]: { flame_score: s, interaction_count: 999, community_score: s, external_score: s } }));
+        } else if (bulkEditField === "city") {
+          const data = { city: bulkEditValue };
+          if (isCommunity(id)) await updateCommunityRestaurant(id, data);
+          else await upsertAdminOverride(id, "edit", data, userId);
+        } else if (bulkEditField === "venue_type") {
+          const data = {};
+          if (bulkEditValue === "Hotel") { data.isHotel = true; data.tags = [...(r.tags || []), "hotel"]; }
+          else if (bulkEditValue === "Bar") { data.isBar = true; }
+          else if (bulkEditValue === "Coffee") { data.isBar = false; data.isHotel = false; }
+          else if (bulkEditValue === "Restaurant") { data.isBar = false; data.isHotel = false; }
+          if (isCommunity(id)) await updateCommunityRestaurant(id, data);
+          else await upsertAdminOverride(id, "edit", data, userId);
+        } else if (bulkEditField === "cuisine") {
+          const data = { cuisine: bulkEditValue };
+          if (isCommunity(id)) await updateCommunityRestaurant(id, data);
+          else await upsertAdminOverride(id, "edit", data, userId);
+        }
+        count++;
+      } catch (e) { console.error(`Bulk edit failed for ${id}:`, e); }
+    }
+    setBulkSaving(false);
+    showToast(`Updated ${count} restaurants`);
+    setBulkSelected(new Set());
+    setBulkEditValue("");
+    onRestaurantsChanged?.();
+  };
+
   // ── MISSING DATA ──
   const missingData = useMemo(() => {
     if (section !== "missing") return [];
@@ -600,17 +715,31 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
   const renderBrowseRow = (r) => {
     const fs = getFlameScore(r);
     const sd = getScoreData(r);
-    const isExpanded = expandedId === r.id;
+    const isExpanded = !bulkMode && expandedId === r.id;
+    const isSelected = bulkSelected.has(r.id);
     return (
       <div key={r.id}>
-        <button type="button" onClick={() => { setExpandedId(isExpanded ? null : r.id); setFlameInput(""); }}
+        <button type="button" onClick={() => {
+          if (bulkMode) { toggleBulkSelect(r.id); }
+          else { setExpandedId(isExpanded ? null : r.id); setFlameInput(""); }
+        }}
           style={{
             width: "100%", display: "flex", alignItems: "center", gap: 10,
-            padding: "8px 10px", background: isExpanded ? C.bg3 : C.bg2,
-            border: `1px solid ${isExpanded ? C.terracotta : C.border}`,
+            padding: "8px 10px", background: isExpanded ? C.bg3 : isSelected ? `${C.terracotta}18` : C.bg2,
+            border: `1px solid ${isExpanded ? C.terracotta : isSelected ? C.terracotta : C.border}`,
             borderRadius: isExpanded ? "10px 10px 0 0" : 10,
             cursor: "pointer", textAlign: "left",
           }}>
+          {bulkMode && (
+            <div style={{
+              width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+              border: `2px solid ${isSelected ? C.terracotta : C.border}`,
+              background: isSelected ? C.terracotta : "transparent",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              {isSelected && <span style={{ color: "#fff", fontSize: 11, lineHeight: 1 }}>&#10003;</span>}
+            </div>
+          )}
           <div style={{ width: 40, height: 40, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: C.bg3 }}>
             <img src={r.img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}
               onError={e => { e.target.style.display = "none"; }} />
@@ -732,6 +861,7 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                 <div style={{ display: "flex", gap: 6 }}>
                   <select value={browseCity} onChange={e => { setBrowseCity(e.target.value); setBrowsePage(0); }} style={{ ...selectStyle, flex: 2 }}>
                     <option value="">All Cities</option>
+                    <option value="__none__">--- No City ---</option>
                     {cities.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                   <select value={browseCuisine} onChange={e => { setBrowseCuisine(e.target.value); setBrowsePage(0); }} style={{ ...selectStyle, flex: 2 }}>
@@ -741,6 +871,15 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                   <select value={browsePrice} onChange={e => { setBrowsePrice(e.target.value); setBrowsePage(0); }} style={{ ...selectStyle, flex: 1 }}>
                     <option value="">$</option>
                     {PRICE_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={browseSource} onChange={e => { setBrowseSource(e.target.value); setBrowsePage(0); }} style={{ ...selectStyle, flex: 1 }}>
+                    <option value="">All Sources</option>
+                    <option value="original">Original</option>
+                    <option value="Admin Import">Admin Import</option>
+                    <option value="research_import">Research Import</option>
+                    <option value="community">Community</option>
                   </select>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -754,11 +893,25 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                 </div>
               </div>
 
-              {/* Results count + pagination */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <span style={{ fontSize: 11, color: C.muted, fontFamily: "-apple-system,sans-serif" }}>
-                  {browseFiltered.length} restaurants
-                </span>
+              {/* Results count + pagination + bulk toggle + page size */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, color: C.muted, fontFamily: "-apple-system,sans-serif" }}>
+                    {browseFiltered.length} restaurants
+                  </span>
+                  <button type="button" onClick={() => { setBulkMode(m => !m); setBulkSelected(new Set()); setBulkEditValue(""); }}
+                    style={{ ...btnSmall, fontSize: 10, padding: "3px 8px", background: bulkMode ? C.terracotta : "transparent", color: bulkMode ? "#fff" : C.muted, border: bulkMode ? "none" : `1px solid ${C.border}` }}>
+                    {bulkMode ? "Exit Bulk" : "Bulk Edit"}
+                  </button>
+                  <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+                    {[25, 50, 100].map(s => (
+                      <button key={s} type="button" onClick={() => { setPageSize(s); setBrowsePage(0); }}
+                        style={{ background: "none", border: "none", fontSize: 10, cursor: "pointer", padding: "2px 5px", color: pageSize === s ? C.terracotta : C.muted, fontWeight: pageSize === s ? 700 : 400, fontFamily: "-apple-system,sans-serif" }}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 {totalPages > 1 && (
                   <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                     <button type="button" onClick={() => setBrowsePage(p => Math.max(0, p - 1))} disabled={browsePage === 0}
@@ -769,6 +922,21 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                   </div>
                 )}
               </div>
+
+              {/* Bulk mode: select all / deselect */}
+              {bulkMode && (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                  <button type="button" onClick={selectAllOnPage}
+                    style={{ ...btnSmall, fontSize: 10, padding: "3px 8px" }}>Select All on Page</button>
+                  <button type="button" onClick={deselectAll}
+                    style={{ ...btnSmall, fontSize: 10, padding: "3px 8px" }}>Deselect All</button>
+                  {bulkSelected.size > 0 && (
+                    <span style={{ fontSize: 10, color: C.terracotta, fontFamily: "-apple-system,sans-serif" }}>
+                      {bulkSelected.size} selected
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Restaurant list */}
               <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -788,6 +956,120 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                   <span style={{ fontSize: 11, color: C.muted }}>{browsePage + 1} / {totalPages}</span>
                   <button type="button" onClick={() => setBrowsePage(p => Math.min(totalPages - 1, p + 1))} disabled={browsePage >= totalPages - 1}
                     style={{ background: "none", border: "none", color: browsePage >= totalPages - 1 ? C.bg3 : C.muted, cursor: "pointer", fontSize: 14, padding: "4px 8px" }}>Next ›</button>
+                </div>
+              )}
+
+              {/* Bulk edit toolbar */}
+              {bulkMode && bulkSelected.size > 0 && (
+                <div style={{
+                  position: "sticky", bottom: 0, left: 0, right: 0, marginTop: 12,
+                  background: C.bg2, border: `1px solid ${C.terracotta}`, borderRadius: 12,
+                  padding: 12, display: "flex", flexDirection: "column", gap: 8,
+                  boxShadow: `0 -4px 20px rgba(0,0,0,0.4)`,
+                }}>
+                  <div style={{ fontSize: 11, color: C.terracotta, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                    Bulk Edit - {bulkSelected.size} selected
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <select value={bulkEditField} onChange={e => { setBulkEditField(e.target.value); setBulkEditValue(""); setMergeKeepId(null); }} style={{ ...selectStyle, flex: 1 }}>
+                      <option value="city">City</option>
+                      <option value="flames">Flames</option>
+                      <option value="venue_type">Venue Type</option>
+                      <option value="cuisine">Cuisine</option>
+                      <option value="merge">Merge</option>
+                    </select>
+                    {bulkEditField === "city" && (
+                      <select value={bulkEditValue} onChange={e => setBulkEditValue(e.target.value)} style={{ ...selectStyle, flex: 2 }}>
+                        <option value="">Select city...</option>
+                        {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    )}
+                    {bulkEditField === "flames" && (
+                      <input type="number" min="0.5" max="5" step="0.5" value={bulkEditValue} onChange={e => setBulkEditValue(e.target.value)}
+                        placeholder="0.5 - 5" style={{ flex: 2, padding: "7px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, color: C.text, fontSize: 12, outline: "none" }} />
+                    )}
+                    {bulkEditField === "venue_type" && (
+                      <select value={bulkEditValue} onChange={e => setBulkEditValue(e.target.value)} style={{ ...selectStyle, flex: 2 }}>
+                        <option value="">Select type...</option>
+                        <option value="Restaurant">Restaurant</option>
+                        <option value="Bar">Bar</option>
+                        <option value="Coffee">Coffee</option>
+                        <option value="Hotel">Hotel</option>
+                      </select>
+                    )}
+                    {bulkEditField === "cuisine" && (
+                      <select value={bulkEditValue} onChange={e => setBulkEditValue(e.target.value)} style={{ ...selectStyle, flex: 2 }}>
+                        <option value="">Select cuisine...</option>
+                        {CUISINE_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Merge UI — requires exactly 2 selected */}
+                  {bulkEditField === "merge" && (
+                    <div>
+                      {bulkSelected.size !== 2 ? (
+                        <div style={{ fontSize: 11, color: "#e6a832", fontFamily: "-apple-system,sans-serif", padding: "4px 0" }}>
+                          Select exactly 2 places to merge. ({bulkSelected.size} selected)
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                          <div style={{ fontSize: 11, color: C.muted, fontFamily: "-apple-system,sans-serif" }}>
+                            Pick which one to keep — the other will be removed and its loves transferred:
+                          </div>
+                          {[...bulkSelected].map(id => {
+                            const r = allRestaurants.find(ar => ar.id === id);
+                            if (!r) return null;
+                            const isKeep = mergeKeepId === id;
+                            return (
+                              <button key={id} type="button" onClick={() => setMergeKeepId(id)}
+                                style={{
+                                  display: "flex", alignItems: "center", gap: 8, padding: "8px 10px",
+                                  borderRadius: 8, border: `1.5px solid ${isKeep ? C.terracotta : C.border}`,
+                                  background: isKeep ? "rgba(196,96,58,0.12)" : C.bg, cursor: "pointer", textAlign: "left",
+                                }}>
+                                <div style={{
+                                  width: 18, height: 18, borderRadius: "50%", flexShrink: 0,
+                                  border: `2px solid ${isKeep ? C.terracotta : C.border}`,
+                                  background: isKeep ? C.terracotta : "transparent",
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                }}>
+                                  {isKeep && <span style={{ color: "#fff", fontSize: 10, fontWeight: 700 }}>✓</span>}
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 12, color: C.text, fontFamily: "Georgia,serif", fontStyle: "italic", fontWeight: "bold", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    {r.name}
+                                  </div>
+                                  <div style={{ fontSize: 10, color: C.muted }}>
+                                    {r.city || "No city"} · {r.cuisine || "No cuisine"} · ID: {r.id}
+                                  </div>
+                                </div>
+                                <span style={{ fontSize: 9, color: isKeep ? C.terracotta : C.dim, fontFamily: "'DM Mono',monospace", textTransform: "uppercase" }}>
+                                  {isKeep ? "KEEP" : "REMOVE"}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {bulkEditField !== "merge" ? (
+                    <button type="button" onClick={bulkApply} disabled={bulkSaving || !bulkEditValue}
+                      style={{ ...btnPrimary, width: "100%", opacity: bulkSaving || !bulkEditValue ? 0.5 : 1 }}>
+                      {bulkSaving ? "Applying..." : `Apply to ${bulkSelected.size} selected`}
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => setConfirm({
+                      message: `Merge "${allRestaurants.find(r => r.id === [...bulkSelected].find(id => id !== mergeKeepId))?.name}" into "${allRestaurants.find(r => r.id === mergeKeepId)?.name}"? This transfers all loves and removes the duplicate.`,
+                      onConfirm: () => { bulkApply(); setConfirm(null); },
+                      onCancel: () => setConfirm(null),
+                    })} disabled={bulkSaving || bulkSelected.size !== 2 || !mergeKeepId}
+                      style={{ ...btnPrimary, width: "100%", opacity: bulkSaving || bulkSelected.size !== 2 || !mergeKeepId ? 0.5 : 1 }}>
+                      {bulkSaving ? "Merging..." : "Merge Places"}
+                    </button>
+                  )}
                 </div>
               )}
             </>
