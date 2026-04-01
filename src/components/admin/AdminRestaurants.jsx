@@ -572,6 +572,29 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
   const [mergeKeepId, setMergeKeepId] = useState(null);
 
   const bulkApply = async () => {
+    // Delete has its own flow
+    if (bulkEditField === "delete") {
+      if (bulkSelected.size === 0) return;
+      setBulkSaving(true);
+      let count = 0;
+      for (const id of bulkSelected) {
+        const r = allRestaurants.find(ar => ar.id === id);
+        if (!r) continue;
+        try {
+          if (isCommunity(id)) await deleteCommunityRestaurant(id);
+          else await upsertAdminOverride(id, "delete", null, userId);
+          await logAdminAction("restaurant_remove", userId, "restaurant", String(id), { name: r.name });
+          count++;
+        } catch (e) { console.error(`Bulk delete failed for ${id}:`, e); }
+      }
+      setBulkSaving(false);
+      showToast(`Removed ${count} restaurants`);
+      setBulkSelected(new Set());
+      setBulkEditValue("");
+      onRestaurantsChanged?.();
+      return;
+    }
+
     // Merge has its own flow
     if (bulkEditField === "merge") {
       if (bulkSelected.size !== 2 || !mergeKeepId) return;
@@ -977,6 +1000,7 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                       <option value="venue_type">Venue Type</option>
                       <option value="cuisine">Cuisine</option>
                       <option value="merge">Merge</option>
+                      <option value="delete">Delete</option>
                     </select>
                     {bulkEditField === "city" && (
                       <select value={bulkEditValue} onChange={e => setBulkEditValue(e.target.value)} style={{ ...selectStyle, flex: 2 }}>
@@ -1055,12 +1079,24 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                     </div>
                   )}
 
-                  {bulkEditField !== "merge" ? (
-                    <button type="button" onClick={bulkApply} disabled={bulkSaving || !bulkEditValue}
-                      style={{ ...btnPrimary, width: "100%", opacity: bulkSaving || !bulkEditValue ? 0.5 : 1 }}>
-                      {bulkSaving ? "Applying..." : `Apply to ${bulkSelected.size} selected`}
+                  {/* Delete warning */}
+                  {bulkEditField === "delete" && (
+                    <div style={{ fontSize: 11, color: C.red || "#e05050", fontFamily: "-apple-system,sans-serif", padding: "2px 0" }}>
+                      This will permanently remove {bulkSelected.size} place{bulkSelected.size !== 1 ? "s" : ""} from the app.
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  {bulkEditField === "delete" ? (
+                    <button type="button" onClick={() => setConfirm({
+                      message: `Permanently remove ${bulkSelected.size} restaurant${bulkSelected.size !== 1 ? "s" : ""}? This cannot be undone.`,
+                      onConfirm: () => { bulkApply(); setConfirm(null); },
+                      onCancel: () => setConfirm(null),
+                    })} disabled={bulkSaving}
+                      style={{ width: "100%", padding: "10px", borderRadius: 10, border: "none", background: C.red || "#e05050", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: bulkSaving ? 0.5 : 1 }}>
+                      {bulkSaving ? "Deleting..." : `Delete ${bulkSelected.size} selected`}
                     </button>
-                  ) : (
+                  ) : bulkEditField === "merge" ? (
                     <button type="button" onClick={() => setConfirm({
                       message: `Merge "${allRestaurants.find(r => r.id === [...bulkSelected].find(id => id !== mergeKeepId))?.name}" into "${allRestaurants.find(r => r.id === mergeKeepId)?.name}"? This transfers all loves and removes the duplicate.`,
                       onConfirm: () => { bulkApply(); setConfirm(null); },
@@ -1068,6 +1104,11 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                     })} disabled={bulkSaving || bulkSelected.size !== 2 || !mergeKeepId}
                       style={{ ...btnPrimary, width: "100%", opacity: bulkSaving || bulkSelected.size !== 2 || !mergeKeepId ? 0.5 : 1 }}>
                       {bulkSaving ? "Merging..." : "Merge Places"}
+                    </button>
+                  ) : (
+                    <button type="button" onClick={bulkApply} disabled={bulkSaving || !bulkEditValue}
+                      style={{ ...btnPrimary, width: "100%", opacity: bulkSaving || !bulkEditValue ? 0.5 : 1 }}>
+                      {bulkSaving ? "Applying..." : `Apply to ${bulkSelected.size} selected`}
                     </button>
                   )}
                 </div>
