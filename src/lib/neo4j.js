@@ -457,6 +457,126 @@ export async function getSixDegrees(restaurantId1, restaurantId2) {
   };
 }
 
+// ── PERSONALIZATION & INTELLIGENCE ──────────────────────────
+
+// Smart Swipe: score restaurants by how well they match user's taste
+export async function getSmartSwipeScores(clerkUserId) {
+  if (!clerkUserId) return {};
+  const records = await runQuery(
+    `MATCH (me:User {id: $myId})-[:LOVED]->(myRest:Restaurant)
+     WITH me, collect(DISTINCT myRest.cuisine) AS myCuisines,
+          collect(DISTINCT myRest) AS myRests
+     UNWIND myRests AS myR
+     OPTIONAL MATCH (myR)-[:HAS_TAG]->(t:Tag)
+     WITH me, myCuisines, collect(DISTINCT t.name) AS myTags
+     // Score candidates
+     MATCH (candidate:Restaurant)
+     WHERE NOT (me)-[:LOVED]->(candidate)
+     OPTIONAL MATCH (candidate)-[:HAS_TAG]->(ct:Tag)
+     WHERE ct.name IN myTags
+     WITH me, candidate, myCuisines, size(collect(DISTINCT ct)) AS tagOverlap
+     // Friends who loved it
+     OPTIONAL MATCH (me)-[:FOLLOWS]->(friend)-[:LOVED]->(candidate)
+     WITH candidate,
+          CASE WHEN candidate.cuisine IN myCuisines THEN 2 ELSE 0 END AS cuisineBoost,
+          tagOverlap * 3 AS tagBoost,
+          count(DISTINCT friend) * 3 AS friendBoost,
+          CASE WHEN candidate.rating >= 8.5 THEN 1 ELSE 0 END AS gemBoost
+     WITH candidate, cuisineBoost + tagBoost + friendBoost + gemBoost AS score
+     WHERE score > 0
+     RETURN candidate.id AS id, score
+     ORDER BY score DESC
+     LIMIT 500`,
+    { myId: clerkUserId }
+  );
+  const map = {};
+  records.forEach(r => { map[r.get('id')] = r.get('score').toNumber ? r.get('score').toNumber() : r.get('score'); });
+  return map;
+}
+
+// Personalization scores for Discover tab
+export async function getPersonalizationScores(clerkUserId) {
+  if (!clerkUserId) return {};
+  const records = await runQuery(
+    `MATCH (me:User {id: $myId})-[:LOVED]->(myRest:Restaurant)
+     WITH me, collect(DISTINCT myRest.cuisine) AS myCuisines,
+          collect(DISTINCT myRest) AS myRests
+     UNWIND myRests AS myR
+     OPTIONAL MATCH (myR)-[:HAS_TAG]->(t:Tag)
+     WITH me, myCuisines, collect(DISTINCT t.name) AS myTags
+     MATCH (candidate:Restaurant)
+     OPTIONAL MATCH (candidate)-[:HAS_TAG]->(ct:Tag)
+     WHERE ct.name IN myTags
+     WITH me, candidate, myCuisines, TOFLOAT(size(collect(DISTINCT ct))) AS tagHits
+     OPTIONAL MATCH (me)-[:FOLLOWS]->(friend)-[:LOVED]->(candidate)
+     OPTIONAL MATCH (me)-[:FOLLOWS_CITY]->(fc:City {name: candidate.city})
+     WITH candidate,
+          CASE WHEN candidate.cuisine IN myCuisines THEN 1.0 ELSE 0.0 END +
+          LEAST(2.0, tagHits * 0.5) +
+          CASE WHEN count(DISTINCT friend) > 0 THEN 1.5 ELSE 0.0 END +
+          CASE WHEN fc IS NOT NULL THEN 0.5 ELSE 0.0 END AS boost
+     WHERE boost > 0
+     RETURN candidate.id AS id, boost
+     ORDER BY boost DESC
+     LIMIT 1000`,
+    { myId: clerkUserId }
+  );
+  const map = {};
+  records.forEach(r => { map[r.get('id')] = r.get('boost').toNumber ? r.get('boost').toNumber() : r.get('boost'); });
+  return map;
+}
+
+// Friends' recent loves — for chatbot and social features
+export async function getFriendsRecentLoves(clerkUserId, limit = 10) {
+  if (!clerkUserId) return [];
+  const records = await runQuery(
+    `MATCH (me:User {id: $myId})-[:FOLLOWS]->(friend)-[l:LOVED]->(r:Restaurant)
+     WHERE l.timestamp IS NOT NULL
+     RETURN friend.name AS friendName, friend.username AS friendUsername,
+            r.id AS restaurantId, r.name AS restaurant, r.cuisine AS cuisine, r.city AS city
+     ORDER BY l.timestamp DESC
+     LIMIT $limit`,
+    { myId: clerkUserId, limit: neo4j.int(limit) }
+  );
+  return records.map(r => ({
+    friendName: r.get('friendName'),
+    friendUsername: r.get('friendUsername'),
+    restaurantId: r.get('restaurantId'),
+    restaurant: r.get('restaurant'),
+    cuisine: r.get('cuisine'),
+    city: r.get('city'),
+  }));
+}
+
+// Cross-cuisine discovery — same vibes, different cuisine
+export async function getCrossCuisineRecs(clerkUserId, limit = 6) {
+  if (!clerkUserId) return [];
+  const records = await runQuery(
+    `MATCH (me:User {id: $myId})-[:LOVED]->(myRest:Restaurant)-[:HAS_TAG]->(tag:Tag)<-[:HAS_TAG]-(candidate:Restaurant)
+     WHERE candidate.cuisine <> myRest.cuisine
+       AND NOT (me)-[:LOVED]->(candidate)
+     WITH candidate, collect(DISTINCT tag.name) AS sharedTags,
+          count(DISTINCT tag) AS overlap,
+          collect(DISTINCT myRest.cuisine)[0] AS fromCuisine
+     RETURN candidate.id AS id, candidate.name AS name, candidate.cuisine AS cuisine,
+            candidate.city AS city, candidate.rating AS rating,
+            sharedTags[..3] AS sharedTags, overlap, fromCuisine
+     ORDER BY overlap DESC, candidate.rating DESC
+     LIMIT $limit`,
+    { myId: clerkUserId, limit: neo4j.int(limit) }
+  );
+  return records.map(r => ({
+    id: r.get('id'),
+    name: r.get('name'),
+    cuisine: r.get('cuisine'),
+    city: r.get('city'),
+    rating: r.get('rating')?.toNumber?.() ?? r.get('rating'),
+    sharedTags: r.get('sharedTags'),
+    overlap: r.get('overlap').toNumber(),
+    fromCuisine: r.get('fromCuisine'),
+  }));
+}
+
 // ── ADMIN FUNCTIONS ──────────────────────────────────────────
 
 export async function getGraphStats() {

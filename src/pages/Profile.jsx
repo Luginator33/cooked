@@ -3,7 +3,7 @@ import { useUser, useClerk } from "@clerk/clerk-react";
 import { getFollowers, getFollowing, getUserProfile, saveSharedPhoto, saveUserData, saveUserPhotos, supabase, followCity, unfollowCity, getFollowedCities } from "../lib/supabase";
 import { CITIES, CITY_FLAGS, sortCityRegions, getFullCityRegions } from "../data/restaurants";
 import { getCookedScore, getCityReadiness, getRecentLovesForUser } from "../lib/neo4j";
-import { ProfilePhoto, parseProfilePhoto } from "../components/AvatarIcon";
+import { ProfilePhoto, parseProfilePhoto, getDefaultAvatar, AvatarIcon } from "../components/AvatarIcon";
 import AdminPanel from "../components/admin/AdminPanel";
 
 function safeSetItem(key, value) {
@@ -555,7 +555,7 @@ export default function Profile({
 
         <div className="d-profile-overlay">
           <div className="d-profile-avatar" onClick={() => fileRef.current?.click()}>
-            <ProfilePhoto photo={photo} size={60} />
+            <ProfilePhoto photo={photo} size={60} userId={user?.id} />
           </div>
           <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handlePhotoUpload} />
           <div className="d-profile-overlay-text">
@@ -935,9 +935,7 @@ export default function Profile({
                     }}
                     style={{ width: "100%", background: "none", border: "none", borderBottom: `1px solid ${C.border}`, padding: "12px 0", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", textAlign: "left" }}
                   >
-                    <div style={{ width: 34, height: 34, borderRadius: "50%", overflow: "hidden", border: `1px solid ${C.border}`, background: C.bg3, flexShrink: 0 }}>
-                      {u.profile_photo ? <img src={u.profile_photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-                    </div>
+                    <ProfilePhoto photo={u.profile_photo} size={34} userId={u.clerk_user_id} />
                     <div style={{ minWidth: 0 }}>
                       <div style={{ color: C.text, fontSize: 14, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.profile_name}</div>
                       <div style={{ color: C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif" }}>{u.profile_username}</div>

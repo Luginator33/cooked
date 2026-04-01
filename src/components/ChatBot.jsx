@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react"
-import { getYoudLoveThis, getRisingRestaurants, getHiddenGems, getTrendingInFollowedCities } from "../lib/neo4j"
+import { getYoudLoveThis, getRisingRestaurants, getHiddenGems, getTrendingInFollowedCities, getFriendsRecentLoves, getCrossCuisineRecs } from "../lib/neo4j"
 import { saveResearch, getResearchEntries, deleteResearch, saveNewPlaces } from "../lib/supabase"
 
 function safeSetItem(key, value) {
@@ -210,12 +210,22 @@ function buildUserContext(lovedRestaurants, watchlistIds, followedCities, tasteP
 
 // ── NEO4J CONTEXT BUILDER ──────────────────────────────────────
 
-function buildNeo4jContext(recommendations, trending, rising, hiddenGems) {
+function buildNeo4jContext(recommendations, trending, rising, hiddenGems, friendsLoves, crossCuisine) {
   const sections = [];
 
   if (recommendations?.length) {
     sections.push("Restaurants matched to their taste (they haven't tried yet):\n" +
       recommendations.map(r => `- ${r.name} (${r.cuisine}, ${r.city}) — ${r._weight || r.weight} taste matches`).join("\n"));
+  }
+
+  if (friendsLoves?.length) {
+    sections.push("What their friends recently loved (mention naturally, like 'oh Katie was just at...'):\n" +
+      friendsLoves.map(f => `- ${f.friendName} loved ${f.restaurant} (${f.cuisine}, ${f.city})`).join("\n"));
+  }
+
+  if (crossCuisine?.length) {
+    sections.push("Cross-cuisine picks (same vibes as places they love, but different cuisine — great for expanding their taste):\n" +
+      crossCuisine.map(r => `- ${r.name} (${r.cuisine}, ${r.city}) — shares vibes: ${(r.sharedTags || []).join(", ")}`).join("\n"));
   }
 
   if (trending?.length) {
@@ -471,8 +481,9 @@ export default function ChatBot({
       userId ? getTrendingInFollowedCities(userId, 5).catch(() => []) : Promise.resolve([]),
       getRisingRestaurants(5).catch(() => []),
       getHiddenGems(5).catch(() => []),
-    ]).then(([recs, trending, rising, gems]) => {
-      // Match back to full restaurant objects
+      getFriendsRecentLoves(userId, 10).catch(() => []),
+      getCrossCuisineRecs(userId, 6).catch(() => []),
+    ]).then(([recs, trending, rising, gems, friendsLoves, crossCuisine]) => {
       const matchToFull = (items) => items.map(item => {
         const full = allRestaurants.find(r => String(r.id) === String(item.id));
         return full ? { ...full, ...item } : item;
@@ -482,6 +493,8 @@ export default function ChatBot({
         trending: matchToFull(trending),
         rising: matchToFull(rising),
         hiddenGems: matchToFull(gems),
+        friendsLoves,
+        crossCuisine,
       };
     });
   }, [userId]);
@@ -817,7 +830,7 @@ If the content isn't about food/restaurants/hotels/bars/nightlife, say "NOT_RELE
 
       // Build Neo4j context
       const neo4j = neo4jCacheRef.current || {};
-      const neo4jContext = buildNeo4jContext(neo4j.recommendations, neo4j.trending, neo4j.rising, neo4j.hiddenGems);
+      const neo4jContext = buildNeo4jContext(neo4j.recommendations, neo4j.trending, neo4j.rising, neo4j.hiddenGems, neo4j.friendsLoves, neo4j.crossCuisine);
 
       // Build research context from stored knowledge
       const research = researchCacheRef.current || [];
@@ -826,8 +839,23 @@ If the content isn't about food/restaurants/hotels/bars/nightlife, say "NOT_RELE
           research.map(r => r.summary).join("\n\n") + "\n"
         : "";
 
+      // Build conversation memory from past sessions
+      let memoryContext = "";
+      try {
+        const hist = JSON.parse(localStorage.getItem("cooked_chat_history") || "[]");
+        const pastTopics = hist
+          .filter(h => h.id !== conversationIdRef.current)
+          .slice(-5)
+          .map(h => h.query)
+          .filter(Boolean);
+        if (pastTopics.length > 0) {
+          memoryContext = "\n## PAST CONVERSATIONS (reference naturally if relevant, like 'last time you asked about...')\n" +
+            pastTopics.map(t => `- "${t}"`).join("\n") + "\n";
+        }
+      } catch {}
+
       // Build full system prompt
-      const systemPrompt = buildSystemPrompt(dynamicKB, userContext, neo4jContext + researchContext);
+      const systemPrompt = buildSystemPrompt(dynamicKB, userContext, neo4jContext + researchContext + memoryContext);
 
       const response = await fetch("https://cooked-proxy.luga-podesta.workers.dev/", {
         method: "POST",

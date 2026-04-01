@@ -139,16 +139,24 @@ export function parseProfilePhoto(raw) {
   return null;
 }
 
+// Pick a deterministic stock avatar based on a user ID string
+export function getDefaultAvatar(userId) {
+  if (!userId) return STOCK_AVATARS[0].icon;
+  let h = 0;
+  for (let i = 0; i < userId.length; i++) h = ((h << 5) - h + userId.charCodeAt(i)) | 0;
+  return STOCK_AVATARS[Math.abs(h) % STOCK_AVATARS.length].icon;
+}
+
 // Render a profile photo — handles stock icons, uploaded photos, and URLs
-export function ProfilePhoto({ photo, size = 60, style = {} }) {
+// Pass userId to get a deterministic default avatar when no photo is set
+export function ProfilePhoto({ photo, size = 60, style = {}, userId }) {
   const parsed = typeof photo === "string" ? parseProfilePhoto(photo) : photo;
 
   if (!parsed) {
+    const defaultIcon = getDefaultAvatar(userId);
     return (
       <div style={{ width: size, height: size, borderRadius: "50%", background: "rgba(255,255,255,0.03)", border: "1.5px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", ...style }}>
-        <svg width={size * 0.45} height={size * 0.45} viewBox="0 0 24 24" fill="none" stroke="rgba(245,240,235,0.3)" strokeWidth="1.5" strokeLinecap="round">
-          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-        </svg>
+        <AvatarIcon type={defaultIcon} size={size * 0.55} />
       </div>
     );
   }

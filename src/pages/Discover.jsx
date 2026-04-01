@@ -4,6 +4,7 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { SignInButton, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
 import { RESTAURANTS, ALL_TAGS, normalizeCity, CITY_REGIONS as CANONICAL_CITY_REGIONS, sortCityRegions, getFullCityRegions } from "../data/restaurants";
+import { ProfilePhoto, getDefaultAvatar, AvatarIcon } from "../components/AvatarIcon";
 
 /** All cities — base + any admin-approved custom cities */
 const BASE_CITY_REGIONS = getFullCityRegions();
@@ -72,7 +73,7 @@ import TasteProfile from "./TasteProfile";
 import UserProfile from "./UserProfile";
 import Onboarding from "./Onboarding";
 import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser, getAdminOverrides, sendMessage, getInbox, getConversation, markMessagesRead, getUnreadMessageCount, logInteraction, fetchFlameScores, computeFlameScore } from "../lib/supabase";
-import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities, syncRestaurant, seedAllRestaurants, getYoudLoveThis, getRisingRestaurants, getHiddenGems, getSixDegrees, getTasteFingerprint, getPeopleLikeYou, getWhoToFollow } from "../lib/neo4j";
+import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities, syncRestaurant, seedAllRestaurants, getYoudLoveThis, getRisingRestaurants, getHiddenGems, getSixDegrees, getTasteFingerprint, getPeopleLikeYou, getWhoToFollow, getSmartSwipeScores, getPersonalizationScores, getCrossCuisineRecs } from "../lib/neo4j";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -1032,6 +1033,9 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [followingPicksLoading, setFollowingPicksLoading] = useState(false);
   const [followingPicksRestaurants, setFollowingPicksRestaurants] = useState([]);
   const [followingPicksNoFollows, setFollowingPicksNoFollows] = useState(false);
+  const [swipeScores, setSwipeScores] = useState({}); // { restaurantId: score } from Neo4j smart swipe
+  const [personalizationScores, setPersonalizationScores] = useState({}); // { restaurantId: boost } for discover sort
+  const [crossCuisineRecs, setCrossCuisineRecs] = useState([]); // cross-cuisine discovery
   const [venueType, setVenueType] = useState("all"); // "all" | "restaurants" | "bars" | "coffee"
   const [secondaryCuisine, setSecondaryCuisine] = useState(null); // dropdown selection when restaurants or bars
   const [showFilterSheet, setShowFilterSheet] = useState(false);
@@ -1174,6 +1178,18 @@ export default function Discover({ tasteProfile, initialTab }) {
         .filter(Boolean);
       setHiddenGems(matched);
     }).catch(e => console.error("[Neo4j] hiddenGems error:", e));
+    // Personalization intelligence
+    getSmartSwipeScores(user.id).then(setSwipeScores).catch(() => {});
+    getPersonalizationScores(user.id).then(setPersonalizationScores).catch(() => {});
+    getCrossCuisineRecs(user.id, 8).then(results => {
+      const matched = results
+        .map(r => {
+          const full = allRestaurants.find(ar => String(ar.id) === String(r.id));
+          return full ? { ...full, _sharedTags: r.sharedTags, _fromCuisine: r.fromCuisine, _overlap: r.overlap } : null;
+        })
+        .filter(Boolean);
+      setCrossCuisineRecs(matched);
+    }).catch(e => console.error("[Neo4j] crossCuisine error:", e));
   }, [user?.id, feedRefreshKey, allRestaurants.length]);
 
   // Auto-refresh feeds every 30 minutes while the app is open
@@ -2283,18 +2299,23 @@ export default function Discover({ tasteProfile, initialTab }) {
   };
   const filteredSorted = useMemo(() => {
     const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+    const hasPersonalization = Object.keys(personalizationScores).length > 0;
     const arr = [...filteredForDiscover];
-    const score = (r) => (userRatings[r.id] || 0) * 0.3 + getFlameScore(r) * 0.7;
+    const score = (r) => {
+      const flame = getFlameScore(r);
+      const personal = hasPersonalization ? (personalizationScores[String(r.id)] || 0) : 0;
+      const userRating = userRatings[r.id] || 0;
+      return flame * 0.5 + userRating * 0.2 + personal * 0.3;
+    };
     arr.sort((a, b) => {
       const diff = score(b) - score(a);
       if (Math.abs(diff) > 0.1) return diff;
-      // Within same score tier, rotate daily using ID + day
       const ha = ((Number(a.id) || 0) * 2654435761 + dayOfYear) >>> 0;
       const hb = ((Number(b.id) || 0) * 2654435761 + dayOfYear) >>> 0;
       return ha - hb;
     });
     return arr;
-  }, [filteredForDiscover.length, userRatings, city, activeFilter, secondaryCuisine, searchQuery, filterMood]);
+  }, [filteredForDiscover.length, userRatings, personalizationScores, city, activeFilter, secondaryCuisine, searchQuery, filterMood]);
   const heatCityRestaurants = heatCity === "All" ? allRestaurants : allRestaurants.filter(r => {
     const group = CITY_GROUPS[heatCity] || [heatCity];
     return group.includes(r.city) || group.includes(r.neighborhood);
@@ -2306,20 +2327,29 @@ export default function Discover({ tasteProfile, initialTab }) {
   // but different each day and between users
   const heatDeck = useMemo(() => {
     const arr = [...heatActive, ...heatSkippedRecycled];
-    // Hash full user ID for a proper per-user seed, use day-of-year for daily variation
+    // Smart sort: taste-matched restaurants first, then shuffle within tiers
+    const hasScores = Object.keys(swipeScores).length > 0;
+    if (hasScores) {
+      arr.sort((a, b) => (swipeScores[String(b.id)] || 0) - (swipeScores[String(a.id)] || 0));
+    }
+    // Shuffle within score tiers (groups of ~10) for daily variety
     const uid = user?.id || "x";
     let h = 0;
     for (let i = 0; i < uid.length; i++) h = ((h << 5) - h + uid.charCodeAt(i)) | 0;
     const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
     const seed = ((Math.abs(h) + dayOfYear * 2654435761) >>> 0) % 2147483647 || 1;
     let s = seed;
-    for (let i = arr.length - 1; i > 0; i--) {
-      s = (s * 16807) % 2147483647;
-      const j = s % (i + 1);
-      [arr[i], arr[j]] = [arr[j], arr[i]];
+    const tierSize = hasScores ? 10 : arr.length; // shuffle within tiers if smart, full shuffle if not
+    for (let start = 0; start < arr.length; start += tierSize) {
+      const end = Math.min(start + tierSize, arr.length);
+      for (let i = end - 1; i > start; i--) {
+        s = (s * 16807) % 2147483647;
+        const j = start + (s % (i - start + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
     }
     return arr;
-  }, [heatActive.length, heatSkippedRecycled.length, heatCity, user?.id]);
+  }, [heatActive.length, heatSkippedRecycled.length, heatCity, user?.id, swipeScores]);
   const filtered = filteredByCity;
   const listNames = Object.keys(userLists);
   const toggleList = (listName, restaurantId) => {
@@ -3548,7 +3578,7 @@ Return a JSON object with exactly these fields:
             {headerProfilePhoto || user?.imageUrl ? (
               <img src={headerProfilePhoto || user?.imageUrl || ""} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:"50%" }} onError={(e) => { e.target.style.display = "none"; }} />
             ) : (
-              (safeLocalStorageGetItem("cooked_name") || "?")[0]?.toUpperCase()
+              <AvatarIcon type={getDefaultAvatar(user?.id)} size={18} />
             )}
           </div>
         </div>
@@ -3647,6 +3677,12 @@ Return a JSON object with exactly these fields:
               <div className="bottom-info">
                 <h3>{featuredRestaurant.name}</h3>
                 <div className="meta">{[featuredRestaurant.cuisine, featuredRestaurant.neighborhood, featuredRestaurant.price].filter(Boolean).join(" · ")}</div>
+                {featuredRestaurant._recommenders?.length > 0 && (
+                  <div className="meta" style={{ opacity: 0.6, fontSize: 11, marginTop: 2 }}>{featuredRestaurant._recommenders[0]} loved this too</div>
+                )}
+                {!featuredRestaurant._recommenders?.length && chatTasteProfile?.topCuisines?.[0] && (
+                  <div className="meta" style={{ opacity: 0.6, fontSize: 11, marginTop: 2 }}>Because you love {chatTasteProfile.topCuisines[0].cuisine || chatTasteProfile.topCuisines[0].name}</div>
+                )}
               </div>
             </div>
           ) : null}
@@ -3690,7 +3726,7 @@ Return a JSON object with exactly these fields:
                     <div className="flame-badge"><span>{"🔥".repeat(Math.min(Math.round(getFlameScore(r)), 5))}</span></div>
                     <div className="card-info">
                       <h4>{r.name}</h4>
-                      <div className="sub">{r._weight} {r._weight === 1 ? "match" : "matches"}</div>
+                      <div className="sub">{r._recommenders?.length > 0 ? `${r._recommenders[0]} loved this` : `${r._weight} taste ${r._weight === 1 ? "match" : "matches"}`}</div>
                     </div>
                   </div>
                 ))}
@@ -3741,9 +3777,34 @@ Return a JSON object with exactly these fields:
                   <div className="bottom-info">
                     <h3>{r.name}</h3>
                     <div className="meta">{[r.cuisine, r.neighborhood || r.city].filter(Boolean).join(" · ")}</div>
+                    <div className="meta" style={{ opacity: 0.5, fontSize: 11 }}>{r._loveCount === 0 ? "Undiscovered" : `Only ${r._loveCount} ${r._loveCount === 1 ? "person knows" : "people know"}`}</div>
                   </div>
                 </div>
               ))}
+            </>
+          )}
+
+          {/* Cross-Cuisine Discovery — same vibes, different cuisine */}
+          {crossCuisineRecs.length > 0 && (
+            <>
+              <div className="home-section-header">
+                <div style={{ display: "flex", alignItems: "baseline" }}>
+                  <h3>New flavors, same vibes</h3>
+                </div>
+              </div>
+              <div className="home-rising-scroll">
+                {crossCuisineRecs.slice(0, 6).map(r => (
+                  <div key={`cross-${r.id}-${photoCacheVersion}`} className="home-rising-card" onClick={() => setDetailRestaurant(r)}>
+                    <img src={getAnyCachedPhotoForId(r.id) || r.img} alt={r.name} />
+                    <div className="shade" />
+                    <div className="flame-badge"><span>{"🔥".repeat(Math.min(Math.round(getFlameScore(r)), 5))}</span></div>
+                    <div className="card-info">
+                      <h4>{r.name}</h4>
+                      <div className="sub">{r._sharedTags?.length > 0 ? `${r._sharedTags[0]} · ${r.cuisine}` : r.cuisine}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </>
           )}
 
