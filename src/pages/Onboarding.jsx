@@ -93,7 +93,7 @@ const TRAVEL_CITIES = [
   { name: "Seoul", img: "https://images.unsplash.com/photo-1547981609-4b6bfe67ca0b?w=200&q=70" },
   { name: "Chicago", img: "https://images.unsplash.com/photo-1494522855154-9297ac14b55f?w=200&q=70" },
   { name: "San Francisco", img: "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=200&q=70" },
-  { name: "Nashville", img: "https://images.unsplash.com/photo-1587162146766-e06b1189b907?w=200&q=70" },
+  { name: "Taormina", img: "https://images.unsplash.com/photo-1523365280197-f1783db9fe62?w=200&q=70" },
   { name: "Lisbon", img: "https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=200&q=70" },
 ];
 
