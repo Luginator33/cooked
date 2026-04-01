@@ -2118,17 +2118,32 @@ export default function Discover({ tasteProfile, initialTab }) {
     return group.includes(r.city) || group.includes(r.neighborhood);
   });
 
-  // Tier 1: filter by venue type (All / Restaurants / Bars & Nightlife / Coffee & Cafes)
-  // Restaurants: include only when isBar is not true (ignore cuisine text; e.g. "Sushi" or "Sushi Bar" both pass).
+  // Tier 1: filter by venue type (All / Restaurants / Bars & Nightlife / Coffee & Cafes / Hotels)
+  // Hotels detected via: cuisine, tags, name ("Hotel"/"Resort"), or isHotel flag
+  const HOTEL_KW = ["hotel", "resort", "lodge", "hostel", "guesthouse", "bed and breakfast", "b&b", "motel"];
+  const HOTEL_NAME_KW = ["hotel", "resort"];
+  const checkIsHotel = (r) => {
+    if (r.isHotel === true) return true;
+    const cu = (r.cuisine || "").toLowerCase();
+    if (HOTEL_KW.some(k => cu.includes(k))) return true;
+    const n = (r.name || "").toLowerCase();
+    if (HOTEL_NAME_KW.some(k => n.includes(k))) return true;
+    const tags = Array.isArray(r.tags) ? r.tags : [];
+    if (tags.some(t => HOTEL_KW.some(k => t.toLowerCase().includes(k)))) return true;
+    return false;
+  };
   const passesVenueType = (r) => {
     if (venueType === "all") return true;
     const cu = (r.cuisine || "").toLowerCase();
+    const isHotel = checkIsHotel(r);
     if (venueType === "restaurants") {
       if (r.isBar === true) return false;
       if (cu.includes("coffee")) return false;
+      if (isHotel) return false;
       return true;
     }
     if (venueType === "bars") {
+      if (isHotel) return false;
       if (r.isBar === true) return true;
       if (cu.includes("bar")) return true;
       if (cu.includes("nightclub")) return true;
@@ -2139,7 +2154,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       return cu.includes("coffee") || cu.includes("cafe");
     }
     if (venueType === "hotels") {
-      return cu.includes("hotel") || cu.includes("resort") || r.isHotel === true;
+      return isHotel;
     }
     return true;
   };

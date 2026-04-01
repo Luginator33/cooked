@@ -20,9 +20,13 @@ const TABS = [
   { key: "system", label: "System" },
 ];
 
+// Static RESTAURANTS is ~2900. If allRestaurants is near that, community data hasn't loaded yet.
+const STATIC_COUNT_THRESHOLD = 3500;
+
 export default function AdminPanel({ onClose, allRestaurants, userId, onRestaurantsChanged }) {
   const [tab, setTab] = useState("restaurants");
 
+  const isLoading = allRestaurants.length < STATIC_COUNT_THRESHOLD;
   const tabProps = { allRestaurants, userId, onRestaurantsChanged };
 
   return createPortal(
@@ -61,14 +65,27 @@ export default function AdminPanel({ onClose, allRestaurants, userId, onRestaura
 
         {/* Content */}
         <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 20px 40px" }}>
-          {tab === "restaurants" && <AdminRestaurants {...tabProps} />}
-          {tab === "imports" && <AdminImports {...tabProps} />}
-          {tab === "cities" && <AdminCities {...tabProps} />}
-          {tab === "users" && <AdminUsers {...tabProps} />}
-          {tab === "photos" && <AdminPhotos {...tabProps} />}
-          {tab === "content" && <AdminContent {...tabProps} />}
-          {tab === "analytics" && <AdminAnalytics {...tabProps} />}
-          {tab === "system" && <AdminSystem {...tabProps} />}
+          {isLoading ? (
+            <div style={{ textAlign: "center", padding: "60px 20px" }}>
+              <div style={{ fontSize: 24, marginBottom: 12 }}>🍳</div>
+              <div style={{ fontSize: 14, color: C.muted, marginBottom: 6 }}>Loading restaurant data...</div>
+              <div style={{ fontSize: 12, color: C.dim }}>{allRestaurants.length.toLocaleString()} of ~6,000+ loaded</div>
+              <div style={{ width: 120, height: 3, background: C.border, borderRadius: 2, margin: "12px auto 0", overflow: "hidden" }}>
+                <div style={{ width: `${Math.min(100, (allRestaurants.length / 6000) * 100)}%`, height: "100%", background: C.terracotta, borderRadius: 2, transition: "width 0.3s" }} />
+              </div>
+            </div>
+          ) : (
+            <>
+              {tab === "restaurants" && <AdminRestaurants {...tabProps} />}
+              {tab === "imports" && <AdminImports {...tabProps} />}
+              {tab === "cities" && <AdminCities {...tabProps} />}
+              {tab === "users" && <AdminUsers {...tabProps} />}
+              {tab === "photos" && <AdminPhotos {...tabProps} />}
+              {tab === "content" && <AdminContent {...tabProps} />}
+              {tab === "analytics" && <AdminAnalytics {...tabProps} />}
+              {tab === "system" && <AdminSystem {...tabProps} />}
+            </>
+          )}
         </div>
       </div>
     </div>,

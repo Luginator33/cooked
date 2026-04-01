@@ -62,13 +62,15 @@ function PlaceCard({ place, allRestaurants, onImport, onDismiss, onDelete, statu
       const detailRes = await fetch(`https://places.googleapis.com/v1/places/${gPlace.id}`, {
         headers: {
           "X-Goog-Api-Key": GOOGLE_KEY,
-          "X-Goog-FieldMask": "displayName,formattedAddress,nationalPhoneNumber,websiteUri,location,photos,rating,userRatingCount,priceLevel,addressComponents",
+          "X-Goog-FieldMask": "displayName,formattedAddress,nationalPhoneNumber,websiteUri,location,photos,rating,userRatingCount,priceLevel,addressComponents,types",
         },
       });
 
       if (detailRes.ok) {
         const d = await detailRes.json();
         // Store extra Google data for import
+        const placeTypes = d.types || [];
+        const isLodging = placeTypes.some(t => t === "lodging" || t === "hotel" || t === "resort_hotel" || t === "extended_stay_hotel" || t === "motel");
         setGoogleData({
           rating: d.rating || null,
           phone: d.nationalPhoneNumber || null,
@@ -76,6 +78,8 @@ function PlaceCard({ place, allRestaurants, onImport, onDismiss, onDelete, statu
           lat: d.location?.latitude || null,
           lng: d.location?.longitude || null,
           address: d.formattedAddress || null,
+          isHotel: isLodging,
+          placeTypes,
         });
 
         // Fetch photo URLs
@@ -206,6 +210,7 @@ function PlaceCard({ place, allRestaurants, onImport, onDismiss, onDelete, statu
               {/* Google extra data preview */}
               {googleData && (
                 <div style={{ marginTop: 6, fontSize: 10, color: C.muted, fontFamily: "'Inter', -apple-system, sans-serif" }}>
+                  {googleData.isHotel && <span style={{ color: "#e0a050" }}>🏨 Hotel · </span>}
                   {googleData.rating && <span>Rating: {googleData.rating} · </span>}
                   {googleData.website && <span>Has website · </span>}
                   {googleData.lat && <span>Has coords</span>}
@@ -411,6 +416,13 @@ export default function AdminImports({ allRestaurants, userId, onRestaurantsChan
   const handleImport = async (placeId, form, photoUrl, googleData) => {
     try {
       const id = `imported-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      // Auto-detect hotel from Google Places types or name
+      const nameHasHotel = /(hotel|resort)/i.test(form.name);
+      const isHotel = googleData?.isHotel || nameHasHotel;
+      const baseTags = form.cuisine ? form.cuisine.split(/[,/]/).map(t => t.trim()).filter(Boolean) : [];
+      // If it's a hotel, make sure "hotel" is in the tags so detection works everywhere
+      if (isHotel && !baseTags.some(t => /(hotel|resort)/i.test(t))) baseTags.push("hotel");
+
       const newRestaurant = {
         name: form.name,
         city: form.city,
@@ -418,13 +430,14 @@ export default function AdminImports({ allRestaurants, userId, onRestaurantsChan
         cuisine: form.cuisine || "",
         price: form.price || "",
         desc: form.description || "",
-        tags: form.cuisine ? form.cuisine.split(/[,/]/).map(t => t.trim()).filter(Boolean) : [],
+        tags: baseTags,
         rating: googleData?.rating || null,
         lat: googleData?.lat || null,
         lng: googleData?.lng || null,
         phone: googleData?.phone || null,
         website: googleData?.website || null,
         address: googleData?.address || null,
+        isHotel: isHotel || undefined,
         img: photoUrl || null,
         img2: photoUrl || null,
         source: "research_import",

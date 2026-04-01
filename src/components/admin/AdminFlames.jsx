@@ -20,15 +20,21 @@ const PRICE_OPTIONS = ["$", "$$", "$$$", "$$$$"];
 
 const BAR_KEYWORDS = ["bar", "cocktail", "wine bar", "lounge", "pub", "speakeasy", "nightclub", "brewery", "dive", "jazz", "karaoke", "hookah", "tiki", "rooftop"];
 const COFFEE_KEYWORDS = ["coffee", "cafe", "café", "espresso", "tea house", "matcha", "bakery cafe"];
-const HOTEL_KEYWORDS = ["hotel", "resort", "inn", "lodge"];
+const HOTEL_KEYWORDS = ["hotel", "resort", "lodge", "hostel", "guesthouse", "bed and breakfast", "b&b", "motel"];
+const HOTEL_NAME_KEYWORDS = ["hotel", "resort"];
 
 function matchesVenueType(r, type) {
   if (type === "all") return true;
   const c = (r.cuisine || "").toLowerCase();
+  const n = (r.name || "").toLowerCase();
+  const tags = Array.isArray(r.tags) ? r.tags.map(t => t.toLowerCase()) : [];
   const isBar = r.isBar || BAR_KEYWORDS.some(k => c.includes(k));
   const isCoffee = COFFEE_KEYWORDS.some(k => c.includes(k));
-  const isHotel = HOTEL_KEYWORDS.some(k => c.includes(k));
-  if (type === "bars") return isBar;
+  const isHotel = r.isHotel === true
+    || HOTEL_KEYWORDS.some(k => c.includes(k))
+    || tags.some(t => HOTEL_KEYWORDS.some(k => t.includes(k)))
+    || HOTEL_NAME_KEYWORDS.some(k => n.includes(k));
+  if (type === "bars") return isBar && !isHotel;
   if (type === "coffee") return isCoffee;
   if (type === "hotels") return isHotel;
   if (type === "restaurants") return !isBar && !isCoffee && !isHotel;
