@@ -259,6 +259,7 @@ function UnapprovedPanel({ cities, allRestaurants, noCityRestaurants, flash, onA
   const [confirmDeny, setConfirmDeny] = useState(null);
   const [denyDeleting, setDenyDeleting] = useState(false);
   const [showNoCity, setShowNoCity] = useState(false);
+  const [grouping, setGrouping] = useState(false);
 
   if (cities.length === 0 && (!noCityRestaurants || noCityRestaurants.length === 0)) {
     return (
@@ -460,13 +461,26 @@ function UnapprovedPanel({ cities, allRestaurants, noCityRestaurants, flash, onA
                   )}
                   <button
                     type="button"
-                    disabled={!assignTarget}
-                    onClick={() => {
-                      // TODO: bulk update community_restaurants city field
-                      flash(`${cityName} → ${assignTarget}. Add alias to restaurants.js to make permanent.`);
+                    disabled={!assignTarget || grouping}
+                    onClick={async () => {
+                      setGrouping(true);
+                      // Bulk update community restaurants with this city
+                      const cityRestaurants = allRestaurants.filter(r => {
+                        const n = normalizeCity(r.city);
+                        return n === cityName || r.city === cityName;
+                      });
+                      const communityOnes = cityRestaurants.filter(r => r.id >= 100000);
+                      let updated = 0;
+                      for (const r of communityOnes) {
+                        const { error } = await updateCommunityRestaurant(r.id, { city: assignTarget });
+                        if (!error) updated++;
+                      }
+                      setGrouping(false);
+                      flash(`${cityName} → ${assignTarget} (${updated} updated)`);
                       setAssignCity(null);
+                      if (updated > 0 && onRestaurantsChanged) onRestaurantsChanged();
                     }}
-                    style={{ ...btnPrimary, width: "100%", opacity: assignTarget ? 1 : 0.4, fontSize: 12 }}
+                    style={{ ...btnPrimary, width: "100%", opacity: assignTarget && !grouping ? 1 : 0.4, fontSize: 12 }}
                   >
                     Group Under {assignTarget || "..."}
                   </button>
