@@ -739,43 +739,41 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
                   value={cityDropOpen ? citySearch : (editForm.city || "")}
                   onChange={e => { setCitySearch(e.target.value); setCityDropOpen(true); }}
                   onFocus={() => { setCitySearch(editForm.city || ""); setCityDropOpen(true); }}
+                  onBlur={() => { setTimeout(() => setCityDropOpen(false), 150); }}
                   placeholder="Search cities..."
                   style={{ ...inputStyle, borderColor: cityDropOpen ? C.terracotta : undefined }}
                   autoComplete="off"
                 />
                 {cityDropOpen && (
-                  <>
-                    {/* Invisible overlay to close dropdown on outside click */}
-                    <div style={{ position: "fixed", inset: 0, zIndex: 999 }} onClick={() => setCityDropOpen(false)} />
-                    <div style={{
-                      position: "absolute", top: "100%", left: 0, right: 0, zIndex: 1000,
-                      maxHeight: 200, overflowY: "auto", background: C.bg2, border: `1px solid ${C.terracotta}`,
-                      borderRadius: "0 0 8px 8px", marginTop: -1, WebkitOverflowScrolling: "touch",
-                    }}>
-                      {cityFilteredList.length === 0 && (
-                        <div style={{ padding: "10px 12px", fontSize: 12, color: C.dim }}>No matching cities</div>
-                      )}
-                      {cityFilteredList.slice(0, 30).map(c => (
-                        <button key={c} type="button" onClick={() => {
-                          setEditForm(p => ({ ...p, city: c }));
-                          setCityDropOpen(false);
-                          setCitySearch("");
-                        }} style={{
-                          display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
-                          background: c === editForm.city ? "rgba(196,96,58,0.15)" : "transparent",
-                          border: "none", borderBottom: `1px solid ${C.border}`, color: C.text,
-                          fontSize: 13, fontFamily: "-apple-system,sans-serif", cursor: "pointer",
-                        }}>
-                          {c}
-                        </button>
-                      ))}
-                      {cityFilteredList.length > 30 && (
-                        <div style={{ padding: "6px 12px", fontSize: 10, color: C.dim, textAlign: "center" }}>
-                          Type more to narrow down...
-                        </div>
-                      )}
-                    </div>
-                  </>
+                  <div style={{
+                    position: "absolute", top: "100%", left: 0, right: 0, zIndex: 1000,
+                    maxHeight: 200, overflowY: "auto", background: C.bg2, border: `1px solid ${C.terracotta}`,
+                    borderRadius: "0 0 8px 8px", marginTop: -1, WebkitOverflowScrolling: "touch",
+                  }}>
+                    {cityFilteredList.length === 0 && (
+                      <div style={{ padding: "10px 12px", fontSize: 12, color: C.dim }}>No matching cities</div>
+                    )}
+                    {cityFilteredList.slice(0, 30).map(c => (
+                      <button key={c} type="button" onMouseDown={e => {
+                        e.preventDefault(); // prevent input blur before click registers
+                        setEditForm(p => ({ ...p, city: c }));
+                        setCityDropOpen(false);
+                        setCitySearch("");
+                      }} style={{
+                        display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
+                        background: c === editForm.city ? "rgba(196,96,58,0.15)" : "transparent",
+                        border: "none", borderBottom: `1px solid ${C.border}`, color: C.text,
+                        fontSize: 13, fontFamily: "-apple-system,sans-serif", cursor: "pointer",
+                      }}>
+                        {c}
+                      </button>
+                    ))}
+                    {cityFilteredList.length > 30 && (
+                      <div style={{ padding: "6px 12px", fontSize: 10, color: C.dim, textAlign: "center" }}>
+                        Type more to narrow down...
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
