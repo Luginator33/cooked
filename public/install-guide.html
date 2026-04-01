@@ -20,15 +20,22 @@
     width: 100%;
   }
   .logo {
-    font-family: Georgia, 'Cormorant Garamond', serif;
+    font-family: 'Playfair Display', Georgia, serif;
     font-style: italic;
     font-weight: 700;
-    font-size: 36px;
+    font-size: 38px;
     text-align: center;
     margin-bottom: 6px;
+    background: linear-gradient(135deg, #3a1c0e 0%, #7a2e1a 15%, #d4712a 35%, #ff9632 50%, #e87040 65%, #8b3018 80%, #2a0e06 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 12px rgba(255,140,50,0.25)) drop-shadow(0 0 25px rgba(224,100,40,0.1));
   }
-  .logo span:first-child { color: #f0ebe2; }
-  .logo span:last-child { color: #c4603a; }
+  .logo-ed {
+    -webkit-text-fill-color: #e07850;
+    filter: drop-shadow(0 0 8px rgba(224,112,80,0.4));
+  }
   .tagline {
     text-align: center;
     font-size: 14px;
@@ -44,7 +51,7 @@
     text-align: center;
     margin-bottom: 32px;
     font-size: 15px;
-    color: #c4603a;
+    color: #e07850;
     font-weight: 600;
     letter-spacing: 0.01em;
     word-break: break-all;
@@ -73,7 +80,7 @@
     height: 28px;
     border-radius: 50%;
     background: rgba(196,96,58,0.15);
-    color: #c4603a;
+    color: #e07850;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -131,8 +138,8 @@
     font-family: inherit;
   }
   .platform-tab.active {
-    color: #c4603a;
-    border-bottom-color: #c4603a;
+    color: #e07850;
+    border-bottom-color: #e07850;
   }
   .platform-content { display: none; }
   .platform-content.active { display: block; }
@@ -162,7 +169,7 @@
 </head>
 <body>
 <div class="card">
-  <div class="logo"><span>cook</span><span>ed</span></div>
+  <div class="logo">cook<span class="logo-ed">ed</span></div>
   <div class="tagline">your restaurant companion</div>
 
   <div class="url-box">cooked-mejx.onrender.com</div>
