@@ -1501,11 +1501,13 @@ function ProfilePhotoSlide({ onFinish, homeCity, cuisinesVibes, followCities, sw
         }
       }
 
-      // Auto-follow the app owner
+      // Auto-follow: new user follows owner, owner follows new user back
       if (user.id !== OWNER_CLERK_ID) {
         try {
           await followUser(user.id, OWNER_CLERK_ID);
           syncFollow(user.id, OWNER_CLERK_ID);
+          await followUser(OWNER_CLERK_ID, user.id);
+          syncFollow(OWNER_CLERK_ID, user.id);
         } catch (e) { console.warn("Auto-follow owner failed:", e); }
       }
     } catch (err) {
@@ -1647,11 +1649,13 @@ export default function Onboarding({ onComplete, isGoogleSignup = false }) {
         }
       }
 
-      // Auto-follow the app owner
+      // Auto-follow: new user follows owner, owner follows new user back
       if (user.id !== OWNER_CLERK_ID) {
         try {
           await followUser(user.id, OWNER_CLERK_ID);
           syncFollow(user.id, OWNER_CLERK_ID);
+          await followUser(OWNER_CLERK_ID, user.id);
+          syncFollow(OWNER_CLERK_ID, user.id);
         } catch (e) { console.warn("Auto-follow owner failed:", e); }
       }
     } catch (err) {
