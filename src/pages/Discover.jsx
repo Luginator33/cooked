@@ -4312,8 +4312,14 @@ Return a JSON object with exactly these fields:
               }));
             } else {
               if (user?.id) {
-                if (dir === 'right') logInteraction(user.id, r.id, 'heat');
-                else if (dir === 'left') logInteraction(user.id, r.id, 'pass');
+                if (dir === 'right') {
+                  logInteraction(user.id, r.id, 'heat');
+                  const fullRest = allRestaurants.find(ar => ar.id === r.id || ar.id === Number(r.id));
+                  if (fullRest) syncRestaurant(fullRest);
+                  syncLove(user.id, r.id);
+                } else if (dir === 'left') {
+                  logInteraction(user.id, r.id, 'pass');
+                }
               }
               setHeatResults(prev => {
                 const next = {
