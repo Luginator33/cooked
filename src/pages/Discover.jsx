@@ -4344,6 +4344,8 @@ Return a JSON object with exactly these fields:
           dragStart.current = null;
           // After animation completes, advance the deck
           setTimeout(() => {
+            // Advance index FIRST so the old card is gone before we clear the fly animation
+            setHeatDeckIndex(i => i + 1);
             setHeatFlyDir(null);
             setSwipeDir(null);
             if (dir === 'up') {
@@ -4384,8 +4386,6 @@ Return a JSON object with exactly these fields:
                 };
               });
             }
-            // Advance to next card in the stable deck
-            setHeatDeckIndex(i => i + 1);
             heatSwipeHandledRef.current = false;
           }, 400);
         };
