@@ -1030,6 +1030,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [peopleSearchResults, setPeopleSearchResults] = useState([]);
   const [peopleSearchLoading, setPeopleSearchLoading] = useState(false);
   const [peopleFollowingMap, setPeopleFollowingMap] = useState({});
+  const [yourFriends, setYourFriends] = useState([]); // profiles of people you follow
   const [followingPicksLoading, setFollowingPicksLoading] = useState(false);
   const [followingPicksRestaurants, setFollowingPicksRestaurants] = useState([]);
   const [followingPicksNoFollows, setFollowingPicksNoFollows] = useState(false);
@@ -1344,6 +1345,12 @@ export default function Discover({ tasteProfile, initialTab }) {
         return;
       }
       setFollowingPicksNoFollows(false);
+      // Fetch friend profiles for "Your Friends" section
+      const { data: friendProfiles } = await supabase
+        .from("user_data")
+        .select("clerk_user_id, profile_name, profile_username, profile_photo")
+        .in("clerk_user_id", followingIds);
+      if (!cancelled) setYourFriends((friendProfiles || []).filter(p => p.clerk_user_id !== user.id));
       const { data: userRows, error } = await supabase
         .from("user_data")
         .select("loved,watchlist,heat,clerk_user_id")
@@ -3992,9 +3999,7 @@ Return a JSON object with exactly these fields:
                       <div style={{ fontSize: 9, fontFamily: "'Inter', -apple-system, sans-serif", letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, marginBottom: 10 }}>SUGGESTED FOR YOU</div>
                       {suggestedFriends.map(person => (
                         <div key={person.id} onClick={() => person.id && setViewingUserId(person.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
-                          <div style={{ width: 44, height: 44, borderRadius: "50%", border: `2px solid ${C.terracotta}`, background: C.bg3, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
-                            <span style={{ fontSize: 16, color: C.terracotta, fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: "bold" }}>{(person.name || "?")[0].toUpperCase()}</span>
-                          </div>
+                          <ProfilePhoto photo={null} size={44} userId={person.id} style={{ flexShrink: 0, border: `2px solid ${C.terracotta}` }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontStyle: "italic", fontSize: 15, color: C.text }}>{person.name || "User"}</div>
                             <div style={{ fontSize: 11, color: C.terracotta, marginTop: 2, fontFamily: "'Inter', -apple-system, sans-serif" }}>{person.sharedCount} restaurant{person.sharedCount !== 1 ? "s" : ""} in common</div>
@@ -4086,8 +4091,24 @@ Return a JSON object with exactly these fields:
                     </div>
                   )}
 
-                  {/* Empty state when no suggestions and no following picks */}
-                  {suggestedFriends.length === 0 && peopleLikeYou.length === 0 && followingPicksRestaurants.length === 0 && !followingPicksLoading && (
+                  {/* Your Friends — people you follow */}
+                  {yourFriends.length > 0 && (
+                    <div style={{ padding: "8px 16px 0" }}>
+                      <div style={{ fontSize: 9, fontFamily: "'Inter', -apple-system, sans-serif", letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, marginBottom: 10 }}>YOUR FRIENDS</div>
+                      {yourFriends.map(friend => (
+                        <div key={friend.clerk_user_id} onClick={() => setViewingUserId(friend.clerk_user_id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                          <ProfilePhoto photo={friend.profile_photo} size={44} userId={friend.clerk_user_id} style={{ flexShrink: 0, border: `2px solid ${C.terracotta}` }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontStyle: "italic", fontSize: 15, color: C.text }}>{friend.profile_name || "User"}</div>
+                            {friend.profile_username && <div style={{ fontSize: 12, color: C.muted, marginTop: 2, fontFamily: "'Inter', -apple-system, sans-serif" }}>@{friend.profile_username}</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Empty state when no suggestions and no friends */}
+                  {suggestedFriends.length === 0 && peopleLikeYou.length === 0 && followingPicksRestaurants.length === 0 && yourFriends.length === 0 && !followingPicksLoading && (
                     <div style={{ textAlign: "center", padding: "32px 24px", color: C.muted, fontSize: 14, fontFamily: "'Inter', -apple-system, sans-serif" }}>
                       Search for friends above or invite them to join Cooked
                     </div>
@@ -4127,21 +4148,7 @@ Return a JSON object with exactly these fields:
                           background: "transparent",
                         }}
                       >
-                        <div
-                          style={{
-                            width: 44,
-                            height: 44,
-                            borderRadius: "50%",
-                            overflow: "hidden",
-                            flexShrink: 0,
-                            border: `2px solid ${C.terracotta}`,
-                            background: C.bg3,
-                          }}
-                        >
-                          {row.profile_photo ? (
-                            <img src={row.profile_photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          ) : null}
-                        </div>
+                        <ProfilePhoto photo={row.profile_photo} size={44} userId={uid} style={{ flexShrink: 0, border: `2px solid ${C.terracotta}` }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontStyle: "italic", fontSize: 14, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{displayName}</div>
                           <div style={{ fontFamily: "'Inter', -apple-system, sans-serif", fontSize: 12, color: C.muted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{uname}</div>
