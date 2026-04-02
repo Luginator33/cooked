@@ -1113,7 +1113,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const seedTriggeredRef = useRef(false);
   useEffect(() => {
     if (seedTriggeredRef.current) return;
-    if (safeLocalStorageGetItem("cooked_graph_seeded_v3")) return;
+    if (safeLocalStorageGetItem("cooked_graph_seeded_v4")) return;
     if (!import.meta.env.VITE_NEO4J_URI) return;
     // Wait for community restaurants to merge (static data is ~2900, with community it's higher)
     if (allRestaurants.length < 100) return;
@@ -1134,8 +1134,8 @@ export default function Discover({ tasteProfile, initialTab }) {
           }
           console.log("[Neo4j] Re-synced", loved.length, "loved restaurants");
         }
-        try { window.localStorage.setItem("cooked_graph_seeded_v3", "1"); } catch {}
-        console.log("[Neo4j] Graph seeded with", allRestaurants.length, "restaurants (v3 — city fix)");
+        try { window.localStorage.setItem("cooked_graph_seeded_v4", "1"); } catch {}
+        console.log("[Neo4j] Graph seeded with", allRestaurants.length, "restaurants (v4 — love sync fix)");
       }).catch(e => console.error("[Neo4j] Seed error:", e));
     }, 3000);
     return () => clearTimeout(timer);
