@@ -5395,9 +5395,7 @@ Return a JSON object with exactly these fields:
               {dmConvo ? (
                 <>
                   <button type="button" className="sheet-back" style={{ fontSize:18 }} onClick={() => { setDmConvo(null); loadDmInbox(); }}>‹</button>
-                  <div className="av-circle" style={{ width:32, height:32 }}>
-                    {dmConvo.partnerPhoto ? <img src={dmConvo.partnerPhoto} alt="" /> : null}
-                  </div>
+                  <ProfilePhoto photo={dmConvo.partnerPhoto} size={32} userId={dmConvo.partnerId} />
                   <div className="sheet-header-title" style={{ flex:1 }}>{dmConvo.partnerName}</div>
                 </>
               ) : (
@@ -5417,9 +5415,7 @@ Return a JSON object with exactly these fields:
                   </div>
                 ) : dmInbox.map(convo => (
                   <button key={convo.partnerId} type="button" className={`sheet-row${convo.unread > 0 ? " unread" : ""}`} onClick={() => openDmConvo(convo.partnerId, convo.partnerName, convo.partnerPhoto)}>
-                    <div className="av-circle" style={{ width:44, height:44 }}>
-                      {convo.partnerPhoto ? <img src={convo.partnerPhoto} alt="" /> : null}
-                    </div>
+                    <ProfilePhoto photo={convo.partnerPhoto} size={44} userId={convo.partnerId} />
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                         <span style={{ fontFamily:"'Inter', -apple-system, sans-serif", fontSize:14, fontWeight: convo.unread > 0 ? 700 : 400, color:C.text }}>{convo.partnerName}</span>
@@ -5478,15 +5474,13 @@ Return a JSON object with exactly these fields:
 
       {/* ── SHARE VIA DM PICKER ── */}
       {dmSharePicker && createPortal(
-        <div className="modal-backdrop" style={{ background:"rgba(0,0,0,0.7)", zIndex:10000 }} onClick={() => setDmSharePicker(null)}>
+        <div className="modal-backdrop" style={{ background:"rgba(0,0,0,0.7)", zIndex:999999 }} onClick={() => setDmSharePicker(null)}>
           <div className="sheet short" onClick={e => e.stopPropagation()} style={{ padding:"20px 18px 36px", overflowY:"auto" }}>
             <div className="sheet-header-title" style={{ marginBottom:4 }}>Send {dmSharePicker.name} to...</div>
             <input className="glass-input" value={dmShareSearch} onChange={e => setDmShareSearch(e.target.value)} placeholder="Search people..." style={{ marginBottom:12 }} />
             {dmShareResults.length === 0 ? <div className="empty-state" style={{ padding:20, fontSize:13 }}>No people found</div> : dmShareResults.map(u => (
               <button key={u.clerk_user_id} type="button" className="sheet-row" onClick={() => handleShareViaDm(u.clerk_user_id, u.profile_name || u.profile_username || "User")}>
-                <div className="av-circle" style={{ width:36, height:36 }}>
-                  {u.profile_photo ? <img src={u.profile_photo} alt="" /> : null}
-                </div>
+                <ProfilePhoto photo={u.profile_photo} size={36} userId={u.clerk_user_id} />
                 <div>
                   <div style={{ fontSize:14, color:C.text, fontFamily:"'Inter', -apple-system, sans-serif" }}>{u.profile_name || "User"}</div>
                   {u.profile_username && <div style={{ fontSize:11, color:C.muted }}>@{u.profile_username}</div>}

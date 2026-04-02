@@ -704,9 +704,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
                         textAlign: "left",
                       }}
                     >
-                      <div style={{ width: 34, height: 34, borderRadius: "50%", overflow: "hidden", border: `1px solid ${C.border}`, background: C.bg3, flexShrink: 0 }}>
-                        {u.profile_photo ? <img src={u.profile_photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-                      </div>
+                      <ProfilePhoto photo={u.profile_photo} size={34} userId={u.clerk_user_id} />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ color: C.text, fontSize: 14, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.profile_name}</div>
                         <div style={{ color: C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif" }}>{u.profile_username}</div>
@@ -738,9 +736,7 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
                       textAlign: "left",
                     }}
                   >
-                    <div style={{ width: 34, height: 34, borderRadius: "50%", overflow: "hidden", border: `1px solid ${C.border}`, background: C.bg3, flexShrink: 0 }}>
-                      {u.profile_photo ? <img src={u.profile_photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-                    </div>
+                    <ProfilePhoto photo={u.profile_photo} size={34} userId={u.clerk_user_id} />
                     <div style={{ minWidth: 0 }}>
                       <div style={{ color: C.text, fontSize: 14, fontFamily: "'Inter', -apple-system, sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.profile_name}</div>
                       <div style={{ color: C.muted, fontSize: 12, fontFamily: "'Inter', -apple-system, sans-serif" }}>{u.profile_username}</div>
