@@ -1035,6 +1035,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [followingPicksRestaurants, setFollowingPicksRestaurants] = useState([]);
   const [followingPicksNoFollows, setFollowingPicksNoFollows] = useState(false);
   const [swipeScores, setSwipeScores] = useState({}); // { restaurantId: score } from Neo4j smart swipe
+  const swipeScoresRef = useRef({});
   const [personalizationScores, setPersonalizationScores] = useState({}); // { restaurantId: boost } for discover sort
   const [crossCuisineRecs, setCrossCuisineRecs] = useState([]); // cross-cuisine discovery
   const [venueType, setVenueType] = useState("all"); // "all" | "restaurants" | "bars" | "coffee"
@@ -1180,7 +1181,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       setHiddenGems(matched);
     }).catch(e => console.error("[Neo4j] hiddenGems error:", e));
     // Personalization intelligence
-    getSmartSwipeScores(user.id).then(setSwipeScores).catch(() => {});
+    getSmartSwipeScores(user.id).then(s => { swipeScoresRef.current = s; setSwipeScores(s); }).catch(() => {});
     getPersonalizationScores(user.id).then(setPersonalizationScores).catch(() => {});
     getCrossCuisineRecs(user.id, 8).then(results => {
       const matched = results
@@ -2360,9 +2361,10 @@ export default function Discover({ tasteProfile, initialTab }) {
   const heatDeck = useMemo(() => {
     let arr = [...heatActive, ...heatSkippedRecycled];
     // Smart sort: taste-matched restaurants first, then shuffle within tiers
-    const hasScores = Object.keys(swipeScores).length > 0;
+    const scores = swipeScoresRef.current;
+    const hasScores = Object.keys(scores).length > 0;
     if (hasScores) {
-      arr.sort((a, b) => (swipeScores[String(b.id)] || 0) - (swipeScores[String(a.id)] || 0));
+      arr.sort((a, b) => (scores[String(b.id)] || 0) - (scores[String(a.id)] || 0));
       // Diversity: limit same-name chains (e.g., "Soho House") to max 2 in the top 50
       const nameCounts = {};
       const getBrand = (name) => {
@@ -2399,7 +2401,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       }
     }
     return arr;
-  }, [heatActive.length, heatSkippedRecycled.length, heatCity, user?.id, swipeScores]);
+  }, [heatActive.length, heatSkippedRecycled.length, heatCity, user?.id]);
   const filtered = filteredByCity;
   const listNames = Object.keys(userLists);
   const toggleList = (listName, restaurantId) => {
