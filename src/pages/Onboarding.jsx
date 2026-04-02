@@ -153,6 +153,26 @@ const GENDER_OPTIONS = ["Male", "Female", "Non-binary", "Prefer not to say"];
 
 // ─── Progress Dots ───
 
+function OnboardingBackBtn({ onBack }) {
+  if (!onBack) return null;
+  return (
+    <button
+      type="button"
+      onClick={onBack}
+      style={{
+        position: "absolute", top: "max(12px, env(safe-area-inset-top, 12px))", left: 16,
+        width: 40, height: 40, borderRadius: "50%",
+        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+        color: "rgba(245,240,235,0.5)", fontSize: 18, cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 10, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+      }}
+    >
+      ‹
+    </button>
+  );
+}
+
 function ProgressDots({ step, total = 9 }) {
   return (
     <div className="ob-progress">
@@ -251,7 +271,7 @@ function CardFanSlide({ onNext, onSignIn }) {
 
 // ─── Sign In Slide (for returning users) ───
 
-function SignInSlide({ onSuccess }) {
+function SignInSlide({ onSuccess, onBack }) {
   const { signIn, isLoaded } = useSignIn();
   const clerkObj = useClerk();
   const [form, setForm] = useState({ email: "", password: "" });
@@ -308,6 +328,7 @@ function SignInSlide({ onSuccess }) {
 
   return (
     <div className="d-onboarding d-ob-slide" style={{ paddingTop: 60 }}>
+      <OnboardingBackBtn onBack={onBack} />
       <div className="glow-orb glow-amber glow-1" />
       <div className="glow-orb glow-rose glow-2" />
       <div className="ob-title">Welcome back</div>
@@ -363,7 +384,7 @@ function SignInSlide({ onSuccess }) {
 
 // ─── Slide 1: Pick Home City ───
 
-function PickHomeCitySlide({ onNext, onSelect }) {
+function PickHomeCitySlide({ onNext, onSelect, onBack }) {
   const [selected, setSelected] = useState(null);
 
   const handleSelect = (name) => {
@@ -373,6 +394,7 @@ function PickHomeCitySlide({ onNext, onSelect }) {
 
   return (
     <div className="d-onboarding d-ob-slide">
+      <OnboardingBackBtn onBack={onBack} />
       <div className="glow-orb glow-amber glow-1" />
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={2} />
@@ -406,7 +428,7 @@ function PickHomeCitySlide({ onNext, onSelect }) {
 
 // ─── Slide 2: Cuisines & Vibes ───
 
-function CuisinesVibesSlide({ onNext, onSelect }) {
+function CuisinesVibesSlide({ onNext, onSelect, onBack }) {
   const [picks, setPicks] = useState(new Set());
 
   const toggle = (item) => {
@@ -424,6 +446,7 @@ function CuisinesVibesSlide({ onNext, onSelect }) {
 
   return (
     <div className="d-onboarding d-ob-slide" style={{ paddingTop: 40 }}>
+      <OnboardingBackBtn onBack={onBack} />
       <div className="glow-orb glow-amber glow-1" />
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={3} />
@@ -488,7 +511,7 @@ function CuisinesVibesSlide({ onNext, onSelect }) {
 
 // ─── Slide 3: Follow Cities ───
 
-function FollowCitiesSlide({ onNext, onSelect }) {
+function FollowCitiesSlide({ onNext, onSelect, onBack }) {
   const [selected, setSelected] = useState(new Set());
 
   const toggle = (name) => {
@@ -506,6 +529,7 @@ function FollowCitiesSlide({ onNext, onSelect }) {
 
   return (
     <div className="d-onboarding d-ob-slide">
+      <OnboardingBackBtn onBack={onBack} />
       <div className="glow-orb glow-amber glow-1" />
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={4} />
@@ -539,7 +563,7 @@ function FollowCitiesSlide({ onNext, onSelect }) {
 
 // ─── Slide 4: Swipe Game ───
 
-function SwipeGameSlide({ onNext, onSwipeResult }) {
+function SwipeGameSlide({ onNext, onSwipeResult, onBack }) {
   const [cardIdx, setCardIdx] = useState(0);
   const [swipeCount, setSwipeCount] = useState(0);
   const [showOverlay, setShowOverlay] = useState(true);
@@ -680,6 +704,7 @@ function SwipeGameSlide({ onNext, onSwipeResult }) {
 
   return (
     <div className="d-onboarding d-ob-slide">
+      <OnboardingBackBtn onBack={onBack} />
       <div className="glow-orb glow-amber glow-1" />
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={5} />
@@ -779,7 +804,7 @@ function SwipeGameSlide({ onNext, onSwipeResult }) {
 
 // ─── Slide 5: Find Friends ───
 
-function FindFriendsSlide({ onNext, onFollowUser }) {
+function FindFriendsSlide({ onNext, onFollowUser, onBack }) {
   const { user } = useUser();
   const [following, setFollowing] = useState(new Set());
   const [realUsers, setRealUsers] = useState([]);
@@ -834,6 +859,7 @@ function FindFriendsSlide({ onNext, onFollowUser }) {
 
   return (
     <div className="d-onboarding d-ob-slide" style={{ paddingTop: 40 }}>
+      <OnboardingBackBtn onBack={onBack} />
       <div className="glow-orb glow-amber glow-1" />
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={6} />
@@ -907,7 +933,7 @@ function FindFriendsSlide({ onNext, onFollowUser }) {
 
 // ─── Slide 6: Chat Concierge ───
 
-function ChatConciergeSlide({ onNext }) {
+function ChatConciergeSlide({ onNext, onBack }) {
   const [messages, setMessages] = useState([
     { type: "bot", text: "Ok so you're clearly into Italian and late-night spots. I can work with that. What are we thinking \u2014 pasta tonight? A new date spot? Or want me to throw you something you'd never find on your own?" },
   ]);
@@ -944,6 +970,7 @@ function ChatConciergeSlide({ onNext }) {
 
   return (
     <div className="d-onboarding d-ob-slide">
+      <OnboardingBackBtn onBack={onBack} />
       <div className="glow-orb glow-amber glow-1" />
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={7} />
@@ -1013,7 +1040,7 @@ function ChatConciergeSlide({ onNext }) {
 
 // ─── Slide 7: Taste Reveal ───
 
-function TasteRevealSlide({ onNext, cuisinesVibes = [], swipeResults = {} }) {
+function TasteRevealSlide({ onNext, cuisinesVibes = [], swipeResults = {}, onBack }) {
   // Dynamic score based on actual engagement
   const picks = cuisinesVibes.length || 0;
   const swipes = (swipeResults?.loved?.length || 0) + (swipeResults?.noped?.length || 0);
@@ -1028,6 +1055,7 @@ function TasteRevealSlide({ onNext, cuisinesVibes = [], swipeResults = {} }) {
 
   return (
     <div className="d-onboarding d-ob-slide" style={{ paddingTop: 60 }}>
+      <OnboardingBackBtn onBack={onBack} />
       <div className="glow-orb glow-amber glow-1" style={{ opacity: 0.3 }} />
       <div className="glow-orb glow-rose glow-2" style={{ opacity: 0.3 }} />
       <ProgressDots step={8} />
@@ -1067,7 +1095,7 @@ function TasteRevealSlide({ onNext, cuisinesVibes = [], swipeResults = {} }) {
 
 // ─── Slide 1: Sign Up ───
 
-function SignUpSlide({ onNext, onSignIn }) {
+function SignUpSlide({ onNext, onSignIn, onBack }) {
   const { signUp, isLoaded: signUpLoaded } = useSignUp();
   const clerk = useClerk();
   const { user } = useUser();
@@ -1208,6 +1236,7 @@ function SignUpSlide({ onNext, onSignIn }) {
   if (googleCompleteProfile) {
     return (
       <div className="d-onboarding d-ob-slide" style={{ paddingTop: 40 }}>
+        <OnboardingBackBtn onBack={onBack} />
         <div className="glow-orb glow-amber glow-1" />
         <div className="glow-orb glow-rose glow-2" />
         <ProgressDots step={1} />
@@ -1274,6 +1303,7 @@ function SignUpSlide({ onNext, onSignIn }) {
   if (verifying) {
     return (
       <div className="d-onboarding d-ob-slide" style={{ paddingTop: 60 }}>
+        <OnboardingBackBtn onBack={() => setVerifying(false)} />
         <div className="glow-orb glow-amber glow-1" />
         <div className="glow-orb glow-rose glow-2" />
         <ProgressDots step={1} />
@@ -1309,6 +1339,7 @@ function SignUpSlide({ onNext, onSignIn }) {
 
   return (
     <div className="d-onboarding d-ob-slide" style={{ paddingTop: 40 }}>
+      <OnboardingBackBtn onBack={onBack} />
       <div className="glow-orb glow-amber glow-1" />
       <div className="glow-orb glow-rose glow-2" />
       <ProgressDots step={1} />
@@ -1671,6 +1702,19 @@ export default function Onboarding({ onComplete, isGoogleSignup = false }) {
   };
 
   const goNext = () => setSlide(s => s + 1);
+  const goBack = () => {
+    if (showSignIn) { setShowSignIn(false); return; }
+    if (slide > 0) setSlide(s => s - 1);
+  };
+
+  // PWA back-swipe support for onboarding
+  useEffect(() => {
+    if (slide === 0 && !showSignIn) return; // No back on first screen
+    window.history.pushState({ onboardingSlide: slide }, "");
+    const handlePop = () => goBack();
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [slide, showSignIn]);
 
   const handleSignIn = () => {
     setShowSignIn(true);
@@ -1713,17 +1757,17 @@ export default function Onboarding({ onComplete, isGoogleSignup = false }) {
 
   return (
     <div style={{ opacity: fontsReady ? 1 : 0, transition: "opacity 0.3s ease" }}>
-      {showSignIn && <SignInSlide onSuccess={handleSignInSuccess} />}
+      {showSignIn && <SignInSlide onSuccess={handleSignInSuccess} onBack={() => setShowSignIn(false)} />}
       {!showSignIn && slide === 0 && <CardFanSlide onNext={goNext} onSignIn={handleSignIn} />}
-      {!showSignIn && slide === 1 && <SignUpSlide onNext={goNext} onSignIn={handleSignIn} />}
-      {slide === 2 && <PickHomeCitySlide onNext={goNext} onSelect={(city) => setHomeCity(city)} />}
-      {slide === 3 && <CuisinesVibesSlide onNext={goNext} onSelect={(picks) => setCuisinesVibes(picks)} />}
-      {slide === 4 && <FollowCitiesSlide onNext={goNext} onSelect={(cities) => setFollowCitiesState(cities)} />}
-      {slide === 5 && <SwipeGameSlide onNext={goNext} onSwipeResult={(results) => setSwipeResults(results)} />}
-      {slide === 6 && <FindFriendsSlide onNext={goNext} />}
-      {slide === 7 && <ChatConciergeSlide onNext={goNext} />}
+      {!showSignIn && slide === 1 && <SignUpSlide onNext={goNext} onSignIn={handleSignIn} onBack={goBack} />}
+      {slide === 2 && <PickHomeCitySlide onNext={goNext} onSelect={(city) => setHomeCity(city)} onBack={goBack} />}
+      {slide === 3 && <CuisinesVibesSlide onNext={goNext} onSelect={(picks) => setCuisinesVibes(picks)} onBack={goBack} />}
+      {slide === 4 && <FollowCitiesSlide onNext={goNext} onSelect={(cities) => setFollowCitiesState(cities)} onBack={goBack} />}
+      {slide === 5 && <SwipeGameSlide onNext={goNext} onSwipeResult={(results) => setSwipeResults(results)} onBack={goBack} />}
+      {slide === 6 && <FindFriendsSlide onNext={goNext} onBack={goBack} />}
+      {slide === 7 && <ChatConciergeSlide onNext={goNext} onBack={goBack} />}
       {slide === 8 && (
-        <TasteRevealSlide onNext={() => { finishAndSave(); }} cuisinesVibes={cuisinesVibes} swipeResults={swipeResults} />
+        <TasteRevealSlide onNext={() => { finishAndSave(); }} cuisinesVibes={cuisinesVibes} swipeResults={swipeResults} onBack={goBack} />
       )}
     </div>
   );

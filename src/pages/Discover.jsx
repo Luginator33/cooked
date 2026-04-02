@@ -1882,6 +1882,29 @@ export default function Discover({ tasteProfile, initialTab }) {
     return () => clearTimeout(timeoutId);
   }, [user?.id, heatResults, watchlist, userRatings, photoResolved]);
 
+  // Log search queries (debounced 1.5s after typing stops)
+  useEffect(() => {
+    if (!user?.id || !searchQuery.trim()) return;
+    const t = setTimeout(() => {
+      logInteraction(user.id, "0", 'search', null);
+      // Store search in Supabase for analytics via a lightweight insert
+      supabase.from('restaurant_interactions').insert({ clerk_user_id: user.id, restaurant_id: "search", action: 'search', value: searchQuery.trim().slice(0, 100) }).then(() => {});
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [searchQuery, user?.id]);
+
+  // Log city filter changes
+  useEffect(() => {
+    if (!user?.id || !city || city === "All") return;
+    supabase.from('restaurant_interactions').insert({ clerk_user_id: user.id, restaurant_id: "filter", action: 'city_filter', value: city }).then(() => {});
+  }, [city, user?.id]);
+
+  // Log mood filter changes
+  useEffect(() => {
+    if (!user?.id || !filterMood) return;
+    supabase.from('restaurant_interactions').insert({ clerk_user_id: user.id, restaurant_id: "filter", action: 'mood_filter', value: filterMood }).then(() => {});
+  }, [filterMood, user?.id]);
+
   const exportBackup = () => {
     const data = {};
     BACKUP_KEYS.forEach((key) => {
@@ -2121,9 +2144,10 @@ export default function Discover({ tasteProfile, initialTab }) {
     setShowTagPicker(false);
   }, [detailRestaurant]);
 
-  // Push history state for modals so browser back / mobile swipe-back works
+  // Log restaurant detail view + push history state for back navigation
   useEffect(() => {
     if (!detailRestaurant) return;
+    if (user?.id) logInteraction(user.id, detailRestaurant.id, 'view');
     window.history.pushState({ restaurantDetail: true }, "");
     const handlePop = () => {
       setDetailRestaurant(null);
@@ -2542,7 +2566,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     const normalizedId = isNaN(id) ? id : Number(id);
     setWatchlist(s => {
       const inList = s.includes(normalizedId) || s.includes(Number(id)) || s.includes(String(id));
-      if (!inList && user?.id) logInteraction(user.id, id, 'watchlist');
+      if (user?.id) logInteraction(user.id, id, inList ? 'watchlist_remove' : 'watchlist');
       if (inList) return s.filter(x => x !== normalizedId && x !== Number(id) && x !== String(id));
       return [...s, normalizedId];
     });
@@ -4306,6 +4330,7 @@ Return a JSON object with exactly these fields:
             setHeatFlyDir(null);
             setSwipeDir(null);
             if (dir === 'up') {
+              if (user?.id) logInteraction(user.id, r.id, 'skip');
               setHeatResults(prev => ({
                 ...prev,
                 skipped: [...prev.skipped.filter(id => id !== r.id), r.id],
