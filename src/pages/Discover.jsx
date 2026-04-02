@@ -2359,48 +2359,76 @@ export default function Discover({ tasteProfile, initialTab }) {
   // Uses a seeded shuffle based on today's date + user id so it's stable within a session
   // but different each day and between users
   const heatDeck = useMemo(() => {
-    let arr = [...heatActive, ...heatSkippedRecycled];
-    // Smart sort: taste-matched restaurants first, then shuffle within tiers
-    const scores = swipeScoresRef.current;
-    const hasScores = Object.keys(scores).length > 0;
-    if (hasScores) {
-      arr.sort((a, b) => (scores[String(b.id)] || 0) - (scores[String(a.id)] || 0));
-      // Diversity: limit same-name chains (e.g., "Soho House") to max 2 in the top 50
-      const nameCounts = {};
-      const getBrand = (name) => {
-        const words = (name || "").split(/\s+/);
-        return words.length > 2 ? words.slice(0, 2).join(" ").toLowerCase() : (name || "").toLowerCase();
-      };
-      const diverse = [];
-      const deferred = [];
-      for (const r of arr) {
-        const brand = getBrand(r.name);
-        nameCounts[brand] = (nameCounts[brand] || 0) + 1;
-        if (nameCounts[brand] <= 2 || diverse.length >= 50) {
-          diverse.push(r);
-        } else {
-          deferred.push(r);
-        }
-      }
-      arr = [...diverse, ...deferred];
-    }
-    // Shuffle within score tiers (groups of ~10) for daily variety
+    const all = [...heatActive, ...heatSkippedRecycled];
+    if (all.length === 0) return [];
+
+    // Seeded RNG for daily variety
     const uid = user?.id || "x";
     let h = 0;
     for (let i = 0; i < uid.length; i++) h = ((h << 5) - h + uid.charCodeAt(i)) | 0;
     const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
-    const seed = ((Math.abs(h) + dayOfYear * 2654435761) >>> 0) % 2147483647 || 1;
-    let s = seed;
-    const tierSize = hasScores ? 10 : arr.length; // shuffle within tiers if smart, full shuffle if not
-    for (let start = 0; start < arr.length; start += tierSize) {
-      const end = Math.min(start + tierSize, arr.length);
-      for (let i = end - 1; i > start; i--) {
-        s = (s * 16807) % 2147483647;
-        const j = start + (s % (i - start + 1));
+    let s = ((Math.abs(h) + dayOfYear * 2654435761) >>> 0) % 2147483647 || 1;
+    const rng = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+
+    // Categorize restaurants into buckets for diversity
+    const scores = swipeScoresRef.current;
+    const hasScores = Object.keys(scores).length > 0;
+
+    // Priority buckets: user's followed cities first, then scored, then rest
+    const followedCitySet = new Set(followedCities || []);
+    const inFollowedCity = [];
+    const scored = [];
+    const rest = [];
+    for (const r of all) {
+      if (followedCitySet.has(r.city)) inFollowedCity.push(r);
+      else if (hasScores && (scores[String(r.id)] || 0) > 0) scored.push(r);
+      else rest.push(r);
+    }
+
+    // Shuffle each bucket
+    const shuffle = (arr) => {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];
       }
+      return arr;
+    };
+    shuffle(inFollowedCity);
+    shuffle(scored);
+    shuffle(rest);
+
+    // Interleave: ~60% followed cities, ~25% taste-matched, ~15% discovery
+    // This ensures variety even within a user's preferred cities
+    const result = [];
+    let fi = 0, si = 0, ri = 0;
+    const total = all.length;
+    for (let i = 0; i < total; i++) {
+      // Rotate through buckets with weighted probability
+      const roll = rng();
+      if (roll < 0.6 && fi < inFollowedCity.length) result.push(inFollowedCity[fi++]);
+      else if (roll < 0.85 && si < scored.length) result.push(scored[si++]);
+      else if (ri < rest.length) result.push(rest[ri++]);
+      else if (fi < inFollowedCity.length) result.push(inFollowedCity[fi++]);
+      else if (si < scored.length) result.push(scored[si++]);
+      else if (ri < rest.length) result.push(rest[ri++]);
     }
-    return arr;
+
+    // Final pass: limit any brand/chain to max 1 in every 20 cards
+    const getBrand = (name) => (name || "").toLowerCase().replace(/\b(the|a|an|of|in|at|on)\b/g, "").trim().split(/\s+/).slice(0, 2).join(" ");
+    const final = [];
+    const recentBrands = [];
+    const deferred = [];
+    for (const r of result) {
+      const brand = getBrand(r.name);
+      if (recentBrands.includes(brand)) {
+        deferred.push(r);
+      } else {
+        final.push(r);
+        recentBrands.push(brand);
+        if (recentBrands.length > 20) recentBrands.shift();
+      }
+    }
+    return [...final, ...deferred];
   }, [heatActive.length, heatSkippedRecycled.length, heatCity, user?.id]);
   const filtered = filteredByCity;
   const listNames = Object.keys(userLists);
