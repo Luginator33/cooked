@@ -4345,14 +4345,9 @@ Return a JSON object with exactly these fields:
           dragStart.current = null;
           // After animation completes, advance the deck
           setTimeout(() => {
-            // Advance deck and clear fly state together
-            // Skip transition on the new card so it doesn't slide in
-            heatTransitionSkipRef.current = true;
             setHeatDeckIndex(i => i + 1);
             setHeatFlyDir(null);
             setSwipeDir(null);
-            // Re-enable transitions after the new card has rendered in place
-            requestAnimationFrame(() => { heatTransitionSkipRef.current = false; });
             if (dir === 'up') {
               if (user?.id) logInteraction(user.id, r.id, 'skip');
               setHeatResults(prev => ({
@@ -4535,6 +4530,7 @@ Return a JSON object with exactly these fields:
 
                   {/* Current/top card — draggable, flies out on swipe */}
                   <div
+                    key={`swipe-${card.id}`}
                     className="heat-swipe-area"
                     onPointerDown={handlePointerDown}
                     onPointerMove={handlePointerMove}
@@ -4544,7 +4540,7 @@ Return a JSON object with exactly these fields:
                       position:"absolute", inset:0, margin:0,
                       cursor:isDragging ? "grabbing" : "grab",
                       transform: cardTransform,
-                      transition: heatTransitionSkipRef.current ? "none" : heatFlyDir ? "transform 0.4s cubic-bezier(0.32, 0, 0.67, 0)" : isDragging ? "none" : "transform 0.3s ease",
+                      transition: heatFlyDir ? "transform 0.4s cubic-bezier(0.32, 0, 0.67, 0)" : isDragging ? "none" : "transform 0.3s ease",
                       touchAction:"none",
                       zIndex: 2,
                       willChange: "transform",
