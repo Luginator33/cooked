@@ -1635,6 +1635,7 @@ export default function Discover({ tasteProfile, initialTab }) {
   const dragStart = useRef(null);
   const swipeDeltaRef = useRef({ x: 0, y: 0 });
   const heatSwipeHandledRef = useRef(false);
+  const heatTransitionSkipRef = useRef(false);
   const backupInputRef = useRef(null);
 
   const [userLists, setUserLists] = useState(() => {
@@ -4344,10 +4345,14 @@ Return a JSON object with exactly these fields:
           dragStart.current = null;
           // After animation completes, advance the deck
           setTimeout(() => {
-            // Advance index FIRST so the old card is gone before we clear the fly animation
+            // Advance deck and clear fly state together
+            // Skip transition on the new card so it doesn't slide in
+            heatTransitionSkipRef.current = true;
             setHeatDeckIndex(i => i + 1);
             setHeatFlyDir(null);
             setSwipeDir(null);
+            // Re-enable transitions after the new card has rendered in place
+            requestAnimationFrame(() => { heatTransitionSkipRef.current = false; });
             if (dir === 'up') {
               if (user?.id) logInteraction(user.id, r.id, 'skip');
               setHeatResults(prev => ({
@@ -4539,7 +4544,7 @@ Return a JSON object with exactly these fields:
                       position:"absolute", inset:0, margin:0,
                       cursor:isDragging ? "grabbing" : "grab",
                       transform: cardTransform,
-                      transition: heatFlyDir ? "transform 0.4s cubic-bezier(0.32, 0, 0.67, 0)" : isDragging ? "none" : "transform 0.3s ease",
+                      transition: heatTransitionSkipRef.current ? "none" : heatFlyDir ? "transform 0.4s cubic-bezier(0.32, 0, 0.67, 0)" : isDragging ? "none" : "transform 0.3s ease",
                       touchAction:"none",
                       zIndex: 2,
                       willChange: "transform",
