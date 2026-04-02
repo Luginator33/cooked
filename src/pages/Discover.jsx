@@ -2334,11 +2334,29 @@ export default function Discover({ tasteProfile, initialTab }) {
   // Uses a seeded shuffle based on today's date + user id so it's stable within a session
   // but different each day and between users
   const heatDeck = useMemo(() => {
-    const arr = [...heatActive, ...heatSkippedRecycled];
+    let arr = [...heatActive, ...heatSkippedRecycled];
     // Smart sort: taste-matched restaurants first, then shuffle within tiers
     const hasScores = Object.keys(swipeScores).length > 0;
     if (hasScores) {
       arr.sort((a, b) => (swipeScores[String(b.id)] || 0) - (swipeScores[String(a.id)] || 0));
+      // Diversity: limit same-name chains (e.g., "Soho House") to max 2 in the top 50
+      const nameCounts = {};
+      const getBrand = (name) => {
+        const words = (name || "").split(/\s+/);
+        return words.length > 2 ? words.slice(0, 2).join(" ").toLowerCase() : (name || "").toLowerCase();
+      };
+      const diverse = [];
+      const deferred = [];
+      for (const r of arr) {
+        const brand = getBrand(r.name);
+        nameCounts[brand] = (nameCounts[brand] || 0) + 1;
+        if (nameCounts[brand] <= 2 || diverse.length >= 50) {
+          diverse.push(r);
+        } else {
+          deferred.push(r);
+        }
+      }
+      arr = [...diverse, ...deferred];
     }
     // Shuffle within score tiers (groups of ~10) for daily variety
     const uid = user?.id || "x";
