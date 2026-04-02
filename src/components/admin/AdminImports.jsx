@@ -454,9 +454,10 @@ export default function AdminImports({ allRestaurants, userId, onRestaurantsChan
       // Sync to Neo4j
       try { await syncRestaurant(id, newRestaurant); } catch {}
 
-      await updateNewPlaceStatus(placeId, "imported");
+      const { error: statusErr } = await updateNewPlaceStatus(placeId, "imported");
+      if (statusErr) throw statusErr;
+      await loadPlaces();
       showToast(`${form.name} imported!`);
-      loadPlaces();
       if (onRestaurantsChanged) onRestaurantsChanged();
     } catch (err) {
       console.error("Import error:", err);
@@ -465,13 +466,17 @@ export default function AdminImports({ allRestaurants, userId, onRestaurantsChan
   };
 
   const handleDismiss = async (placeId) => {
-    await updateNewPlaceStatus(placeId, "dismissed");
-    loadPlaces();
+    const { error } = await updateNewPlaceStatus(placeId, "dismissed");
+    if (error) { showToast(`Error: ${error.message}`); return; }
+    await loadPlaces();
+    showToast("Skipped");
   };
 
   const handleDelete = async (placeId) => {
-    await deleteNewPlace(placeId);
-    loadPlaces();
+    const { error } = await deleteNewPlace(placeId);
+    if (error) { showToast(`Error: ${error.message}`); return; }
+    await loadPlaces();
+    showToast("Deleted");
   };
 
   return (

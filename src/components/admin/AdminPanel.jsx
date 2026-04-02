@@ -32,8 +32,8 @@ export default function AdminPanel({ onClose, allRestaurants, userId, onRestaura
   return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: C.bg }}>
       <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", height: "100vh", display: "flex", flexDirection: "column" }}>
-        {/* Header */}
-        <div style={{ padding: "14px 20px 0", flexShrink: 0 }}>
+        {/* Header — respects iPhone notch/status bar */}
+        <div style={{ padding: "14px 20px 0", paddingTop: "max(14px, calc(10px + env(safe-area-inset-top, 0px)))", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 22, color: C.text }}>
               Admin Panel
