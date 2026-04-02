@@ -2353,16 +2353,22 @@ export default function Discover({ tasteProfile, initialTab }) {
     const group = CITY_GROUPS[heatCity] || [heatCity];
     return group.includes(r.city) || group.includes(r.neighborhood);
   });
-  const heatActive = heatCityRestaurants.filter(r => !isLovedCheck(r.id) && !heatResults.noped.includes(r.id) && !heatResults.skipped.includes(r.id));
-  const heatSkippedRecycled = heatCityRestaurants.filter(r => heatResults.skipped.includes(r.id));
-  // Shuffle the deck so users don't always see the same first card
-  // Uses a seeded shuffle based on today's date + user id so it's stable within a session
-  // but different each day and between users
-  const heatDeck = useMemo(() => {
-    const all = [...heatActive, ...heatSkippedRecycled];
-    if (all.length === 0) return [];
+  // Build a stable deck stored in a ref — only rebuilds when city changes, not on each swipe
+  const heatDeckRef = useRef([]);
+  const [heatDeckIndex, setHeatDeckIndex] = useState(0);
+  const heatDeckCityRef = useRef(null);
 
-    // Seeded RNG for daily variety
+  // Rebuild deck when city changes or on first load
+  useEffect(() => {
+    if (heatDeckCityRef.current === heatCity && heatDeckRef.current.length > 0) return;
+    heatDeckCityRef.current = heatCity;
+
+    const active = heatCityRestaurants.filter(r => !isLovedCheck(r.id) && !heatResults.noped.includes(r.id) && !heatResults.skipped.includes(r.id));
+    const recycled = heatCityRestaurants.filter(r => heatResults.skipped.includes(r.id));
+    const all = [...active, ...recycled];
+    if (all.length === 0) { heatDeckRef.current = []; setHeatDeckIndex(0); return; }
+
+    // Seeded RNG
     const uid = user?.id || "x";
     let h = 0;
     for (let i = 0; i < uid.length; i++) h = ((h << 5) - h + uid.charCodeAt(i)) | 0;
@@ -2370,66 +2376,47 @@ export default function Discover({ tasteProfile, initialTab }) {
     let s = ((Math.abs(h) + dayOfYear * 2654435761) >>> 0) % 2147483647 || 1;
     const rng = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
 
-    // Categorize restaurants into buckets for diversity
+    // Priority buckets
     const scores = swipeScoresRef.current;
     const hasScores = Object.keys(scores).length > 0;
-
-    // Priority buckets: user's followed cities first, then scored, then rest
     const followedCitySet = new Set(followedCities || []);
-    const inFollowedCity = [];
-    const scored = [];
-    const rest = [];
+    const buckets = { city: [], scored: [], rest: [] };
     for (const r of all) {
-      if (followedCitySet.has(r.city)) inFollowedCity.push(r);
-      else if (hasScores && (scores[String(r.id)] || 0) > 0) scored.push(r);
-      else rest.push(r);
+      if (followedCitySet.has(r.city)) buckets.city.push(r);
+      else if (hasScores && (scores[String(r.id)] || 0) > 0) buckets.scored.push(r);
+      else buckets.rest.push(r);
     }
+    const shuffle = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+    shuffle(buckets.city); shuffle(buckets.scored); shuffle(buckets.rest);
 
-    // Shuffle each bucket
-    const shuffle = (arr) => {
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-      }
-      return arr;
-    };
-    shuffle(inFollowedCity);
-    shuffle(scored);
-    shuffle(rest);
-
-    // Interleave: ~60% followed cities, ~25% taste-matched, ~15% discovery
-    // This ensures variety even within a user's preferred cities
+    // Interleave: 60% city, 25% taste, 15% discovery
     const result = [];
-    let fi = 0, si = 0, ri = 0;
-    const total = all.length;
-    for (let i = 0; i < total; i++) {
-      // Rotate through buckets with weighted probability
+    let ci = 0, si = 0, ri = 0;
+    for (let i = 0; i < all.length; i++) {
       const roll = rng();
-      if (roll < 0.6 && fi < inFollowedCity.length) result.push(inFollowedCity[fi++]);
-      else if (roll < 0.85 && si < scored.length) result.push(scored[si++]);
-      else if (ri < rest.length) result.push(rest[ri++]);
-      else if (fi < inFollowedCity.length) result.push(inFollowedCity[fi++]);
-      else if (si < scored.length) result.push(scored[si++]);
-      else if (ri < rest.length) result.push(rest[ri++]);
+      if (roll < 0.6 && ci < buckets.city.length) result.push(buckets.city[ci++]);
+      else if (roll < 0.85 && si < buckets.scored.length) result.push(buckets.scored[si++]);
+      else if (ri < buckets.rest.length) result.push(buckets.rest[ri++]);
+      else if (ci < buckets.city.length) result.push(buckets.city[ci++]);
+      else if (si < buckets.scored.length) result.push(buckets.scored[si++]);
+      else if (ri < buckets.rest.length) result.push(buckets.rest[ri++]);
     }
 
-    // Final pass: limit any brand/chain to max 1 in every 20 cards
+    // Brand limiter: max 1 per 20 cards
     const getBrand = (name) => (name || "").toLowerCase().replace(/\b(the|a|an|of|in|at|on)\b/g, "").trim().split(/\s+/).slice(0, 2).join(" ");
-    const final = [];
-    const recentBrands = [];
-    const deferred = [];
+    const final = [], deferred = [], recent = [];
     for (const r of result) {
       const brand = getBrand(r.name);
-      if (recentBrands.includes(brand)) {
-        deferred.push(r);
-      } else {
-        final.push(r);
-        recentBrands.push(brand);
-        if (recentBrands.length > 20) recentBrands.shift();
-      }
+      if (recent.includes(brand)) { deferred.push(r); }
+      else { final.push(r); recent.push(brand); if (recent.length > 20) recent.shift(); }
     }
-    return [...final, ...deferred];
-  }, [heatActive.length, heatSkippedRecycled.length, heatCity, user?.id]);
+    heatDeckRef.current = [...final, ...deferred];
+    setHeatDeckIndex(0);
+  }, [heatCity, allRestaurants.length]);
+
+  // Current visible cards from the stable deck
+  const heatDeck = heatDeckRef.current.slice(heatDeckIndex);
+  const heatActive = heatCityRestaurants.filter(r => !isLovedCheck(r.id) && !heatResults.noped.includes(r.id) && !heatResults.skipped.includes(r.id));
   const filtered = filteredByCity;
   const listNames = Object.keys(userLists);
   const toggleList = (listName, restaurantId) => {
@@ -4397,6 +4384,8 @@ Return a JSON object with exactly these fields:
                 };
               });
             }
+            // Advance to next card in the stable deck
+            setHeatDeckIndex(i => i + 1);
             heatSwipeHandledRef.current = false;
           }, 400);
         };
@@ -4472,7 +4461,7 @@ Return a JSON object with exactly these fields:
                   <span className="heat-counter">{heatActive.length}</span>
                 </div>
                 {(heatResults.loved.length > 0 || heatResults.noped.length > 0 || heatResults.skipped.length > 0) && (
-                  <button className="heat-reset glass-pill" onClick={() => { setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} })); setSwipeDir(null); setSwipeDelta({ x: 0, y: 0 }); setIsDragging(false); }}>Reset</button>
+                  <button className="heat-reset glass-pill" onClick={() => { setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} })); setSwipeDir(null); setSwipeDelta({ x: 0, y: 0 }); setIsDragging(false); heatDeckCityRef.current = null; setHeatDeckIndex(0); }}>Reset</button>
                 )}
                 <button className="heat-city" onClick={() => setHeatCityPickerOpen(o => !o)}>{heatCity === "All" ? "All Cities" : heatCity} ▾</button>
               </div>
@@ -4507,7 +4496,7 @@ Return a JSON object with exactly these fields:
                   <div style={{ fontFamily:"'Inter', sans-serif", fontSize:14, color:"rgba(245,240,235,0.3)" }}>
                     {heatResults.loved.length} loved · {heatResults.noped.length} passed
                   </div>
-                  <button onClick={() => { setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} })); setSwipeDir(null); setSwipeDelta({ x: 0, y: 0 }); setIsDragging(false); }} style={{ marginTop:8, padding:"12px 28px", borderRadius:12, background:"#ff9632", color:"#fff", border:"none", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"'Inter', sans-serif" }}>Start over</button>
+                  <button onClick={() => { setHeatResults(prev => ({ ...prev, noped: [], skipped: [], votes: {} })); setSwipeDir(null); setSwipeDelta({ x: 0, y: 0 }); setIsDragging(false); heatDeckCityRef.current = null; setHeatDeckIndex(0); }} style={{ marginTop:8, padding:"12px 28px", borderRadius:12, background:"#ff9632", color:"#fff", border:"none", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"'Inter', sans-serif" }}>Start over</button>
                 </div>
               )}
 
