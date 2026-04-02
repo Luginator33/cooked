@@ -12,7 +12,8 @@ import {
   supabase,
   unfollowUser,
 } from "../lib/supabase";
-import { syncFollow, removeFollow, getOverlapRestaurants } from "../lib/neo4j";
+import { syncFollow, removeFollow, getOverlapRestaurants, getTasteFingerprint, getCookedScore, getCityReadiness, getRecentLovesForUser } from "../lib/neo4j";
+import { ProfilePhoto } from "../components/AvatarIcon";
 
 const C = {
   bg: "#0a0a0f",
@@ -138,6 +139,19 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
   const [sheetLoading, setSheetLoading] = useState(false);
   const [followedCitiesCount, setFollowedCitiesCount] = useState(0);
   const [overlapRestaurants, setOverlapRestaurants] = useState([]);
+  const [cookedScore, setCookedScore] = useState(0);
+  const [tasteFingerprint, setTasteFingerprint] = useState(null);
+  const [cityReadiness, setCityReadiness] = useState([]);
+  const [recentActivity, setRecentActivity] = useState([]);
+
+  // Fetch rich profile data from Neo4j
+  useEffect(() => {
+    if (!clerkUserId) return;
+    getCookedScore(clerkUserId).then(setCookedScore).catch(() => {});
+    getTasteFingerprint(clerkUserId).then(setTasteFingerprint).catch(() => {});
+    getCityReadiness(clerkUserId).then(d => setCityReadiness(d || [])).catch(() => {});
+    getRecentLovesForUser(clerkUserId, 5).then(d => setRecentActivity(d || [])).catch(() => {});
+  }, [clerkUserId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -351,15 +365,13 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
           <button
             type="button"
             onClick={() => onClose?.()}
-            style={{ position: "absolute", top: 16, left: 16, width: 44, height: 44, borderRadius: "50%", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.22)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#ffffff", fontSize: 20, lineHeight: 1, padding: 0, zIndex: 5 }}
+            style={{ position: "absolute", top: "max(16px, env(safe-area-inset-top, 16px))", left: 16, width: 44, height: 44, borderRadius: "50%", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.22)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#ffffff", fontSize: 20, lineHeight: 1, padding: 0, zIndex: 5 }}
           >
             ‹
           </button>
 
           <div style={{ position: "absolute", bottom: 16, left: 18, right: 18, display: "flex", alignItems: "flex-end", gap: 14 }}>
-            <div style={{ width: 76, height: 76, borderRadius: "50%", border: `2.5px solid ${C.terracotta}`, overflow: "hidden", flexShrink: 0, background: C.bg2 }}>
-              {avatar ? <img src={avatar} alt="profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-            </div>
+            <ProfilePhoto photo={avatar} size={76} userId={clerkUserId} style={{ flexShrink: 0, border: `2.5px solid ${C.terracotta}` }} />
             <div style={{ flex: 1, paddingBottom: 4 }}>
               <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: "bold", fontSize: 26, color: "#fff", lineHeight: 1.05 }}>{name}</div>
               <div style={{ fontSize: 12, color: "rgba(240,235,226,0.65)", marginTop: 4, fontFamily: "'Inter', -apple-system, sans-serif" }}>{username || "@"}</div>
@@ -503,6 +515,80 @@ export default function UserProfile({ clerkUserId, onClose, onOpenDetail, onView
               })}
             </div>
           </div>
+        )}
+
+        {/* Rich Profile Sections */}
+        {canViewContent && !loading && (
+          <>
+            {/* Cooked Score */}
+            {cookedScore > 0 && (
+              <div style={{ margin: "14px 18px 0", padding: "16px 18px", borderRadius: 16, border: `1px solid ${C.border}`, background: C.bg2 }}>
+                <div style={{ fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, fontFamily: "'Inter', -apple-system, sans-serif" }}>COOKED SCORE</div>
+                <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: "bold", fontStyle: "italic", fontSize: 36, color: C.terracotta, marginTop: 4 }}>{cookedScore}</div>
+              </div>
+            )}
+
+            {/* Taste Profile */}
+            {tasteFingerprint?.topCuisines?.length > 0 && (
+              <div style={{ padding: "14px 18px 0" }}>
+                <div style={{ fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, fontFamily: "'Inter', -apple-system, sans-serif", marginBottom: 8 }}>TASTE PROFILE</div>
+                {tasteFingerprint.topCuisines.slice(0, 5).map((c, i) => {
+                  const maxCount = tasteFingerprint.topCuisines[0]?.count || 1;
+                  const pct = Math.round((c.count / maxCount) * 100);
+                  return (
+                    <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                      <div style={{ width: 90, fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif", fontWeight: 500 }}>{c.name}</div>
+                      <div style={{ flex: 1, height: 6, borderRadius: 3, background: C.bg3, overflow: "hidden" }}>
+                        <div style={{ width: `${pct}%`, height: "100%", borderRadius: 3, background: `linear-gradient(90deg, ${C.terracotta}, #ffb347)` }} />
+                      </div>
+                      <div style={{ fontSize: 11, color: C.terracotta, fontFamily: "'Inter', -apple-system, sans-serif", minWidth: 30, textAlign: "right" }}>{Math.round((c.count / (tasteFingerprint.totalLoves || 1)) * 100)}%</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* City Readiness */}
+            {cityReadiness.length > 0 && (
+              <div style={{ padding: "14px 18px 0" }}>
+                <div style={{ fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, fontFamily: "'Inter', -apple-system, sans-serif", marginBottom: 8 }}>CITY READINESS</div>
+                <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
+                  {cityReadiness.slice(0, 5).map(c => (
+                    <div key={c.city} style={{ minWidth: 90, textAlign: "center", padding: "10px 8px", borderRadius: 14, border: `1px solid ${C.border}`, background: C.bg2, flexShrink: 0 }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: C.terracotta, fontFamily: "'Inter', -apple-system, sans-serif" }}>{Math.round(c.pctExplored * 100)}%</div>
+                      <div style={{ fontSize: 11, color: C.text, marginTop: 4, fontFamily: "'Inter', -apple-system, sans-serif" }}>{c.city}</div>
+                      <div style={{ fontSize: 9, color: C.muted, marginTop: 2 }}>{c.lovedInCity} of {c.totalInCity}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recent Activity */}
+            {recentActivity.length > 0 && (
+              <div style={{ padding: "14px 18px 0" }}>
+                <div style={{ fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, fontFamily: "'Inter', -apple-system, sans-serif", marginBottom: 8 }}>RECENT ACTIVITY</div>
+                {recentActivity.map(a => {
+                  const r = lovedRestaurants.find(rest => String(rest.id) === String(a.id));
+                  if (!r) return null;
+                  const ts = a.timestamp?.replace(/(\.\d{3})\d+/, '$1');
+                  const d = ts ? new Date(ts) : null;
+                  const ago = d && !isNaN(d) ? (() => { const m = Math.floor((Date.now() - d) / 60000); return m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m/60)}h ago` : `${Math.floor(m/1440)}d ago`; })() : "";
+                  return (
+                    <div key={a.id} onClick={() => onOpenDetail?.(r)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: C.bg3 }}>
+                        {r.img && <img src={r.img} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, color: C.text, fontFamily: "'Inter', -apple-system, sans-serif" }}>Loved <strong style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic" }}>{r.name}</strong></div>
+                        <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{ago}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
 
         {!loading && !canViewContent ? (
