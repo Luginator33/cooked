@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { C, cardStyle, inputStyle, btnPrimary, btnSecondary, btnDanger, btnSmall, btnOutline, sectionHeader, SearchBar, ConfirmDialog, Toast } from "./adminHelpers";
-import { upsertAdminOverride, deleteAdminOverride, addCommunityRestaurant, deleteCommunityRestaurant, updateCommunityRestaurant, saveSharedPhoto, logAdminAction, supabase } from "../../lib/supabase";
+import { upsertRestaurant, softDeleteRestaurant, mergeRestaurantsDb, saveSharedPhoto, logAdminAction, supabase } from "../../lib/supabase";
 import { transferLoves, syncRestaurant } from "../../lib/neo4j";
 import { normalizeCity } from "../../data/restaurants";
 
@@ -349,16 +349,11 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
   // ── ACTIONS ──
   const handleRemove = async (r) => {
     try {
-      if (isCommunity(r.id)) {
-        const { error } = await deleteCommunityRestaurant(r.id);
-        if (error) throw error;
-      } else {
-        const { error } = await upsertAdminOverride(r.id, "delete", null, userId);
-        if (error) throw error;
-      }
+      const { error } = await softDeleteRestaurant(r.id);
+      if (error) throw error;
       await logAdminAction("restaurant_remove", userId, "restaurant", String(r.id), { name: r.name });
       setConfirm(null);
-      setRemovedIds(prev => new Set([...prev, r.id, String(r.id)]));
+      setRemovedIds(prev => new Set([...prev, r.id, String(r.id), Number(r.id)]));
       setExpandedId(null);
       showToast(`Removed ${r.name}`);
       onRestaurantsChanged?.();
@@ -384,6 +379,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
     // Map editForm fields to valid Supabase column names
     const { desc, ...rest } = editForm;
     const data = {
+      id: editing.id,
       ...rest,
       description: desc || "",
       rating: Number(editForm.rating) || 0,
@@ -391,12 +387,10 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
       lng: Number(editForm.lng) || 0,
       tags: editForm.tags.split(",").map(t => t.trim()).filter(Boolean),
     };
-    if (isCommunity(editing.id)) {
-      const { error } = await updateCommunityRestaurant(editing.id, data);
-      if (error) { showToast(`Save failed: ${error.message}`, "error"); return; }
-    } else {
-      await upsertAdminOverride(editing.id, "edit", data, userId);
-    }
+    const { error } = await upsertRestaurant(data);
+    if (error) { showToast(`Save failed: ${error.message}`, "error"); return; }
+    // Sync edit to Neo4j so recommendations stay accurate
+    try { await syncRestaurant(data); } catch {}
     await logAdminAction("restaurant_edit", userId, "restaurant", String(editing.id), { name: data.name });
     showToast(`Updated ${data.name}`);
     setEditing(null);
@@ -574,7 +568,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
       img: photoUrl, img2: photoUrl, source: "Admin Import", heat: importPreview.heat || "🔥🔥",
     };
     try {
-      const { data, error } = await addCommunityRestaurant(r);
+      const { data, error } = await upsertRestaurant(r);
       if (error) { showToast("Save failed: " + (error.message || "unknown error"), "error"); return; }
       const savedId = data?.[0]?.id || r.id;
       if (photoUrl) await saveSharedPhoto(String(savedId), photoUrl);
@@ -591,8 +585,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
   const handleMerge = async () => {
     if (!mergeFrom || !mergeTo || mergeFrom === mergeTo) return;
     await transferLoves(mergeFrom, mergeTo);
-    if (isCommunity(mergeFrom)) await deleteCommunityRestaurant(Number(mergeFrom));
-    else await upsertAdminOverride(mergeFrom, "merge_into", null, userId, mergeTo);
+    await mergeRestaurantsDb(mergeFrom, mergeTo);
     await logAdminAction("restaurant_merge", userId, "restaurant", mergeFrom, { merged_into: mergeTo });
     showToast("Restaurants merged");
     setMergeFrom(""); setMergeTo("");
@@ -632,8 +625,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
         const r = allRestaurants.find(ar => ar.id === id);
         if (!r) continue;
         try {
-          if (isCommunity(id)) await deleteCommunityRestaurant(id);
-          else await upsertAdminOverride(id, "delete", null, userId);
+          await softDeleteRestaurant(id);
           await logAdminAction("restaurant_remove", userId, "restaurant", String(id), { name: r.name });
           count++;
         } catch (e) { console.error(`Bulk delete failed for ${id}:`, e); }
@@ -655,8 +647,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
       setBulkSaving(true);
       try {
         await transferLoves(String(removeId), String(mergeKeepId));
-        if (isCommunity(removeId)) await deleteCommunityRestaurant(removeId);
-        else await upsertAdminOverride(removeId, "merge_into", { merged_into: String(mergeKeepId) }, userId);
+        await mergeRestaurantsDb(removeId, mergeKeepId);
         await logAdminAction("restaurant_merge", userId, "restaurant", String(removeId), { merged_into: String(mergeKeepId) });
         showToast(`Merged into ${allRestaurants.find(r => r.id === mergeKeepId)?.name || mergeKeepId}`);
       } catch (e) { showToast(`Merge failed: ${e.message}`, "error"); }
@@ -689,8 +680,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
           setAllFlameScores(prev => ({ ...prev, [String(id)]: { flame_score: s, interaction_count: 999, community_score: s, external_score: s } }));
         } else if (bulkEditField === "city") {
           const data = { city: bulkEditValue };
-          if (isCommunity(id)) await updateCommunityRestaurant(id, data);
-          else await upsertAdminOverride(id, "edit", data, userId);
+          await upsertRestaurant({ id, ...data });
         } else if (bulkEditField === "venue_type") {
           const data = {};
           // Additive: "Add: Hotel" adds hotel without clearing bar, etc.
@@ -699,12 +689,10 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
           else if (bulkEditValue === "-Hotel") { data.isHotel = false; }
           else if (bulkEditValue === "-Bar") { data.isBar = false; }
           else if (bulkEditValue === "Restaurant Only") { data.isBar = false; data.isHotel = false; }
-          if (isCommunity(id)) await updateCommunityRestaurant(id, data);
-          else await upsertAdminOverride(id, "edit", data, userId);
+          await upsertRestaurant({ id, ...data });
         } else if (bulkEditField === "cuisine") {
           const data = { cuisine: bulkEditValue };
-          if (isCommunity(id)) await updateCommunityRestaurant(id, data);
-          else await upsertAdminOverride(id, "edit", data, userId);
+          await upsertRestaurant({ id, ...data });
         }
         count++;
       } catch (e) { console.error(`Bulk edit failed for ${id}:`, e); }
@@ -1531,7 +1519,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
                       <button type="button" onClick={async () => {
                         const photoUrl = item.photos[item.selectedPhoto || 0] || "";
                         const r = { ...item.data, img: photoUrl, img2: photoUrl };
-                        const { data, error } = await addCommunityRestaurant(r);
+                        const { data, error } = await upsertRestaurant(r);
                         if (error) { showToast(`Failed: ${error.message}`, "error"); return; }
                         const savedId = data?.[0]?.id || r.id;
                         if (photoUrl) await saveSharedPhoto(String(savedId), photoUrl);
@@ -1578,7 +1566,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
                     const item = bulkQueue[i];
                     const photoUrl = item.photos[item.selectedPhoto || 0] || "";
                     const r = { ...item.data, img: photoUrl, img2: photoUrl };
-                    const { data, error } = await addCommunityRestaurant(r);
+                    const { data, error } = await upsertRestaurant(r);
                     if (!error) {
                       const savedId = data?.[0]?.id || r.id;
                       if (photoUrl) await saveSharedPhoto(String(savedId), photoUrl);

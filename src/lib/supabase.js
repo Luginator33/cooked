@@ -5,6 +5,85 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// ── UNIFIED RESTAURANT TABLE ────────────────────────────────
+// Field mapping: DB snake_case ↔ JS camelCase
+export function dbToJs(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    placeId: row.place_id,
+    googleMapsUrl: row.google_maps_url,
+    googleRating: row.google_rating,
+    googleReviews: row.google_reviews,
+    isBar: row.is_bar,
+    isHotel: row.is_hotel,
+    desc: row.description, // backward compat — many components use r.desc
+  };
+}
+
+export function jsToDb(obj) {
+  if (!obj) return null;
+  const { placeId, googleMapsUrl, googleRating, googleReviews, isBar, isHotel, desc, ...rest } = obj;
+  const mapped = { ...rest };
+  if (placeId !== undefined) mapped.place_id = placeId;
+  if (googleMapsUrl !== undefined) mapped.google_maps_url = googleMapsUrl;
+  if (googleRating !== undefined) mapped.google_rating = googleRating;
+  if (googleReviews !== undefined) mapped.google_reviews = googleReviews;
+  if (isBar !== undefined) mapped.is_bar = isBar;
+  if (isHotel !== undefined) mapped.is_hotel = isHotel;
+  if (desc !== undefined && !mapped.description) mapped.description = desc;
+  mapped.updated_at = new Date().toISOString();
+  // Remove JS-only fields that aren't DB columns
+  delete mapped._recentLoves; delete mapped._weight; delete mapped._recommenders;
+  delete mapped._loveCount; delete mapped._sharedTags; delete mapped._fromCuisine; delete mapped._overlap;
+  return mapped;
+}
+
+// Fetch ALL non-deleted restaurants from unified table
+export async function getAllRestaurants() {
+  const allRows = [];
+  let from = 0;
+  const pageSize = 1000;
+  while (true) {
+    const { data, error } = await supabase
+      .from('restaurants')
+      .select('*')
+      .eq('is_deleted', false)
+      .range(from, from + pageSize - 1);
+    if (error) { console.error('getAllRestaurants error:', error); break; }
+    if (!data || data.length === 0) break;
+    allRows.push(...data);
+    from += pageSize;
+    if (data.length < pageSize) break;
+  }
+  return allRows.map(dbToJs);
+}
+
+// Upsert a restaurant (used for ALL add/edit operations)
+export async function upsertRestaurant(restaurantData) {
+  const mapped = jsToDb(restaurantData);
+  if (!mapped.id) mapped.id = Math.floor(Math.random() * 900000) + 100000;
+  mapped.id = Number(mapped.id);
+  const { data, error } = await supabase.from('restaurants').upsert(mapped, { onConflict: 'id' }).select();
+  return { data, error };
+}
+
+// Soft-delete a restaurant
+export async function softDeleteRestaurant(id) {
+  const { error } = await supabase.from('restaurants').update({ is_deleted: true, updated_at: new Date().toISOString() }).eq('id', Number(id));
+  return { error };
+}
+
+// Merge: soft-delete source, set merged_into_id
+export async function mergeRestaurantsDb(fromId, intoId) {
+  const { error } = await supabase.from('restaurants').update({
+    is_deleted: true,
+    merged_into_id: Number(intoId),
+    updated_at: new Date().toISOString(),
+  }).eq('id', Number(fromId));
+  return { error };
+}
+
 // ── FLAME SCORE / INTERACTION TRACKING ──────────────────────
 // Log a user interaction with a restaurant (fire-and-forget)
 export function logInteraction(clerkUserId, restaurantId, action, value = null) {

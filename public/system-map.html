@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cooked — System Map</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0f; color: #f0ebe2; font-family: 'Inter', -apple-system, sans-serif; padding: 24px; min-height: 100vh; }
+  h1 { font-family: Georgia, serif; font-style: italic; font-size: 28px; margin-bottom: 8px; }
+  h2 { font-family: Georgia, serif; font-style: italic; font-size: 22px; margin: 40px 0 16px; color: #e07850; }
+  h3 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(245,240,235,0.4); margin: 24px 0 12px; }
+  p, li { font-size: 14px; line-height: 1.7; color: rgba(245,240,235,0.7); }
+  .subtitle { font-size: 14px; color: rgba(245,240,235,0.4); margin-bottom: 32px; }
+
+  /* Color Key */
+  .key { display: flex; flex-wrap: wrap; gap: 16px; margin: 24px 0 32px; padding: 16px; border-radius: 14px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); }
+  .key-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .dot-green { background: #22c55e; }
+  .dot-orange { background: #f59e0b; }
+  .dot-red { background: #ef4444; }
+  .dot-blue { background: #3b82f6; }
+  .dot-purple { background: #a855f7; }
+  .dot-gray { background: rgba(255,255,255,0.15); }
+
+  /* Cards */
+  .card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+  .card-title { font-family: Georgia, serif; font-style: italic; font-weight: bold; font-size: 18px; margin-bottom: 8px; }
+
+  /* Flow diagrams */
+  .flow { background: #12121a; border-radius: 14px; padding: 20px; margin: 16px 0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; line-height: 2; white-space: pre-wrap; overflow-x: auto; }
+
+  /* Status indicators */
+  .status { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-left: 8px; }
+  .status-ok { background: rgba(34,197,94,0.15); color: #22c55e; }
+  .status-warn { background: rgba(245,158,11,0.15); color: #f59e0b; }
+  .status-broken { background: rgba(239,68,68,0.15); color: #ef4444; }
+  .status-missing { background: rgba(168,85,247,0.15); color: #a855f7; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 24px; font-size: 13px; }
+  th { text-align: left; padding: 8px 12px; background: rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.08); color: rgba(245,240,235,0.5); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; }
+  td { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; }
+
+  /* Section dividers */
+  .divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(224,120,80,0.3), transparent); margin: 40px 0; }
+
+  /* Connection lines */
+  .conn { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+  .conn-line { height: 2px; width: 40px; flex-shrink: 0; }
+  .conn-green { background: #22c55e; }
+  .conn-orange { background: #f59e0b; }
+  .conn-red { background: #ef4444; }
+  .conn-gray { background: rgba(255,255,255,0.1); }
+
+  /* Boxes in diagrams */
+  .box-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
+  .box { padding: 12px 16px; border-radius: 12px; font-size: 13px; text-align: center; min-width: 120px; }
+  .box-green { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); color: #22c55e; }
+  .box-orange { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); color: #f59e0b; }
+  .box-red { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; }
+  .box-blue { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); color: #3b82f6; }
+  .box-purple { background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); color: #a855f7; }
+  .box-gray { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: rgba(245,240,235,0.5); }
+
+  .arrow { font-size: 18px; color: rgba(245,240,235,0.3); }
+  .highlight { color: #e07850; font-weight: 600; }
+  .max-w { max-width: 800px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<div class="max-w">
+
+<h1>cook<span style="color:#e07850">ed</span> System Map</h1>
+<p class="subtitle">How everything connects — and what's broken. April 2, 2026</p>
+
+<!-- COLOR KEY -->
+<div class="key">
+  <div class="key-item"><div class="dot dot-green"></div> Working & synced</div>
+  <div class="key-item"><div class="dot dot-orange"></div> Works but not synced everywhere</div>
+  <div class="key-item"><div class="dot dot-red"></div> Broken / not connected</div>
+  <div class="key-item"><div class="dot dot-purple"></div> Missing entirely</div>
+  <div class="key-item"><div class="dot dot-blue"></div> Storage system</div>
+  <div class="key-item"><div class="dot dot-gray"></div> Not applicable</div>
+</div>
+
+<!-- SECTION 1: THE LOVE SYSTEM -->
+<h2>1. The Love System (Biggest Issue)</h2>
+<p>When you love a restaurant, it should be saved in ONE place and everything reads from there. Instead, loves go to <strong>4 different places</strong> that can get out of sync.</p>
+
+<h3>What happens when you love a restaurant</h3>
+<div class="box-row">
+  <div class="box box-blue">React State<br><small>heatResults.loved</small></div>
+  <span class="arrow">+</span>
+  <div class="box box-blue">localStorage<br><small>cooked_loved</small></div>
+  <span class="arrow">+</span>
+  <div class="box box-blue">Neo4j Graph<br><small>LOVED relationship</small></div>
+  <span class="arrow">+</span>
+  <div class="box box-blue">Supabase<br><small>restaurant_interactions</small></div>
+</div>
+
+<table>
+  <tr><th>Storage</th><th>Updated when you love?</th><th>Read by</th><th>Status</th></tr>
+  <tr>
+    <td>React state (heatResults.loved)</td>
+    <td>Yes - immediately</td>
+    <td>Swipe page, Detail view, Discover cards</td>
+    <td><span class="status status-ok">OK</span></td>
+  </tr>
+  <tr>
+    <td>localStorage (cooked_loved)</td>
+    <td>Yes - immediately</td>
+    <td>Backup on page reload</td>
+    <td><span class="status status-ok">OK</span></td>
+  </tr>
+  <tr>
+    <td>Neo4j (LOVED relationship)</td>
+    <td>Yes - via syncLove()</td>
+    <td>Recommendations, Rising, Hidden Gems, Recent Activity</td>
+    <td><span class="status status-ok">OK</span></td>
+  </tr>
+  <tr>
+    <td>Supabase (restaurant_interactions)</td>
+    <td>Yes - via logInteraction()</td>
+    <td>Flame score calculation</td>
+    <td><span class="status status-ok">OK</span></td>
+  </tr>
+  <tr>
+    <td>Supabase (user_data.loved)</td>
+    <td style="color:#ef4444; font-weight:600">NO - not updated by toggleLove!</td>
+    <td>Profile page, Admin analytics, Other users viewing your profile</td>
+    <td><span class="status status-broken">BROKEN</span></td>
+  </tr>
+</table>
+
+<p><strong>The problem:</strong> Your Profile page and other people viewing your profile read from <code>user_data.loved</code> in Supabase. But the love button never writes there directly. The debounced auto-save writes <code>user_data.heat.loved</code> (nested inside the heat object), but the Profile reads the top-level <code>loved</code> array.</p>
+
+<div class="divider"></div>
+
+<!-- SECTION 2: DATA STORAGE MAP -->
+<h2>2. Where Your Data Lives</h2>
+<p>Three storage systems that should stay in sync but often don't.</p>
+
+<div class="box-row">
+  <div class="box box-blue" style="flex:1; min-width: 200px;">
+    <strong>localStorage</strong><br>
+    <small>On your device only<br>Fast, but lost if you clear data</small>
+  </div>
+  <div class="box box-blue" style="flex:1; min-width: 200px;">
+    <strong>Supabase (Database)</strong><br>
+    <small>In the cloud<br>Source of truth, syncs across devices</small>
+  </div>
+  <div class="box box-blue" style="flex:1; min-width: 200px;">
+    <strong>Neo4j (Graph)</strong><br>
+    <small>Relationship database<br>Powers all recommendations</small>
+  </div>
+</div>
+
+<h3>What syncs where</h3>
+<table>
+  <tr><th>Data</th><th>localStorage</th><th>Supabase</th><th>Neo4j</th></tr>
+  <tr>
+    <td>Loved restaurants</td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-warn">Partial</span></td>
+    <td><span class="status status-ok">Yes</span></td>
+  </tr>
+  <tr>
+    <td>Watchlist</td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-missing">No</span></td>
+  </tr>
+  <tr>
+    <td>Ratings</td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-missing">No</span></td>
+  </tr>
+  <tr>
+    <td>Notes / Lists</td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-broken">No!</span></td>
+    <td><span class="status status-gray">N/A</span></td>
+  </tr>
+  <tr>
+    <td>Chat history</td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-broken">No!</span></td>
+    <td><span class="status status-gray">N/A</span></td>
+  </tr>
+  <tr>
+    <td>Following users</td>
+    <td><span class="status status-gray">N/A</span></td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-ok">Yes</span></td>
+  </tr>
+  <tr>
+    <td>Following cities</td>
+    <td><span class="status status-gray">N/A</span></td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-ok">Yes</span></td>
+  </tr>
+  <tr>
+    <td>Profile photo</td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-gray">N/A</span></td>
+  </tr>
+</table>
+
+<div class="divider"></div>
+
+<!-- SECTION 3: ADMIN PANEL -->
+<h2>3. Admin Panel Actions</h2>
+<p>When you make changes in the admin panel, here's what actually gets updated:</p>
+
+<table>
+  <tr><th>Admin Action</th><th>Supabase</th><th>Neo4j</th><th>App UI</th></tr>
+  <tr>
+    <td><strong>Edit restaurant</strong> (city, cuisine, tags)</td>
+    <td><span class="status status-ok">Saved</span></td>
+    <td><span class="status status-broken">NOT synced</span></td>
+    <td><span class="status status-ok">Refreshes</span></td>
+  </tr>
+  <tr>
+    <td><strong>Remove restaurant</strong></td>
+    <td><span class="status status-ok">Deleted</span></td>
+    <td><span class="status status-warn">Not cleaned</span></td>
+    <td><span class="status status-ok">Disappears</span></td>
+  </tr>
+  <tr>
+    <td><strong>Merge restaurants</strong></td>
+    <td><span class="status status-ok">Override saved</span></td>
+    <td><span class="status status-ok">Loves transferred</span></td>
+    <td><span class="status status-ok">Refreshes</span></td>
+  </tr>
+  <tr>
+    <td><strong>Import restaurant</strong></td>
+    <td><span class="status status-ok">Added</span></td>
+    <td><span class="status status-broken">NOT synced</span></td>
+    <td><span class="status status-ok">Refreshes</span></td>
+  </tr>
+  <tr>
+    <td><strong>Set flame score</strong></td>
+    <td><span class="status status-ok">Saved</span></td>
+    <td><span class="status status-gray">N/A</span></td>
+    <td><span class="status status-ok">Updates</span></td>
+  </tr>
+</table>
+
+<p><span class="highlight">Key gap:</span> When you edit a restaurant's cuisine or tags in admin, Neo4j still has the old data. This means the recommendation engine (You'd Love This, Cross-Cuisine, Smart Swipe) uses stale information.</p>
+
+<div class="divider"></div>
+
+<!-- SECTION 4: NAVIGATION -->
+<h2>4. Back Button & PWA Swipe-Back</h2>
+<p>On a phone PWA, swiping from the left edge should go "back." Here's what works and what doesn't:</p>
+
+<table>
+  <tr><th>Screen</th><th>Back Button</th><th>PWA Swipe-Back</th></tr>
+  <tr>
+    <td>Restaurant Detail</td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-ok">Works</span></td>
+  </tr>
+  <tr>
+    <td>User Profile (other person)</td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-ok">Works</span></td>
+  </tr>
+  <tr>
+    <td>Taste Profile</td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-ok">Works</span></td>
+  </tr>
+  <tr>
+    <td>Admin Panel</td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-ok">Works</span></td>
+  </tr>
+  <tr>
+    <td>Onboarding (all slides)</td>
+    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-ok">Works</span></td>
+  </tr>
+  <tr>
+    <td>Tab navigation (Home/Heat/Discover/Map/Profile)</td>
+    <td><span class="status status-gray">N/A</span></td>
+    <td><span class="status status-broken">Goes to Google sign-in!</span></td>
+  </tr>
+  <tr>
+    <td>DM Inbox / Conversations</td>
+    <td><span class="status status-ok">X button</span></td>
+    <td><span class="status status-broken">Doesn't close</span></td>
+  </tr>
+  <tr>
+    <td>Notifications</td>
+    <td><span class="status status-ok">X button</span></td>
+    <td><span class="status status-broken">Doesn't close</span></td>
+  </tr>
+  <tr>
+    <td>Filter Sheet</td>
+    <td><span class="status status-ok">Close button</span></td>
+    <td><span class="status status-broken">Doesn't close</span></td>
+  </tr>
+  <tr>
+    <td>Settings</td>
+    <td><span class="status status-ok">Back button</span></td>
+    <td><span class="status status-broken">Doesn't close</span></td>
+  </tr>
+</table>
+
+<div class="divider"></div>
+
+<!-- SECTION 5: RECOMMENDATION ENGINE -->
+<h2>5. Recommendation Engine</h2>
+<p>How the app decides what to show you — and what's working with only a few users.</p>
+
+<table>
+  <tr><th>Feature</th><th>Data Source</th><th>Works with 2-4 users?</th></tr>
+  <tr>
+    <td><strong>Rising</strong> (most loved in 30 days)</td>
+    <td>Neo4j: count LOVED in time window</td>
+    <td><span class="status status-ok">Yes</span></td>
+  </tr>
+  <tr>
+    <td><strong>Hidden Gems</strong> (high rated, few loves)</td>
+    <td>Neo4j: rating + love count</td>
+    <td><span class="status status-ok">Yes</span></td>
+  </tr>
+  <tr>
+    <td><strong>Taste Profile</strong> (your cuisine breakdown)</td>
+    <td>Neo4j: your LOVED restaurants</td>
+    <td><span class="status status-ok">Yes</span></td>
+  </tr>
+  <tr>
+    <td><strong>Cooked Score</strong></td>
+    <td>Neo4j: discovery points</td>
+    <td><span class="status status-ok">Yes</span></td>
+  </tr>
+  <tr>
+    <td><strong>Smart Swipe</strong> (taste-matched order)</td>
+    <td>Neo4j: tag/cuisine overlap</td>
+    <td><span class="status status-ok">Yes</span></td>
+  </tr>
+  <tr>
+    <td><strong>Cross-Cuisine</strong> (new flavors, same vibes)</td>
+    <td>Neo4j: shared tags, different cuisine</td>
+    <td><span class="status status-ok">Yes</span></td>
+  </tr>
+  <tr>
+    <td><strong>You'd Love This</strong> (collaborative filtering)</td>
+    <td>Neo4j: similar users' loves</td>
+    <td><span class="status status-warn">Needs 3+ users with overlap</span></td>
+  </tr>
+  <tr>
+    <td><strong>People Like You</strong></td>
+    <td>Neo4j: shared love count</td>
+    <td><span class="status status-warn">Needs 3+ users</span></td>
+  </tr>
+  <tr>
+    <td><strong>Who To Follow</strong></td>
+    <td>Neo4j: friends-of-friends</td>
+    <td><span class="status status-warn">Needs 3+ user chain</span></td>
+  </tr>
+  <tr>
+    <td><strong>Trending in Cities</strong></td>
+    <td>Neo4j: loves in followed cities</td>
+    <td><span class="status status-warn">Needs multiple users</span></td>
+  </tr>
+</table>
+
+<div class="divider"></div>
+
+<!-- SECTION 6: PRIORITY FIXES -->
+<h2>6. What To Fix (Priority Order)</h2>
+
+<div class="card" style="border-color: rgba(239,68,68,0.3);">
+  <div class="card-title" style="color: #ef4444;">High Priority</div>
+  <ol style="padding-left: 20px;">
+    <li><strong>Unify love system</strong> — One source of truth. toggleLove should update user_data.loved in Supabase.</li>
+    <li><strong>Admin edits to Neo4j</strong> — When you change a restaurant's cuisine/city/tags in admin, sync it to Neo4j so recommendations stay accurate.</li>
+    <li><strong>Tab navigation history</strong> — PWA back-swipe on tabs goes to Google sign-in. Need pushState for tab changes.</li>
+    <li><strong>Normalize all IDs to strings</strong> — Mixed number/string IDs cause silent comparison failures.</li>
+  </ol>
+</div>
+
+<div class="card" style="border-color: rgba(245,158,11,0.3);">
+  <div class="card-title" style="color: #f59e0b;">Medium Priority</div>
+  <ol style="padding-left: 20px;" start="5">
+    <li><strong>DM/Notifications/Filter → pushState</strong> — PWA back-swipe should close modals.</li>
+    <li><strong>Notes & lists → Supabase</strong> — Currently localStorage only. Lost on device change.</li>
+    <li><strong>Chat history → Supabase</strong> — Same issue. Local only.</li>
+    <li><strong>Chinatown city group</strong> — Listed in 6 city groups. Could cause cross-city filtering bugs.</li>
+  </ol>
+</div>
+
+<div class="card" style="border-color: rgba(168,85,247,0.3);">
+  <div class="card-title" style="color: #a855f7;">Future</div>
+  <ol style="padding-left: 20px;" start="9">
+    <li><strong>Merge → update user_data.loved</strong> — Old loves still reference deleted restaurant IDs.</li>
+    <li><strong>Watchlist + Ratings → Neo4j</strong> — Would improve recommendation accuracy.</li>
+    <li><strong>Real-time sync</strong> — Push updates to other logged-in users when data changes.</li>
+  </ol>
+</div>
+
+<div style="text-align: center; padding: 40px 0; color: rgba(245,240,235,0.2); font-size: 12px;">
+  Generated by Claude Code &mdash; April 2, 2026
+</div>
+
+</div>
+</body>
+</html>

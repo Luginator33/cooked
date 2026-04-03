@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { C, cardStyle, btnPrimary, btnSecondary, btnDanger, btnSmall, sectionHeader } from "./adminHelpers";
-import { getNewPlaces, updateNewPlaceStatus, deleteNewPlace, addCommunityRestaurant, saveSharedPhoto, getResearchSources, addResearchSource, updateResearchSource, deleteResearchSource } from "../../lib/supabase";
+import { getNewPlaces, updateNewPlaceStatus, deleteNewPlace, upsertRestaurant, saveSharedPhoto, getResearchSources, addResearchSource, updateResearchSource, deleteResearchSource } from "../../lib/supabase";
 import { syncRestaurant } from "../../lib/neo4j";
 
 const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_PLACES_KEY;
@@ -443,7 +443,7 @@ export default function AdminImports({ allRestaurants, userId, onRestaurantsChan
         source: "research_import",
       };
 
-      const { error } = await addCommunityRestaurant({ id, ...newRestaurant });
+      const { error } = await upsertRestaurant({ id, ...newRestaurant });
       if (error) throw error;
 
       // Save photo to shared library

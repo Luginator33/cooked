@@ -72,7 +72,7 @@ import Profile from "./Profile";
 import TasteProfile from "./TasteProfile";
 import UserProfile from "./UserProfile";
 import Onboarding from "./Onboarding";
-import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser, getAdminOverrides, sendMessage, getInbox, getConversation, markMessagesRead, getUnreadMessageCount, logInteraction, fetchFlameScores, computeFlameScore } from "../lib/supabase";
+import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser, getAdminOverrides, sendMessage, getInbox, getConversation, markMessagesRead, getUnreadMessageCount, logInteraction, fetchFlameScores, computeFlameScore, getAllRestaurants as getAllRestaurantsFromSupabase, upsertRestaurant, softDeleteRestaurant } from "../lib/supabase";
 import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities, syncRestaurant, seedAllRestaurants, getYoudLoveThis, getRisingRestaurants, getHiddenGems, getSixDegrees, getTasteFingerprint, getPeopleLikeYou, getWhoToFollow, getSmartSwipeScores, getPersonalizationScores, getCrossCuisineRecs } from "../lib/neo4j";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -810,6 +810,23 @@ export default function Discover({ tasteProfile, initialTab }) {
       return false;
     }
   });
+
+  // PWA tab navigation history — back-swipe goes to previous tab, not Google sign-in
+  const prevTabRef = useRef(null);
+  useEffect(() => {
+    if (prevTabRef.current === null) { prevTabRef.current = tab; return; } // skip initial
+    if (prevTabRef.current !== tab) {
+      window.history.pushState({ tab }, "");
+      prevTabRef.current = tab;
+    }
+  }, [tab]);
+  useEffect(() => {
+    const handlePop = (e) => {
+      if (e.state?.tab) setTab(e.state.tab);
+    };
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, []);
 
   const [showHeatTip, setShowHeatTip] = useState(false);
   const [heatTipFading, setHeatTipFading] = useState(false);
@@ -1646,56 +1663,23 @@ export default function Discover({ tasteProfile, initialTab }) {
   // Merge in community restaurants from Supabase so all users can see them.
   // City names are normalized so Google Places variants (e.g. "Ciudad de Mexico")
   // and neighborhood names (e.g. "Silver Lake") map to canonical cities.
-  const refreshCommunityRestaurants = useCallback(async () => {
-    const community = await getCommunityRestaurants();
-    if (!Array.isArray(community) || community.length === 0) return;
-    setAllRestaurants((prev) => {
-      const byId = new Map(prev.map((r) => [String(r.id), r]));
-      const byName = new Map(prev.map((r) => [r.name?.toLowerCase().trim(), r]));
-      community.forEach((r) => {
-        if (!r || r.id == null) return;
-        // Normalize city before merging
-        if (r.city) r.city = normalizeCity(r.city);
-        const key = String(r.id);
-        const nameKey = r.name?.toLowerCase().trim();
-        if (nameKey) {
-          const existingByName = byName.get(nameKey);
-          if (existingByName && String(existingByName.id) !== key) {
-            byId.delete(String(existingByName.id));
-          }
-        }
-        const merged = { ...(byId.get(key) || {}), ...r };
-        byId.set(key, merged);
-        if (nameKey) byName.set(nameKey, merged);
-      });
-      return Array.from(byId.values());
-    });
+  // Unified restaurant load from Supabase (replaces old 3-step merge)
+  const refreshRestaurants = useCallback(async () => {
+    const restaurants = await getAllRestaurantsFromSupabase();
+    if (restaurants.length > 0) {
+      // Normalize cities and ensure each restaurant has an id
+      const normalized = restaurants.filter(r => r && r.id && r.name).map(r => ({
+        ...r,
+        city: r.city ? normalizeCity(r.city) : r.city,
+      }));
+      setAllRestaurants(normalized);
+      console.log(`[Supabase] Loaded ${normalized.length} restaurants from unified table`);
+    }
   }, []);
 
   useEffect(() => {
-    refreshCommunityRestaurants();
-  }, [refreshCommunityRestaurants]);
-
-  // Apply admin overrides (edits/deletions) from Supabase
-  const [overrideRefreshKey, setOverrideRefreshKey] = useState(0);
-  const refreshAdminOverrides = useCallback(() => setOverrideRefreshKey(k => k + 1), []);
-  useEffect(() => {
-    getAdminOverrides().then(overrides => {
-      if (!overrides || overrides.length === 0) return;
-      setAllRestaurants(prev => {
-        let result = prev;
-        const deleteIds = new Set();
-        const edits = {};
-        overrides.forEach(o => {
-          if (o.action === "delete" || o.action === "merge_into") deleteIds.add(String(o.restaurant_id));
-          if (o.action === "edit" && o.override_data) edits[String(o.restaurant_id)] = o.override_data;
-        });
-        if (deleteIds.size > 0) result = result.filter(r => !deleteIds.has(String(r.id)));
-        if (Object.keys(edits).length > 0) result = result.map(r => edits[String(r.id)] ? { ...r, ...edits[String(r.id)] } : r);
-        return result;
-      });
-    });
-  }, [overrideRefreshKey]);
+    refreshRestaurants();
+  }, [refreshRestaurants]);
 
   useEffect(() => { safeSetItem("cooked_ratings", JSON.stringify(userRatings)); }, [userRatings]);
   useEffect(() => { safeSetItem("cooked_notes", JSON.stringify(userNotes)); }, [userNotes]);
@@ -4671,7 +4655,7 @@ Return a JSON object with exactly these fields:
             clerkImageUrl={user?.imageUrl}
             onViewUser={setViewingUserId}
             allCitiesFromDb={dynamicAllCities}
-            onRestaurantsChanged={() => { refreshCommunityRestaurants(); refreshAdminOverrides(); }}
+            onRestaurantsChanged={refreshRestaurants}
             onOpenIgImport={() => { setIgError(null); setIgAddedRestaurants([]); setIgDone(false); setIgImporting(false); setPickerMode("ig-import"); setIgModal(true); }}
             onSharedPhotoSaved={(restaurantId, photoUrl) => {
               setPhotoResolved((prev) => [...new Set([...prev, restaurantId])]);
