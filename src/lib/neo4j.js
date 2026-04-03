@@ -104,6 +104,15 @@ export async function syncRestaurant(r) {
   }
 }
 
+export async function removeRestaurantFromGraph(restaurantId) {
+  if (!restaurantId) return;
+  await runQuery(
+    `MATCH (r:Restaurant {id: $restId})
+     DETACH DELETE r`,
+    { restId: String(restaurantId) }
+  );
+}
+
 export async function syncLove(clerkUserId, restaurantId) {
   if (!clerkUserId || !restaurantId) return;
   await runQuery(

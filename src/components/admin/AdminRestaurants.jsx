@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { C, cardStyle, inputStyle, btnPrimary, btnSecondary, btnDanger, btnSmall, btnOutline, sectionHeader, SearchBar, ConfirmDialog, Toast } from "./adminHelpers";
 import { upsertRestaurant, softDeleteRestaurant, mergeRestaurantsDb, saveSharedPhoto, logAdminAction, supabase, cleanupLovedAfterDelete, cleanupLovedAfterMerge } from "../../lib/supabase";
-import { transferLoves, syncRestaurant } from "../../lib/neo4j";
+import { transferLoves, syncRestaurant, removeRestaurantFromGraph } from "../../lib/neo4j";
 import { normalizeCity } from "../../data/restaurants";
 
 const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_PLACES_KEY;
@@ -353,6 +353,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
       if (error) throw error;
       await logAdminAction("restaurant_remove", userId, "restaurant", String(r.id), { name: r.name });
       cleanupLovedAfterDelete(r.id).catch(e => console.error("cleanup loved:", e));
+      removeRestaurantFromGraph(r.id).catch(e => console.error("neo4j cleanup:", e));
       setConfirm(null);
       setRemovedIds(prev => new Set([...prev, r.id, String(r.id), Number(r.id)]));
       setExpandedId(null);
@@ -630,6 +631,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
           await softDeleteRestaurant(id);
           await logAdminAction("restaurant_remove", userId, "restaurant", String(id), { name: r.name });
           cleanupLovedAfterDelete(id).catch(e2 => console.error("cleanup loved:", e2));
+          removeRestaurantFromGraph(id).catch(e2 => console.error("neo4j cleanup:", e2));
           count++;
         } catch (e) { console.error(`Bulk delete failed for ${id}:`, e); }
       }

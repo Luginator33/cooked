@@ -467,6 +467,15 @@ export default function Profile({
     getRecentLovesForUser(user.id, 5).then((data) => setRecentActivity(data || []));
   }, [user?.id]);
 
+  // PWA back-swipe for settings sheet
+  useEffect(() => {
+    if (!settingsOpen) return;
+    window.history.pushState({ overlay: "settings" }, "");
+    const handlePop = () => { setSettingsOpen(false); setSettingsSection(null); };
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [settingsOpen]);
+
   const openSocialList = async (kind) => {
     if (!user?.id) return;
     setSocialModal({ title: kind === "followers" ? "Followers" : "Following", users: [], loading: true });

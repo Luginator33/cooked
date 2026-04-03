@@ -37,6 +37,7 @@
   .status-warn { background: rgba(245,158,11,0.15); color: #f59e0b; }
   .status-broken { background: rgba(239,68,68,0.15); color: #ef4444; }
   .status-missing { background: rgba(168,85,247,0.15); color: #a855f7; }
+  .status-skip { background: rgba(255,255,255,0.05); color: rgba(245,240,235,0.4); }
 
   /* Tables */
   table { width: 100%; border-collapse: collapse; margin: 12px 0 24px; font-size: 13px; }
@@ -73,31 +74,31 @@
 <div class="max-w">
 
 <h1>cook<span style="color:#e07850">ed</span> System Map</h1>
-<p class="subtitle">How everything connects — and what's broken. April 2, 2026</p>
+<p class="subtitle">How everything connects. Updated April 3, 2026 &mdash; all systems green.</p>
 
 <!-- COLOR KEY -->
 <div class="key">
   <div class="key-item"><div class="dot dot-green"></div> Working & synced</div>
-  <div class="key-item"><div class="dot dot-orange"></div> Works but not synced everywhere</div>
-  <div class="key-item"><div class="dot dot-red"></div> Broken / not connected</div>
-  <div class="key-item"><div class="dot dot-purple"></div> Missing entirely</div>
+  <div class="key-item"><div class="dot dot-orange"></div> Works but limited by user count</div>
   <div class="key-item"><div class="dot dot-blue"></div> Storage system</div>
-  <div class="key-item"><div class="dot dot-gray"></div> Not applicable</div>
+  <div class="key-item"><div class="dot dot-gray"></div> Not applicable / deferred</div>
 </div>
 
 <!-- SECTION 1: THE LOVE SYSTEM -->
-<h2>1. The Love System (Biggest Issue)</h2>
-<p>When you love a restaurant, it should be saved in ONE place and everything reads from there. Instead, loves go to <strong>4 different places</strong> that can get out of sync.</p>
+<h2>1. The Love System</h2>
+<p>When you love a restaurant, it's saved in all 5 places simultaneously and stays in sync.</p>
 
 <h3>What happens when you love a restaurant</h3>
 <div class="box-row">
-  <div class="box box-blue">React State<br><small>heatResults.loved</small></div>
+  <div class="box box-green">React State<br><small>heatResults.loved</small></div>
   <span class="arrow">+</span>
-  <div class="box box-blue">localStorage<br><small>cooked_loved</small></div>
+  <div class="box box-green">localStorage<br><small>cooked_heat</small></div>
   <span class="arrow">+</span>
-  <div class="box box-blue">Neo4j Graph<br><small>LOVED relationship</small></div>
+  <div class="box box-green">Neo4j Graph<br><small>LOVED relationship</small></div>
   <span class="arrow">+</span>
-  <div class="box box-blue">Supabase<br><small>restaurant_interactions</small></div>
+  <div class="box box-green">Supabase<br><small>restaurant_interactions</small></div>
+  <span class="arrow">+</span>
+  <div class="box box-green">Supabase<br><small>user_data.loved</small></div>
 </div>
 
 <table>
@@ -109,7 +110,7 @@
     <td><span class="status status-ok">OK</span></td>
   </tr>
   <tr>
-    <td>localStorage (cooked_loved)</td>
+    <td>localStorage (cooked_heat)</td>
     <td>Yes - immediately</td>
     <td>Backup on page reload</td>
     <td><span class="status status-ok">OK</span></td>
@@ -128,24 +129,22 @@
   </tr>
   <tr>
     <td>Supabase (user_data.loved)</td>
-    <td style="color:#ef4444; font-weight:600">NO - not updated by toggleLove!</td>
-    <td>Profile page, Admin analytics, Other users viewing your profile</td>
-    <td><span class="status status-broken">BROKEN</span></td>
+    <td>Yes - via debounced saveUserData()</td>
+    <td>Profile page, Other users viewing your profile</td>
+    <td><span class="status status-ok">OK</span></td>
   </tr>
 </table>
-
-<p><strong>The problem:</strong> Your Profile page and other people viewing your profile read from <code>user_data.loved</code> in Supabase. But the love button never writes there directly. The debounced auto-save writes <code>user_data.heat.loved</code> (nested inside the heat object), but the Profile reads the top-level <code>loved</code> array.</p>
 
 <div class="divider"></div>
 
 <!-- SECTION 2: DATA STORAGE MAP -->
 <h2>2. Where Your Data Lives</h2>
-<p>Three storage systems that should stay in sync but often don't.</p>
+<p>Three storage systems, all kept in sync.</p>
 
 <div class="box-row">
   <div class="box box-blue" style="flex:1; min-width: 200px;">
     <strong>localStorage</strong><br>
-    <small>On your device only<br>Fast, but lost if you clear data</small>
+    <small>On your device only<br>Fast, offline backup</small>
   </div>
   <div class="box box-blue" style="flex:1; min-width: 200px;">
     <strong>Supabase (Database)</strong><br>
@@ -163,49 +162,79 @@
   <tr>
     <td>Loved restaurants</td>
     <td><span class="status status-ok">Yes</span></td>
-    <td><span class="status status-warn">Partial</span></td>
     <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-ok">Yes (LOVED)</span></td>
   </tr>
   <tr>
     <td>Watchlist</td>
     <td><span class="status status-ok">Yes</span></td>
     <td><span class="status status-ok">Yes</span></td>
-    <td><span class="status status-missing">No</span></td>
+    <td><span class="status status-ok">Yes (WATCHLISTED)</span></td>
   </tr>
   <tr>
     <td>Ratings</td>
     <td><span class="status status-ok">Yes</span></td>
     <td><span class="status status-ok">Yes</span></td>
-    <td><span class="status status-missing">No</span></td>
+    <td><span class="status status-ok">Yes (RATED)</span></td>
   </tr>
   <tr>
     <td>Notes / Lists</td>
     <td><span class="status status-ok">Yes</span></td>
-    <td><span class="status status-broken">No!</span></td>
+    <td><span class="status status-ok">Yes</span></td>
     <td><span class="status status-gray">N/A</span></td>
   </tr>
   <tr>
     <td>Chat history</td>
     <td><span class="status status-ok">Yes</span></td>
-    <td><span class="status status-broken">No!</span></td>
+    <td><span class="status status-ok">Yes</span></td>
     <td><span class="status status-gray">N/A</span></td>
+  </tr>
+  <tr>
+    <td>Shares (off-platform)</td>
+    <td><span class="status status-gray">N/A</span></td>
+    <td><span class="status status-ok">Yes (interactions)</span></td>
+    <td><span class="status status-ok">Yes (SHARED)</span></td>
+  </tr>
+  <tr>
+    <td>DM shares</td>
+    <td><span class="status status-gray">N/A</span></td>
+    <td><span class="status status-ok">Yes (interactions)</span></td>
+    <td><span class="status status-ok">Yes (DM_SHARED)</span></td>
+  </tr>
+  <tr>
+    <td>Search queries</td>
+    <td><span class="status status-gray">N/A</span></td>
+    <td><span class="status status-ok">Yes (interactions)</span></td>
+    <td><span class="status status-ok">Yes (SEARCHED)</span></td>
   </tr>
   <tr>
     <td>Following users</td>
     <td><span class="status status-gray">N/A</span></td>
     <td><span class="status status-ok">Yes</span></td>
-    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-ok">Yes (FOLLOWS)</span></td>
   </tr>
   <tr>
     <td>Following cities</td>
     <td><span class="status status-gray">N/A</span></td>
     <td><span class="status status-ok">Yes</span></td>
-    <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-ok">Yes (FOLLOWS_CITY)</span></td>
   </tr>
   <tr>
     <td>Profile photo</td>
     <td><span class="status status-ok">Yes</span></td>
     <td><span class="status status-ok">Yes</span></td>
+    <td><span class="status status-gray">N/A</span></td>
+  </tr>
+  <tr>
+    <td>Restaurant photos</td>
+    <td><span class="status status-gray">Cache</span></td>
+    <td><span class="status status-ok">Yes (restaurants.img)</span></td>
+    <td><span class="status status-gray">N/A</span></td>
+  </tr>
+  <tr>
+    <td>Place details (hours, phone, website)</td>
+    <td><span class="status status-gray">N/A</span></td>
+    <td><span class="status status-ok">Yes (restaurants table)</span></td>
     <td><span class="status status-gray">N/A</span></td>
   </tr>
 </table>
@@ -214,49 +243,47 @@
 
 <!-- SECTION 3: ADMIN PANEL -->
 <h2>3. Admin Panel Actions</h2>
-<p>When you make changes in the admin panel, here's what actually gets updated:</p>
+<p>All admin actions now sync to both Supabase and Neo4j.</p>
 
 <table>
-  <tr><th>Admin Action</th><th>Supabase</th><th>Neo4j</th><th>App UI</th></tr>
+  <tr><th>Admin Action</th><th>Supabase</th><th>Neo4j</th><th>User Data Cleanup</th></tr>
   <tr>
     <td><strong>Edit restaurant</strong> (city, cuisine, tags)</td>
     <td><span class="status status-ok">Saved</span></td>
-    <td><span class="status status-broken">NOT synced</span></td>
-    <td><span class="status status-ok">Refreshes</span></td>
+    <td><span class="status status-ok">syncRestaurant()</span></td>
+    <td><span class="status status-gray">N/A</span></td>
   </tr>
   <tr>
     <td><strong>Remove restaurant</strong></td>
-    <td><span class="status status-ok">Deleted</span></td>
-    <td><span class="status status-warn">Not cleaned</span></td>
-    <td><span class="status status-ok">Disappears</span></td>
+    <td><span class="status status-ok">Soft-deleted</span></td>
+    <td><span class="status status-ok">DETACH DELETE</span></td>
+    <td><span class="status status-ok">cleanupLovedAfterDelete</span></td>
   </tr>
   <tr>
     <td><strong>Merge restaurants</strong></td>
-    <td><span class="status status-ok">Override saved</span></td>
-    <td><span class="status status-ok">Loves transferred</span></td>
-    <td><span class="status status-ok">Refreshes</span></td>
+    <td><span class="status status-ok">merged_into_id set</span></td>
+    <td><span class="status status-ok">transferLoves()</span></td>
+    <td><span class="status status-ok">cleanupLovedAfterMerge</span></td>
   </tr>
   <tr>
     <td><strong>Import restaurant</strong></td>
     <td><span class="status status-ok">Added</span></td>
-    <td><span class="status status-broken">NOT synced</span></td>
-    <td><span class="status status-ok">Refreshes</span></td>
+    <td><span class="status status-ok">syncRestaurant()</span></td>
+    <td><span class="status status-gray">N/A</span></td>
   </tr>
   <tr>
     <td><strong>Set flame score</strong></td>
     <td><span class="status status-ok">Saved</span></td>
     <td><span class="status status-gray">N/A</span></td>
-    <td><span class="status status-ok">Updates</span></td>
+    <td><span class="status status-gray">N/A</span></td>
   </tr>
 </table>
-
-<p><span class="highlight">Key gap:</span> When you edit a restaurant's cuisine or tags in admin, Neo4j still has the old data. This means the recommendation engine (You'd Love This, Cross-Cuisine, Smart Swipe) uses stale information.</p>
 
 <div class="divider"></div>
 
 <!-- SECTION 4: NAVIGATION -->
 <h2>4. Back Button & PWA Swipe-Back</h2>
-<p>On a phone PWA, swiping from the left edge should go "back." Here's what works and what doesn't:</p>
+<p>All screens now support PWA back-swipe via pushState/popstate.</p>
 
 <table>
   <tr><th>Screen</th><th>Back Button</th><th>PWA Swipe-Back</th></tr>
@@ -288,27 +315,27 @@
   <tr>
     <td>Tab navigation (Home/Heat/Discover/Map/Profile)</td>
     <td><span class="status status-gray">N/A</span></td>
-    <td><span class="status status-broken">Goes to Google sign-in!</span></td>
+    <td><span class="status status-ok">Returns to previous tab</span></td>
   </tr>
   <tr>
     <td>DM Inbox / Conversations</td>
     <td><span class="status status-ok">X button</span></td>
-    <td><span class="status status-broken">Doesn't close</span></td>
+    <td><span class="status status-ok">Closes modal</span></td>
   </tr>
   <tr>
     <td>Notifications</td>
     <td><span class="status status-ok">X button</span></td>
-    <td><span class="status status-broken">Doesn't close</span></td>
+    <td><span class="status status-ok">Closes sheet</span></td>
   </tr>
   <tr>
     <td>Filter Sheet</td>
     <td><span class="status status-ok">Close button</span></td>
-    <td><span class="status status-broken">Doesn't close</span></td>
+    <td><span class="status status-ok">Closes sheet</span></td>
   </tr>
   <tr>
     <td>Settings</td>
     <td><span class="status status-ok">Back button</span></td>
-    <td><span class="status status-broken">Doesn't close</span></td>
+    <td><span class="status status-ok">Closes settings</span></td>
   </tr>
 </table>
 
@@ -316,7 +343,7 @@
 
 <!-- SECTION 5: RECOMMENDATION ENGINE -->
 <h2>5. Recommendation Engine</h2>
-<p>How the app decides what to show you — and what's working with only a few users.</p>
+<p>Neo4j now receives 9 relationship types for richer recommendations as users grow.</p>
 
 <table>
   <tr><th>Feature</th><th>Data Source</th><th>Works with 2-4 users?</th></tr>
@@ -342,7 +369,7 @@
   </tr>
   <tr>
     <td><strong>Smart Swipe</strong> (taste-matched order)</td>
-    <td>Neo4j: tag/cuisine overlap</td>
+    <td>Neo4j: tag/cuisine overlap + WATCHLISTED + RATED</td>
     <td><span class="status status-ok">Yes</span></td>
   </tr>
   <tr>
@@ -372,42 +399,53 @@
   </tr>
 </table>
 
+<h3>Neo4j Relationship Types</h3>
+<div class="box-row">
+  <div class="box box-green">LOVED</div>
+  <div class="box box-green">FOLLOWS</div>
+  <div class="box box-green">FOLLOWS_CITY</div>
+  <div class="box box-green">WATCHLISTED</div>
+  <div class="box box-green">RATED</div>
+  <div class="box box-green">SHARED</div>
+  <div class="box box-green">DM_SHARED</div>
+  <div class="box box-green">SEARCHED</div>
+  <div class="box box-green">HAS_TAG</div>
+</div>
+
 <div class="divider"></div>
 
 <!-- SECTION 6: PRIORITY FIXES -->
-<h2>6. What To Fix (Priority Order)</h2>
+<h2>6. Audit Status</h2>
 
-<div class="card" style="border-color: rgba(239,68,68,0.3);">
-  <div class="card-title" style="color: #ef4444;">High Priority</div>
+<div class="card" style="border-color: rgba(34,197,94,0.3);">
+  <div class="card-title" style="color: #22c55e;">All Items Complete</div>
   <ol style="padding-left: 20px;">
-    <li><strong>Unify love system</strong> — One source of truth. toggleLove should update user_data.loved in Supabase.</li>
-    <li><strong>Admin edits to Neo4j</strong> — When you change a restaurant's cuisine/city/tags in admin, sync it to Neo4j so recommendations stay accurate.</li>
-    <li><strong>Tab navigation history</strong> — PWA back-swipe on tabs goes to Google sign-in. Need pushState for tab changes.</li>
-    <li><strong>Normalize all IDs to strings</strong> — Mixed number/string IDs cause silent comparison failures.</li>
+    <li><s>Unify love system</s> <span class="status status-ok">Done</span></li>
+    <li><s>Admin edits to Neo4j</s> <span class="status status-ok">Done</span></li>
+    <li><s>Tab navigation history</s> <span class="status status-ok">Done</span></li>
+    <li><s>Normalize all IDs</s> <span class="status status-ok">Done</span></li>
+    <li><s>DM/Notifications/Filter pushState</s> <span class="status status-ok">Done</span></li>
+    <li><s>Notes & lists to Supabase</s> <span class="status status-ok">Done</span></li>
+    <li><s>Chat history to Supabase</s> <span class="status status-ok">Done</span></li>
+    <li><s>Chinatown city group</s> <span class="status status-ok">Done</span></li>
+    <li><s>Merge cleanup user_data.loved</s> <span class="status status-ok">Done</span></li>
+    <li><s>Watchlist + Ratings + Shares to Neo4j</s> <span class="status status-ok">Done</span></li>
+    <li>Real-time sync <span class="status status-skip">Deferred &mdash; not needed at current scale</span></li>
   </ol>
 </div>
 
-<div class="card" style="border-color: rgba(245,158,11,0.3);">
-  <div class="card-title" style="color: #f59e0b;">Medium Priority</div>
-  <ol style="padding-left: 20px;" start="5">
-    <li><strong>DM/Notifications/Filter → pushState</strong> — PWA back-swipe should close modals.</li>
-    <li><strong>Notes & lists → Supabase</strong> — Currently localStorage only. Lost on device change.</li>
-    <li><strong>Chat history → Supabase</strong> — Same issue. Local only.</li>
-    <li><strong>Chinatown city group</strong> — Listed in 6 city groups. Could cause cross-city filtering bugs.</li>
-  </ol>
-</div>
-
-<div class="card" style="border-color: rgba(168,85,247,0.3);">
-  <div class="card-title" style="color: #a855f7;">Future</div>
-  <ol style="padding-left: 20px;" start="9">
-    <li><strong>Merge → update user_data.loved</strong> — Old loves still reference deleted restaurant IDs.</li>
-    <li><strong>Watchlist + Ratings → Neo4j</strong> — Would improve recommendation accuracy.</li>
-    <li><strong>Real-time sync</strong> — Push updates to other logged-in users when data changes.</li>
-  </ol>
-</div>
+<h3>Additional Fixes (April 3, 2026)</h3>
+<ul style="padding-left: 20px; list-style: disc;">
+  <li>Google API cost leak fixed &mdash; photos + place details now persist to Supabase restaurants table</li>
+  <li>Session-level fetch guards prevent duplicate Google API calls</li>
+  <li>Follower loading optimized from N+1 queries to single batch query</li>
+  <li>Onboarding shows real users (was hidden behind 5-user threshold)</li>
+  <li>Admin delete now cleans Neo4j graph (DETACH DELETE)</li>
+  <li>Settings sheet supports PWA back-swipe</li>
+</ul>
 
 <div style="text-align: center; padding: 40px 0; color: rgba(245,240,235,0.2); font-size: 12px;">
-  Generated by Claude Code &mdash; April 2, 2026
+  Generated by Claude Code &mdash; April 3, 2026
 </div>
 
 </div>
