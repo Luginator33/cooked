@@ -2174,7 +2174,7 @@ export default function Discover({ tasteProfile, initialTab }) {
 
   const CITY_GROUPS = {
     "Los Angeles": ["Los Angeles", "Beverly Hills", "West Hollywood", "Brentwood", "Santa Monica", "Culver City", "Arts District", "Chinatown", "Palms", "Mid-City"],
-    "New York": ["New York", "Manhattan", "Brooklyn", "Queens", "Williamsburg", "West Village", "East Village", "Greenwich Village", "Koreatown", "Midtown", "Flatiron", "SoHo"],
+    "New York": ["New York", "Manhattan", "Brooklyn", "Queens", "Williamsburg", "West Village", "East Village", "Greenwich Village", "Midtown", "Flatiron", "SoHo"],
     "Chicago": ["Chicago", "West Loop", "Lincoln Park", "Wicker Park", "River North"],
     "San Francisco": ["San Francisco", "Berkeley", "Oakland", "Mission", "Hayes Valley", "SoMa", "Nob Hill"],
     "Miami": ["Miami", "South Beach", "Design District", "Wynwood", "Coconut Grove", "Brickell"],
@@ -4391,6 +4391,15 @@ Return a JSON object with exactly these fields:
                   },
                 };
               });
+              // Sync swipe love to cooked_loved so detail view LOVED button stays in sync
+              if (dir === 'right') {
+                try {
+                  const raw = safeLocalStorageGetItem("cooked_loved");
+                  const set = new Set(raw ? JSON.parse(raw) : []);
+                  set.add(r.id);
+                  safeSetItem("cooked_loved", JSON.stringify([...set]));
+                } catch {}
+              }
             }
             heatSwipeHandledRef.current = false;
           }, 400);
