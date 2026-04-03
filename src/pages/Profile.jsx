@@ -475,22 +475,27 @@ export default function Profile({
     const ids = rows
       .map((row) => (kind === "followers" ? row.follower_id : row.following_id))
       .filter(Boolean);
-    const profileResults = await Promise.all(ids.map(async (id) => {
-      const { data } = await getUserProfile(id);
-      // Skip deleted users (no profile in user_data)
-      if (!data) return null;
-      const rawName = data?.profile_name;
-      const username = data?.profile_username || "";
+    if (ids.length === 0) {
+      setSocialModal({ title: kind === "followers" ? "Followers" : "Following", users: [], loading: false });
+      return;
+    }
+    // Batch query — single request instead of N individual getUserProfile calls
+    const { data: profiles } = await supabase
+      .from('user_data')
+      .select('clerk_user_id, profile_name, profile_username, profile_photo')
+      .in('clerk_user_id', ids);
+    const results = (profiles || []).map(data => {
+      const rawName = data.profile_name;
+      const username = data.profile_username || "";
       const displayName = (rawName && rawName !== "User") ? rawName : (username || "New Member");
       return {
-        clerk_user_id: id,
+        clerk_user_id: data.clerk_user_id,
         profile_name: displayName,
         profile_username: username,
-        profile_photo: data?.profile_photo || null,
+        profile_photo: data.profile_photo || null,
       };
-    }));
-    const profiles = profileResults.filter(Boolean);
-    setSocialModal({ title: kind === "followers" ? "Followers" : "Following", users: profiles, loading: false });
+    });
+    setSocialModal({ title: kind === "followers" ? "Followers" : "Following", users: results, loading: false });
   };
 
   const openNotifications = async () => {

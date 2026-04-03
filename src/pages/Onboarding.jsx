@@ -828,9 +828,9 @@ function FindFriendsSlide({ onNext, onFollowUser, onBack }) {
     })();
   }, [user?.id]);
 
-  // Use real users if we have 5+, otherwise show fake friends as placeholder
-  const showUsers = realUsers.length >= 5 ? realUsers : [];
-  const showFakes = realUsers.length < 5;
+  // Always show real users first, pad with fake friends if fewer than 3 real users
+  const showUsers = realUsers;
+  const showFakes = realUsers.length < 3;
 
   const filteredUsers = searchQuery.trim()
     ? showUsers.filter(u =>
