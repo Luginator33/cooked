@@ -412,12 +412,12 @@ export async function sendBroadcastNotification(adminId, message, targetUserIds)
 
 // Community restaurant management
 export async function updateCommunityRestaurant(id, updates) {
-  const { error } = await supabase.from('community_restaurants').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id);
+  const { error } = await supabase.from('community_restaurants').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', String(id));
   return { error };
 }
 
 export async function deleteCommunityRestaurant(id) {
-  const { error } = await supabase.from('community_restaurants').delete().eq('id', id);
+  const { error } = await supabase.from('community_restaurants').delete().eq('id', String(id));
   return { error };
 }
 

@@ -346,12 +346,23 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
 
   // ── ACTIONS ──
   const handleRemove = async (r) => {
-    if (isCommunity(r.id)) await deleteCommunityRestaurant(r.id);
-    else await upsertAdminOverride(r.id, "delete", null, userId);
-    await logAdminAction("restaurant_remove", userId, "restaurant", String(r.id), { name: r.name });
-    showToast(`Removed ${r.name}`);
-    onRestaurantsChanged?.();
-    setConfirm(null);
+    try {
+      if (isCommunity(r.id)) {
+        const { error } = await deleteCommunityRestaurant(r.id);
+        if (error) throw error;
+      } else {
+        const { error } = await upsertAdminOverride(r.id, "delete", null, userId);
+        if (error) throw error;
+      }
+      await logAdminAction("restaurant_remove", userId, "restaurant", String(r.id), { name: r.name });
+      setConfirm(null);
+      showToast(`Removed ${r.name}`);
+      onRestaurantsChanged?.();
+    } catch (err) {
+      console.error("Remove error:", err);
+      setConfirm(null);
+      showToast(`Error removing: ${err.message || "unknown error"}`);
+    }
   };
 
   const startEdit = (r) => {
