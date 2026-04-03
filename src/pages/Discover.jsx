@@ -1753,10 +1753,17 @@ export default function Discover({ tasteProfile, initialTab }) {
         setIsAdmin(remote.is_admin === true);
         const clerkProfileName = user.fullName || user.firstName || "User";
         const clerkProfileUsername = user.username || user.primaryEmailAddress?.emailAddress?.split("@")[0] || "";
-        const remoteHeat = remote.heat || {
-          loved: Array.isArray(remote.loved) ? remote.loved : [],
-          noped: Array.isArray(remote.noped) ? remote.noped : [],
-          skipped: Array.isArray(remote.skipped) ? remote.skipped : [],
+        // Normalize all IDs to numbers for consistent comparison
+        const normalizeIds = (arr) => (Array.isArray(arr) ? arr : []).map(id => isNaN(id) ? id : Number(id));
+        const remoteHeat = remote.heat ? {
+          loved: normalizeIds(remote.heat.loved),
+          noped: normalizeIds(remote.heat.noped),
+          skipped: normalizeIds(remote.heat.skipped),
+          votes: remote.heat.votes && typeof remote.heat.votes === "object" ? remote.heat.votes : {},
+        } : {
+          loved: normalizeIds(remote.loved),
+          noped: normalizeIds(remote.noped),
+          skipped: normalizeIds(remote.skipped),
           votes: remote.votes && typeof remote.votes === "object" ? remote.votes : {},
         };
         const remoteWatchlist = Array.isArray(remote.watchlist) ? [...new Set(remote.watchlist.map(id => isNaN(id) ? id : Number(id)))] : [];
@@ -2551,8 +2558,20 @@ export default function Discover({ tasteProfile, initialTab }) {
               });
             });
           }
+          // Sync loved array to Supabase user_data.loved (single source of truth)
+          supabase.from("user_data").select("loved").eq("clerk_user_id", user.id).single().then(({ data: ud }) => {
+            const current = Array.isArray(ud?.loved) ? ud.loved : [];
+            const updated = [...new Set([...current, id, Number(id)])].filter(Boolean);
+            supabase.from("user_data").update({ loved: updated }).eq("clerk_user_id", user.id).then(() => {});
+          });
         } else {
           removeLove(user.id, id);
+          // Remove from Supabase user_data.loved
+          supabase.from("user_data").select("loved").eq("clerk_user_id", user.id).single().then(({ data: ud }) => {
+            const current = Array.isArray(ud?.loved) ? ud.loved : [];
+            const updated = current.filter(x => String(x) !== String(id));
+            supabase.from("user_data").update({ loved: updated }).eq("clerk_user_id", user.id).then(() => {});
+          });
         }
       }
       return {
@@ -4351,6 +4370,12 @@ Return a JSON object with exactly these fields:
                   const fullRest = allRestaurants.find(ar => ar.id === r.id || ar.id === Number(r.id));
                   if (fullRest) syncRestaurant(fullRest);
                   syncLove(user.id, r.id);
+                  // Sync to Supabase user_data.loved
+                  supabase.from("user_data").select("loved").eq("clerk_user_id", user.id).single().then(({ data: ud }) => {
+                    const current = Array.isArray(ud?.loved) ? ud.loved : [];
+                    const updated = [...new Set([...current, r.id, Number(r.id)])].filter(Boolean);
+                    supabase.from("user_data").update({ loved: updated }).eq("clerk_user_id", user.id).then(() => {});
+                  });
                 } else if (dir === 'left') {
                   logInteraction(user.id, r.id, 'pass');
                 }
