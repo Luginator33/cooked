@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { C } from "./adminHelpers";
 import AdminRestaurants from "./AdminRestaurants";
@@ -26,6 +26,14 @@ const STATIC_COUNT_THRESHOLD = 3500;
 export default function AdminPanel({ onClose, allRestaurants, userId, onRestaurantsChanged }) {
   const [tab, setTab] = useState("restaurants");
 
+  // PWA back-swipe support
+  useEffect(() => {
+    window.history.pushState({ adminPanel: true }, "");
+    const handlePop = () => onClose?.();
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [onClose]);
+
   const isLoading = allRestaurants.length < STATIC_COUNT_THRESHOLD;
   const tabProps = { allRestaurants, userId, onRestaurantsChanged };
 
@@ -35,9 +43,17 @@ export default function AdminPanel({ onClose, allRestaurants, userId, onRestaura
         {/* Header — respects iPhone notch/status bar */}
         <div style={{ padding: "14px 20px 0", paddingTop: "max(14px, calc(10px + env(safe-area-inset-top, 0px)))", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 22, color: C.text }}>
-              Admin Panel
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <button
+                type="button" onClick={onClose}
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(245,240,235,0.5)", borderRadius: "50%", width: 40, height: 40, cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                ‹
+              </button>
+              <span style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 22, color: C.text }}>
+                Admin Panel
+              </span>
+            </div>
             <button
               type="button" onClick={onClose}
               style={{ background: C.bg2, border: "none", color: C.muted, borderRadius: "50%", width: 36, height: 36, cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}
