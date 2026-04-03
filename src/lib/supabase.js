@@ -84,6 +84,66 @@ export async function mergeRestaurantsDb(fromId, intoId) {
   return { error };
 }
 
+// Clean up user_data.loved across ALL users after a restaurant is deleted or merged.
+// On delete: removes the deleted ID from every user's loved list.
+// On merge: replaces the old ID with the new ID in every user's loved list.
+export async function cleanupLovedAfterDelete(deletedId) {
+  const numId = Number(deletedId);
+  const strId = String(deletedId);
+  const { data: rows, error } = await supabase.from('user_data').select('clerk_user_id, loved, heat, watchlist');
+  if (error || !rows) { console.error('cleanupLovedAfterDelete fetch error:', error); return; }
+  for (const row of rows) {
+    const updates = {};
+    // Clean loved array
+    if (Array.isArray(row.loved) && (row.loved.includes(numId) || row.loved.includes(strId))) {
+      updates.loved = row.loved.filter(id => id !== numId && id !== strId);
+    }
+    // Clean heat.loved array
+    if (row.heat?.loved && Array.isArray(row.heat.loved) && (row.heat.loved.includes(numId) || row.heat.loved.includes(strId))) {
+      updates.heat = { ...row.heat, loved: row.heat.loved.filter(id => id !== numId && id !== strId) };
+    }
+    // Clean watchlist
+    if (Array.isArray(row.watchlist) && (row.watchlist.includes(numId) || row.watchlist.includes(strId))) {
+      updates.watchlist = row.watchlist.filter(id => id !== numId && id !== strId);
+    }
+    if (Object.keys(updates).length > 0) {
+      await supabase.from('user_data').update(updates).eq('clerk_user_id', row.clerk_user_id);
+    }
+  }
+}
+
+export async function cleanupLovedAfterMerge(fromId, intoId) {
+  const numFrom = Number(fromId);
+  const strFrom = String(fromId);
+  const numInto = Number(intoId);
+  const { data: rows, error } = await supabase.from('user_data').select('clerk_user_id, loved, heat, watchlist');
+  if (error || !rows) { console.error('cleanupLovedAfterMerge fetch error:', error); return; }
+  for (const row of rows) {
+    const updates = {};
+    // Replace in loved array
+    if (Array.isArray(row.loved) && (row.loved.includes(numFrom) || row.loved.includes(strFrom))) {
+      const cleaned = row.loved.filter(id => id !== numFrom && id !== strFrom);
+      if (!cleaned.includes(numInto)) cleaned.push(numInto);
+      updates.loved = cleaned;
+    }
+    // Replace in heat.loved
+    if (row.heat?.loved && Array.isArray(row.heat.loved) && (row.heat.loved.includes(numFrom) || row.heat.loved.includes(strFrom))) {
+      const cleaned = row.heat.loved.filter(id => id !== numFrom && id !== strFrom);
+      if (!cleaned.includes(numInto)) cleaned.push(numInto);
+      updates.heat = { ...row.heat, loved: cleaned };
+    }
+    // Replace in watchlist
+    if (Array.isArray(row.watchlist) && (row.watchlist.includes(numFrom) || row.watchlist.includes(strFrom))) {
+      const cleaned = row.watchlist.filter(id => id !== numFrom && id !== strFrom);
+      if (!cleaned.includes(numInto)) cleaned.push(numInto);
+      updates.watchlist = cleaned;
+    }
+    if (Object.keys(updates).length > 0) {
+      await supabase.from('user_data').update(updates).eq('clerk_user_id', row.clerk_user_id);
+    }
+  }
+}
+
 // ── FLAME SCORE / INTERACTION TRACKING ──────────────────────
 // Log a user interaction with a restaurant (fire-and-forget)
 export function logInteraction(clerkUserId, restaurantId, action, value = null) {

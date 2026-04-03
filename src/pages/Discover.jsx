@@ -74,7 +74,7 @@ import TasteProfile from "./TasteProfile";
 import UserProfile from "./UserProfile";
 import Onboarding from "./Onboarding";
 import { addCommunityRestaurant, followCity, followUser, getCommunityRestaurants, getFollowedCities, getFollowing, isFollowing as checkUserIsFollowing, loadSharedPhotos, loadUserData, saveSharedPhoto, saveUserData, supabase, unfollowCity, unfollowUser, getAdminOverrides, sendMessage, getInbox, getConversation, markMessagesRead, getUnreadMessageCount, logInteraction, fetchFlameScores, computeFlameScore, getAllRestaurants as getAllRestaurantsFromSupabase, upsertRestaurant, softDeleteRestaurant } from "../lib/supabase";
-import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities, syncRestaurant, seedAllRestaurants, getYoudLoveThis, getRisingRestaurants, getHiddenGems, getSixDegrees, getTasteFingerprint, getPeopleLikeYou, getWhoToFollow, getSmartSwipeScores, getPersonalizationScores, getCrossCuisineRecs } from "../lib/neo4j";
+import { syncLove, removeLove, syncFollow, removeFollow, syncCityFollow, removeCityFollow, getFriendsWhoLovedRestaurant, getTrendingInFollowedCities, syncRestaurant, seedAllRestaurants, getYoudLoveThis, getRisingRestaurants, getHiddenGems, getSixDegrees, getTasteFingerprint, getPeopleLikeYou, getWhoToFollow, getSmartSwipeScores, getPersonalizationScores, getCrossCuisineRecs, syncWatchlist, removeWatchlist, syncRating, syncShare, syncDmShare, syncSearch } from "../lib/neo4j";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -1560,8 +1560,8 @@ export default function Discover({ tasteProfile, initialTab }) {
     if (!dmSharePicker) return;
     const r = dmSharePicker;
     await sendMessage(user.id, recipientId, null, String(r.id), r.name);
-    // Log DM share for flame score (+3.5 points)
-    if (user?.id) logInteraction(user.id, r.id, 'dm');
+    // Log DM share for flame score (+3.5 points) + Neo4j graph
+    if (user?.id) { logInteraction(user.id, r.id, 'dm'); syncDmShare(user.id, recipientId, r.id).catch(() => {}); }
     setDmSharePicker(null);
     setToast(`Sent ${r.name} to ${recipientName}`);
     setTimeout(() => setToast(null), 2500);
@@ -1887,8 +1887,9 @@ export default function Discover({ tasteProfile, initialTab }) {
     if (!user?.id || !searchQuery.trim()) return;
     const t = setTimeout(() => {
       logInteraction(user.id, "0", 'search', null);
-      // Store search in Supabase for analytics via a lightweight insert
+      // Store search in Supabase for analytics + Neo4j graph
       supabase.from('restaurant_interactions').insert({ clerk_user_id: user.id, restaurant_id: "search", action: 'search', value: searchQuery.trim().slice(0, 100) }).then(() => {});
+      syncSearch(user.id, searchQuery.trim()).catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
   }, [searchQuery, user?.id]);
@@ -2625,15 +2626,19 @@ export default function Discover({ tasteProfile, initialTab }) {
     const normalizedId = isNaN(id) ? id : Number(id);
     setWatchlist(s => {
       const inList = s.includes(normalizedId) || s.includes(Number(id)) || s.includes(String(id));
-      if (user?.id) logInteraction(user.id, id, inList ? 'watchlist_remove' : 'watchlist');
+      if (user?.id) {
+        logInteraction(user.id, id, inList ? 'watchlist_remove' : 'watchlist');
+        if (inList) removeWatchlist(user.id, id).catch(() => {});
+        else syncWatchlist(user.id, id).catch(() => {});
+      }
       if (inList) return s.filter(x => x !== normalizedId && x !== Number(id) && x !== String(id));
       return [...s, normalizedId];
     });
   };
   const share = async (name, restaurantId) => {
     const text = `Check out ${name} on Cooked — the restaurant app for people who care.`;
-    // Log external share for flame score (+5 points)
-    if (user?.id && restaurantId) logInteraction(user.id, restaurantId, 'share');
+    // Log external share for flame score (+5 points) + Neo4j graph
+    if (user?.id && restaurantId) { logInteraction(user.id, restaurantId, 'share'); syncShare(user.id, restaurantId).catch(() => {}); }
     try {
       if (navigator.share) {
         await navigator.share({ title: name, text, url: window.location.href });
@@ -5103,7 +5108,7 @@ Return a JSON object with exactly these fields:
                   <span className="det-action-label">SEND</span>
                 </button>
                 {/* SHARE (external) */}
-                <button type="button" className="det-action-btn" onClick={async () => { if (user?.id) logInteraction(user.id, detail.id, 'share'); const shareText = `Check out ${detail.name} — ${detail.cuisine} in ${detail.city}. Found on Cooked.`; try { if (navigator.share) { await navigator.share({ title: detail.name, text: shareText, url: window.location.href }); } else { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } } catch { try { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } catch {} } }}>
+                <button type="button" className="det-action-btn" onClick={async () => { if (user?.id) { logInteraction(user.id, detail.id, 'share'); syncShare(user.id, detail.id).catch(() => {}); } const shareText = `Check out ${detail.name} — ${detail.cuisine} in ${detail.city}. Found on Cooked.`; try { if (navigator.share) { await navigator.share({ title: detail.name, text: shareText, url: window.location.href }); } else { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } } catch { try { await navigator.clipboard.writeText(shareText); setDetailShareCopied(true); setTimeout(() => setDetailShareCopied(false), 2000); } catch {} } }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(245,240,235,0.18)" strokeWidth="1.5" strokeLinecap="round">
                     <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
                     <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
@@ -5322,7 +5327,7 @@ Return a JSON object with exactly these fields:
               <div className="det-section-label">YOUR RATING</div>
               <div className="det-rating-row">
                 {[1,2,3,4,5].map(n => (
-                  <button key={n} type="button" className="det-rating-btn" onClick={() => { const next = {...(userRatings||{})}; next[detail.id] = n; setUserRatings(next); if (user?.id) logInteraction(user.id, detail.id, 'rating', n); }}>
+                  <button key={n} type="button" className="det-rating-btn" onClick={() => { const next = {...(userRatings||{})}; next[detail.id] = n; setUserRatings(next); if (user?.id) { logInteraction(user.id, detail.id, 'rating', n); syncRating(user.id, detail.id, n).catch(() => {}); } }}>
                     <FlameIcon size={34} filled={(userRatings[detail.id]||0) >= n} color={(userRatings[detail.id]||0) >= n ? "#ff9632" : "#2a1a0a"} />
                   </button>
                 ))}

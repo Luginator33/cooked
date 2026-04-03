@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { C, cardStyle, inputStyle, btnPrimary, btnSecondary, btnDanger, btnSmall, btnOutline, sectionHeader, SearchBar, ConfirmDialog, Toast } from "./adminHelpers";
-import { upsertRestaurant, softDeleteRestaurant, mergeRestaurantsDb, saveSharedPhoto, logAdminAction, supabase } from "../../lib/supabase";
+import { upsertRestaurant, softDeleteRestaurant, mergeRestaurantsDb, saveSharedPhoto, logAdminAction, supabase, cleanupLovedAfterDelete, cleanupLovedAfterMerge } from "../../lib/supabase";
 import { transferLoves, syncRestaurant } from "../../lib/neo4j";
 import { normalizeCity } from "../../data/restaurants";
 
@@ -352,6 +352,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
       const { error } = await softDeleteRestaurant(r.id);
       if (error) throw error;
       await logAdminAction("restaurant_remove", userId, "restaurant", String(r.id), { name: r.name });
+      cleanupLovedAfterDelete(r.id).catch(e => console.error("cleanup loved:", e));
       setConfirm(null);
       setRemovedIds(prev => new Set([...prev, r.id, String(r.id), Number(r.id)]));
       setExpandedId(null);
@@ -587,6 +588,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
     await transferLoves(mergeFrom, mergeTo);
     await mergeRestaurantsDb(mergeFrom, mergeTo);
     await logAdminAction("restaurant_merge", userId, "restaurant", mergeFrom, { merged_into: mergeTo });
+    cleanupLovedAfterMerge(mergeFrom, mergeTo).catch(e => console.error("cleanup loved merge:", e));
     showToast("Restaurants merged");
     setMergeFrom(""); setMergeTo("");
     onRestaurantsChanged?.();
@@ -627,6 +629,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
         try {
           await softDeleteRestaurant(id);
           await logAdminAction("restaurant_remove", userId, "restaurant", String(id), { name: r.name });
+          cleanupLovedAfterDelete(id).catch(e2 => console.error("cleanup loved:", e2));
           count++;
         } catch (e) { console.error(`Bulk delete failed for ${id}:`, e); }
       }
@@ -649,6 +652,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
         await transferLoves(String(removeId), String(mergeKeepId));
         await mergeRestaurantsDb(removeId, mergeKeepId);
         await logAdminAction("restaurant_merge", userId, "restaurant", String(removeId), { merged_into: String(mergeKeepId) });
+        cleanupLovedAfterMerge(removeId, mergeKeepId).catch(e2 => console.error("cleanup loved merge:", e2));
         showToast(`Merged into ${allRestaurants.find(r => r.id === mergeKeepId)?.name || mergeKeepId}`);
       } catch (e) { showToast(`Merge failed: ${e.message}`, "error"); }
       setBulkSaving(false);

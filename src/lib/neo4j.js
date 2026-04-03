@@ -178,6 +178,70 @@ export async function removeCityFollow(clerkUserId, cityName) {
   );
 }
 
+// ── EXTENDED GRAPH SYNC (watchlist, ratings, shares, DM, search) ────
+
+export async function syncWatchlist(clerkUserId, restaurantId) {
+  if (!clerkUserId || !restaurantId) return;
+  await runQuery(
+    `MERGE (u:User {id: $userId})
+     MERGE (r:Restaurant {id: $restId})
+     MERGE (u)-[w:WATCHLISTED]->(r)
+     SET w.timestamp = datetime()`,
+    { userId: clerkUserId, restId: String(restaurantId) }
+  );
+}
+
+export async function removeWatchlist(clerkUserId, restaurantId) {
+  if (!clerkUserId || !restaurantId) return;
+  await runQuery(
+    `MATCH (u:User {id: $userId})-[w:WATCHLISTED]->(r:Restaurant {id: $restId})
+     DELETE w`,
+    { userId: clerkUserId, restId: String(restaurantId) }
+  );
+}
+
+export async function syncRating(clerkUserId, restaurantId, rating) {
+  if (!clerkUserId || !restaurantId || !rating) return;
+  await runQuery(
+    `MERGE (u:User {id: $userId})
+     MERGE (r:Restaurant {id: $restId})
+     MERGE (u)-[rt:RATED]->(r)
+     SET rt.value = $rating, rt.timestamp = datetime()`,
+    { userId: clerkUserId, restId: String(restaurantId), rating: neo4j.int(rating) }
+  );
+}
+
+export async function syncShare(clerkUserId, restaurantId) {
+  if (!clerkUserId || !restaurantId) return;
+  await runQuery(
+    `MERGE (u:User {id: $userId})
+     MERGE (r:Restaurant {id: $restId})
+     CREATE (u)-[:SHARED {timestamp: datetime()}]->(r)`,
+    { userId: clerkUserId, restId: String(restaurantId) }
+  );
+}
+
+export async function syncDmShare(senderId, recipientId, restaurantId) {
+  if (!senderId || !recipientId || !restaurantId) return;
+  await runQuery(
+    `MERGE (s:User {id: $senderId})
+     MERGE (r:Restaurant {id: $restId})
+     MERGE (recv:User {id: $recipientId})
+     CREATE (s)-[:DM_SHARED {to: $recipientId, timestamp: datetime()}]->(r)`,
+    { senderId, recipientId, restId: String(restaurantId) }
+  );
+}
+
+export async function syncSearch(clerkUserId, query) {
+  if (!clerkUserId || !query) return;
+  await runQuery(
+    `MERGE (u:User {id: $userId})
+     MERGE (q:SearchQuery {text: $query})
+     CREATE (u)-[:SEARCHED {timestamp: datetime()}]->(q)`,
+    { userId: clerkUserId, query: query.toLowerCase().trim().slice(0, 100) }
+  );
+}
+
 // Get taste fingerprint for a user
 export async function getTasteFingerprint(clerkUserId) {
   if (!clerkUserId) return null;
