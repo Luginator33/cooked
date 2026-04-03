@@ -1770,11 +1770,15 @@ export default function Discover({ tasteProfile, initialTab }) {
         const remoteWatchlist = Array.isArray(remote.watchlist) ? [...new Set(remote.watchlist.map(id => isNaN(id) ? id : Number(id)))] : [];
         const remoteRatings = remote.ratings && typeof remote.ratings === "object" ? remote.ratings : {};
         const remotePhotoResolved = Array.isArray(remote.photo_resolved) ? remote.photo_resolved : [];
+        const remoteNotes = remote.notes && typeof remote.notes === "object" ? remote.notes : null;
+        const remoteLists = remote.lists && typeof remote.lists === "object" ? remote.lists : null;
 
         setHeatResults(remoteHeat);
         setWatchlist(remoteWatchlist);
         setUserRatings(remoteRatings);
         setPhotoResolved(remotePhotoResolved);
+        if (remoteNotes) { setUserNotes(remoteNotes); safeSetItem("cooked_notes", JSON.stringify(remoteNotes)); }
+        if (remoteLists) { setUserLists(remoteLists); safeSetItem("cooked_lists", JSON.stringify(remoteLists)); }
         // Load home city from Supabase
         if (remote.home_city) {
           setHomeCity(remote.home_city);
@@ -1868,13 +1872,15 @@ export default function Discover({ tasteProfile, initialTab }) {
         heat: heatResults || { loved: [], noped: [], skipped: [], votes: {} },
         watchlist: watchlist || [],
         ratings: userRatings || {},
+        notes: userNotes || {},
+        lists: userLists || {},
         photo_resolved: photoResolved || [],
         profile_photo: profilePhoto,
         banner_photo: bannerPhoto,
       });
     }, 2000);
     return () => clearTimeout(timeoutId);
-  }, [user?.id, heatResults, watchlist, userRatings, photoResolved]);
+  }, [user?.id, heatResults, watchlist, userRatings, userNotes, userLists, photoResolved]);
 
   // Log search queries (debounced 1.5s after typing stops)
   useEffect(() => {
@@ -2152,6 +2158,33 @@ export default function Discover({ tasteProfile, initialTab }) {
     window.addEventListener("popstate", handlePop);
     return () => window.removeEventListener("popstate", handlePop);
   }, [detailRestaurant?.id]);
+
+  // PWA back-swipe for DM modal
+  useEffect(() => {
+    if (!dmOpen) return;
+    window.history.pushState({ overlay: "dm" }, "");
+    const handlePop = () => { setDmOpen(false); setDmConvo(null); };
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [dmOpen]);
+
+  // PWA back-swipe for notifications sheet
+  useEffect(() => {
+    if (!notifSheetOpen) return;
+    window.history.pushState({ overlay: "notifications" }, "");
+    const handlePop = () => setNotifSheetOpen(false);
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [notifSheetOpen]);
+
+  // PWA back-swipe for filter sheet
+  useEffect(() => {
+    if (!showFilterSheet) return;
+    window.history.pushState({ overlay: "filter" }, "");
+    const handlePop = () => setShowFilterSheet(false);
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [showFilterSheet]);
 
   useEffect(() => {
     if (window.google?.maps) { setMapsReady(true); return; }

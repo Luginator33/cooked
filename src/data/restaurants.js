@@ -513,17 +513,24 @@ const CITY_ALIAS_MAP = {
 };
 
 // Build a reverse lookup from CITY_GROUPS: neighborhood -> canonical city
+// Skip ambiguous neighborhoods that appear in multiple city groups (e.g. "Chinatown")
 const _neighborhoodToCity = {};
+const _ambiguousNeighborhoods = new Set();
 Object.entries(CITY_GROUPS).forEach(([canonical, neighborhoods]) => {
   if (Array.isArray(neighborhoods)) {
     neighborhoods.forEach((n) => {
       const key = n.toLowerCase().trim();
       if (key !== canonical.toLowerCase().trim()) {
+        if (_neighborhoodToCity[key] && _neighborhoodToCity[key] !== canonical) {
+          _ambiguousNeighborhoods.add(key);
+        }
         _neighborhoodToCity[key] = canonical;
       }
     });
   }
 });
+// Remove ambiguous entries — these need explicit mapping in EXTRA_NEIGHBORHOOD_MAP
+_ambiguousNeighborhoods.forEach(key => delete _neighborhoodToCity[key]);
 
 // Additional neighborhood -> city mappings not already in CITY_GROUPS
 const EXTRA_NEIGHBORHOOD_MAP = {
@@ -657,6 +664,10 @@ const EXTRA_NEIGHBORHOOD_MAP = {
   "north scottsdale": "Scottsdale", "old town scottsdale": "Scottsdale",
   // Cannes
   "la croisette": "Cannes", "le suquet": "Cannes", "mougins": "Cannes",
+  // Ambiguous neighborhoods — appear in multiple CITY_GROUPS, so we must pick the most common one.
+  // These restaurants will also match via CITY_GROUPS when filtering, but normalizeCity needs a single answer.
+  "chinatown": "Los Angeles", // default; restaurants in other cities' Chinatowns should use the parent city name
+  "little india": "Singapore",
   // Liberia / Costa Rica
   "guanacaste": "Liberia", "peninsula papagayo": "Liberia",
   // UK locations

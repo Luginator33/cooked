@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react"
 import { getYoudLoveThis, getRisingRestaurants, getHiddenGems, getTrendingInFollowedCities, getFriendsRecentLoves, getCrossCuisineRecs } from "../lib/neo4j"
-import { saveResearch, getResearchEntries, deleteResearch, saveNewPlaces } from "../lib/supabase"
+import { saveResearch, getResearchEntries, deleteResearch, saveNewPlaces, saveUserData, loadUserData } from "../lib/supabase"
 
 function safeSetItem(key, value) {
   try {
@@ -465,6 +465,35 @@ export default function ChatBot({
 
   const hasUserSentMessage = messages.some(m => m.role === "user")
   const showIdleState = !initialMessages && messages.length === 1 && messages[0].role === "assistant"
+  const chatSyncTimerRef = useRef(null);
+
+  // Load chat history from Supabase on mount (merge with localStorage)
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      try {
+        const remote = await loadUserData(userId);
+        if (remote?.chat_history && Array.isArray(remote.chat_history) && remote.chat_history.length > 0) {
+          const local = JSON.parse(localStorage.getItem("cooked_chat_history") || "[]");
+          // Merge: use whichever is newer/longer, keyed by id
+          const merged = new Map();
+          for (const e of remote.chat_history) merged.set(e.id, e);
+          for (const e of local) merged.set(e.id, e); // local overrides if same id
+          const sorted = [...merged.values()].sort((a, b) => a.timestamp - b.timestamp).slice(-20);
+          safeSetItem("cooked_chat_history", JSON.stringify(sorted));
+        }
+      } catch {}
+    })();
+  }, [userId]);
+
+  // Debounced sync of chat history to Supabase (3s after last change)
+  const syncChatToSupabase = (hist) => {
+    if (!userId) return;
+    if (chatSyncTimerRef.current) clearTimeout(chatSyncTimerRef.current);
+    chatSyncTimerRef.current = setTimeout(() => {
+      saveUserData(userId, { chat_history: hist }).catch(() => {});
+    }, 3000);
+  };
 
   useEffect(() => {
     if (inline && messagesContainerRef.current) messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
@@ -805,6 +834,7 @@ If the content isn't about food/restaurants/hotels/bars/nightlife, say "NOT_RELE
       hist.push(entry)
       if (hist.length > 20) hist.splice(0, hist.length - 20)
       safeSetItem("cooked_chat_history", JSON.stringify(hist))
+      syncChatToSupabase(hist);
       conversationIdRef.current = entry.id
     } catch {}
 
@@ -878,7 +908,7 @@ If the content isn't about food/restaurants/hotels/bars/nightlife, say "NOT_RELE
       try {
         const hist = JSON.parse(localStorage.getItem("cooked_chat_history") || "[]")
         const idx = hist.findIndex(e => e.id === conversationIdRef.current)
-        if (idx !== -1) { hist[idx].messages = updatedMessages; safeSetItem("cooked_chat_history", JSON.stringify(hist)); }
+        if (idx !== -1) { hist[idx].messages = updatedMessages; safeSetItem("cooked_chat_history", JSON.stringify(hist)); syncChatToSupabase(hist); }
       } catch {}
     } catch (err) {
       console.error("Chat error:", err);
@@ -887,7 +917,7 @@ If the content isn't about food/restaurants/hotels/bars/nightlife, say "NOT_RELE
       try {
         const hist = JSON.parse(localStorage.getItem("cooked_chat_history") || "[]")
         const idx = hist.findIndex(e => e.id === conversationIdRef.current)
-        if (idx !== -1) { hist[idx].messages = fallbackMessages; safeSetItem("cooked_chat_history", JSON.stringify(hist)); }
+        if (idx !== -1) { hist[idx].messages = fallbackMessages; safeSetItem("cooked_chat_history", JSON.stringify(hist)); syncChatToSupabase(hist); }
       } catch {}
     } finally {
       setLoading(false)
