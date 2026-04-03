@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation } from "react-router-dom";
 import { AuthenticateWithRedirectCallback, useUser } from "@clerk/clerk-react";
 import { loadUserData } from "./lib/supabase";
 import Onboarding from "./pages/Onboarding";
@@ -73,54 +74,38 @@ export class AppErrorBoundary extends React.Component {
   }
 })();
 
-export default function App() {
+// Map URL paths to tab names and vice versa
+const PATH_TO_TAB = { "/": "home", "/home": "home", "/heat": "heat", "/discover": "discover", "/map": "map", "/profile": "profile" };
+const TAB_TO_PATH = { home: "/", heat: "/heat", discover: "/discover", map: "/map", profile: "/profile" };
+
+function AppInner() {
   const { user, isLoaded } = useUser();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [tasteProfile, setTasteProfile] = useState(null);
   const [initialTab, setInitialTab] = useState(null);
   const [googleSignup, setGoogleSignup] = useState(false);
 
   const [screen, setScreen] = useState(() => {
-    // If onboarding already done → discover immediately, no loading
     if (localStorage.getItem("cooked_onboarding_v3") === "1") return "discover";
-    // Otherwise wait for Clerk to load before deciding
     return "loading";
   });
-
-  // Handle Clerk SSO callback (e.g. /sso-callback after Google OAuth)
-  if (window.location.pathname === "/sso-callback") {
-    return (
-      <div style={{ background: "#0a0a0f", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <AuthenticateWithRedirectCallback
-          signInForceRedirectUrl={window.location.origin + "?returning=1"}
-          signUpForceRedirectUrl={window.location.origin + "?google_signup=1"}
-        />
-      </div>
-    );
-  }
 
   // Once Clerk is loaded, determine where to go
   useEffect(() => {
     if (!isLoaded) return;
     if (screen === "discover") return;
 
-    // Check sessionStorage for redirect flags (survives Clerk handshake)
     const isReturning = sessionStorage.getItem("cooked_returning") === "1";
     const isGoogleSignup = sessionStorage.getItem("cooked_google_signup") === "1";
     sessionStorage.removeItem("cooked_returning");
     sessionStorage.removeItem("cooked_google_signup");
 
-    // Clean up any query params
-    if (window.location.search) {
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-
-    // No user signed in → onboarding
     if (!user?.id) {
       setScreen("onboarding");
       return;
     }
 
-    // Returning user (from sign-in) → straight to HOME
     if (isReturning) {
       localStorage.setItem("cooked_onboarding_v3", "1");
       localStorage.setItem("cooked_onboarding_done", "1");
@@ -129,14 +114,12 @@ export default function App() {
       return;
     }
 
-    // New Google signup → continue onboarding (show "Complete your profile" on slide 1)
     if (isGoogleSignup) {
       setGoogleSignup(true);
       setScreen("onboarding");
       return;
     }
 
-    // Signed in but no flags → check Supabase for existing profile
     (async () => {
       try {
         const profile = await loadUserData(user.id);
@@ -159,21 +142,50 @@ export default function App() {
     setTasteProfile(profile);
     setInitialTab("heat");
     setScreen("discover");
+    navigate("/heat");
   };
 
-  // Show dark background while loading (matches app bg — no flash)
   if (screen === "loading") {
     return <div style={{ background: "#0a0a0f", height: "100vh" }} />;
   }
 
+  if (screen === "onboarding") {
+    return <Onboarding onComplete={handleOnboardingComplete} isGoogleSignup={googleSignup} />;
+  }
+
+  // Determine initial tab from URL path
+  const pathTab = PATH_TO_TAB[location.pathname];
+  const effectiveInitialTab = pathTab || initialTab || "home";
+
   return (
-    <>
-      {screen === "onboarding" && (
-        <Onboarding onComplete={handleOnboardingComplete} isGoogleSignup={googleSignup} />
-      )}
-      {screen === "discover" && (
-        <Discover tasteProfile={tasteProfile} initialTab={initialTab} />
-      )}
-    </>
+    <Discover
+      tasteProfile={tasteProfile}
+      initialTab={effectiveInitialTab}
+      navigate={navigate}
+      location={location}
+    />
+  );
+}
+
+// SSO callback component (needs to be outside router for redirect handling)
+function SSOCallback() {
+  return (
+    <div style={{ background: "#0a0a0f", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <AuthenticateWithRedirectCallback
+        signInForceRedirectUrl={window.location.origin + "?returning=1"}
+        signUpForceRedirectUrl={window.location.origin + "?google_signup=1"}
+      />
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/sso-callback" element={<SSOCallback />} />
+        <Route path="*" element={<AppInner />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
