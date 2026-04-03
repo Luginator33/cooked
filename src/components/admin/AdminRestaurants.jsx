@@ -189,7 +189,9 @@ function findDuplicate(allRestaurants, name, lat, lng) {
   return null;
 }
 
-export default function AdminRestaurants({ allRestaurants, userId, onRestaurantsChanged }) {
+export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, userId, onRestaurantsChanged }) {
+  const [removedIds, setRemovedIds] = useState(new Set());
+  const allRestaurants = useMemo(() => allRestaurantsRaw.filter(r => !removedIds.has(r.id) && !removedIds.has(String(r.id))), [allRestaurantsRaw, removedIds]);
   const [section, setSection] = useState("search");
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -356,6 +358,8 @@ export default function AdminRestaurants({ allRestaurants, userId, onRestaurants
       }
       await logAdminAction("restaurant_remove", userId, "restaurant", String(r.id), { name: r.name });
       setConfirm(null);
+      setRemovedIds(prev => new Set([...prev, r.id, String(r.id)]));
+      setExpandedId(null);
       showToast(`Removed ${r.name}`);
       onRestaurantsChanged?.();
     } catch (err) {
