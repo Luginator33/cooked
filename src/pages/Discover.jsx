@@ -793,14 +793,10 @@ function LazyPhotoRow({ item, pickerIndex, onLoad, onSelect, onRefresh, C }) {
   );
 }
 
-// URL path ↔ tab mapping
-const PATH_TO_TAB = { "/": "home", "/home": "home", "/heat": "heat", "/discover": "discover", "/map": "map", "/profile": "profile" };
-const TAB_TO_PATH = { home: "/", heat: "/heat", discover: "/discover", map: "/map", profile: "/profile" };
-
-export default function Discover({ tasteProfile, initialTab, navigate, location }) {
+export default function Discover({ tasteProfile, initialTab }) {
   const { user } = useUser();
   const skipNextTabPersistRef = useRef(false);
-  const [tab, setTabRaw] = useState(() => {
+  const [tab, setTab] = useState(() => {
     try {
       const last = localStorage.getItem("cooked_last_tab");
       if (last && ["home", "heat", "discover", "map", "profile"].includes(last)) return last;
@@ -815,25 +811,22 @@ export default function Discover({ tasteProfile, initialTab, navigate, location 
     }
   });
 
-  // Tab wrapper that syncs to URL via React Router
-  const setTab = useCallback((newTab) => {
-    setTabRaw(newTab);
-    if (navigate && TAB_TO_PATH[newTab]) {
-      const targetPath = TAB_TO_PATH[newTab];
-      if (location?.pathname !== targetPath) {
-        navigate(targetPath);
-      }
-    }
-  }, [navigate, location?.pathname]);
-
-  // Sync URL → tab when browser back/forward is used
+  // PWA tab navigation history — back-swipe goes to previous tab, not Google sign-in
+  const prevTabRef = useRef(null);
   useEffect(() => {
-    if (!location) return;
-    const pathTab = PATH_TO_TAB[location.pathname];
-    if (pathTab && pathTab !== tab) {
-      setTabRaw(pathTab); // Don't call setTab to avoid circular navigate
+    if (prevTabRef.current === null) { prevTabRef.current = tab; return; } // skip initial
+    if (prevTabRef.current !== tab) {
+      window.history.pushState({ tab }, "");
+      prevTabRef.current = tab;
     }
-  }, [location?.pathname]);
+  }, [tab]);
+  useEffect(() => {
+    const handlePop = (e) => {
+      if (e.state?.tab) setTab(e.state.tab);
+    };
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, []);
 
   const [showHeatTip, setShowHeatTip] = useState(false);
   const [heatTipFading, setHeatTipFading] = useState(false);
@@ -848,26 +841,6 @@ export default function Discover({ tasteProfile, initialTab, navigate, location 
   const [homeCity, setHomeCity] = useState(() => {
     try { return localStorage.getItem("cooked_default_city") || "Los Angeles"; } catch { return "Los Angeles"; }
   });
-  // Handle deep links: /r/:id or /u/:id on initial load
-  const deepLinkHandledRef = useRef(false);
-  useEffect(() => {
-    if (!location?.pathname || deepLinkHandledRef.current) return;
-    try {
-      const path = location.pathname;
-      const rMatch = path.match(/^\/r\/(\d+)$/);
-      const uMatch = path.match(/^\/u\/(.+)$/);
-      if (rMatch && allRestaurants.length > 0) {
-        const id = Number(rMatch[1]);
-        const r = allRestaurants.find(ar => ar.id === id || Number(ar.id) === id);
-        if (r) { setDetailRestaurantRaw(r); deepLinkHandledRef.current = true; }
-      }
-      if (uMatch) {
-        setViewingUserIdRaw(uMatch[1]);
-        deepLinkHandledRef.current = true;
-      }
-    } catch (e) { console.error("Deep link error:", e); }
-  }, [location?.pathname, allRestaurants.length]);
-
   const [followedCities, setFollowedCities] = useState([]);
   const [trendingInCities, setTrendingInCities] = useState([]);
   const [youdLoveThis, setYoudLoveThis] = useState([]);
@@ -915,16 +888,7 @@ export default function Discover({ tasteProfile, initialTab, navigate, location 
   const filteredRef = useRef([]);
   const [mapsReady, setMapsReady] = useState(false);
   const [selectedRest, setSelectedRest] = useState(null);
-  const [viewingUserId, setViewingUserIdRaw] = useState(null);
-  const setViewingUserId = useCallback((id) => {
-    setViewingUserIdRaw(id);
-    try {
-      if (navigate) {
-        if (id) navigate(`/u/${id}`, { replace: false });
-        else if (!id) navigate(-1);
-      }
-    } catch (e) { /* navigation may fail during mount */ }
-  }, [navigate]);
+  const [viewingUserId, setViewingUserId] = useState(null);
   /** Friends (following) who loved this spot — from Neo4j when detail opens. */
   const [friendsBeenHere, setFriendsBeenHere] = useState({ loading: false, list: [] });
   const [friendsBeenHereSheetOpen, setFriendsBeenHereSheetOpen] = useState(false);
@@ -1064,17 +1028,7 @@ export default function Discover({ tasteProfile, initialTab, navigate, location 
     }
   }, [usingSupabasePhotoCache, photoCacheVersion]);
 
-  const [detailRestaurant, setDetailRestaurantRaw] = useState(null);
-  // Wrapper: navigate to /r/:id when opening a restaurant, navigate back when closing
-  const setDetailRestaurant = useCallback((r) => {
-    setDetailRestaurantRaw(r);
-    try {
-      if (navigate) {
-        if (r && r.id) navigate(`/r/${r.id}`, { replace: false });
-        else if (!r) navigate(-1);
-      }
-    } catch (e) { /* navigation may fail during mount */ }
-  }, [navigate]);
+  const [detailRestaurant, setDetailRestaurant] = useState(null);
   const [placeDetails, setPlaceDetails] = useState({});
   const [userRatings, setUserRatings] = useState(() => {
     try { return JSON.parse(safeLocalStorageGetItem("cooked_ratings") || "{}"); } catch { return {}; }
@@ -2183,10 +2137,19 @@ export default function Discover({ tasteProfile, initialTab, navigate, location 
     setShowTagPicker(false);
   }, [detailRestaurant]);
 
-  // Log restaurant detail view (router handles history/back navigation)
+  // Log restaurant detail view + push history state for back navigation
   useEffect(() => {
     if (!detailRestaurant) return;
     if (user?.id) logInteraction(user.id, detailRestaurant.id, 'view');
+    window.history.pushState({ restaurantDetail: true }, "");
+    const handlePop = () => {
+      setDetailRestaurant(null);
+      setSixDegreesResult(null);
+      setSixDegreesTarget(null);
+      setSixDegreesLoading(false);
+    };
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
   }, [detailRestaurant?.id]);
 
   useEffect(() => {
@@ -5046,7 +5009,7 @@ Return a JSON object with exactly these fields:
               <div className="det-hero-grad" />
               {/* top bar */}
               <div className="det-hero-top">
-                <button type="button" className="det-back-btn" onClick={() => { setDetailRestaurantRaw(null); setSixDegreesResult(null); setSixDegreesTarget(null); setSixDegreesLoading(false); if (navigate) navigate(-1); }}>‹</button>
+                <button type="button" className="det-back-btn" onClick={() => { setDetailRestaurant(null); setSixDegreesResult(null); setSixDegreesTarget(null); setSixDegreesLoading(false); }}>‹</button>
                 <div className="det-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span></div>
               </div>
               {/* bottom overlay */}
