@@ -3748,9 +3748,15 @@ Return a JSON object with exactly these fields:
                 {featuredRestaurant._recommenders?.length > 0 && (
                   <div className="meta" style={{ opacity: 0.6, fontSize: 11, marginTop: 2 }}>{featuredRestaurant._recommenders[0]} loved this too</div>
                 )}
-                {!featuredRestaurant._recommenders?.length && chatTasteProfile?.topCuisines?.[0] && (
-                  <div className="meta" style={{ opacity: 0.6, fontSize: 11, marginTop: 2 }}>Because you love {chatTasteProfile.topCuisines[0].cuisine || chatTasteProfile.topCuisines[0].name}</div>
-                )}
+                {!featuredRestaurant._recommenders?.length && (() => {
+                  // Match explanation to the actual restaurant's cuisine
+                  const rc = (featuredRestaurant.cuisine || "").toLowerCase();
+                  const match = (chatTasteProfile?.topCuisines || []).find(c => rc.includes((c.cuisine || c.name || "").toLowerCase()));
+                  if (match) return <div className="meta" style={{ opacity: 0.6, fontSize: 11, marginTop: 2 }}>Because you love {match.cuisine || match.name}</div>;
+                  // Fallback: mention neighborhood or a tag
+                  if (featuredRestaurant.neighborhood) return <div className="meta" style={{ opacity: 0.6, fontSize: 11, marginTop: 2 }}>Popular in {featuredRestaurant.neighborhood}</div>;
+                  return null;
+                })()}
               </div>
             </div>
           ) : null}
