@@ -5,7 +5,7 @@ import {
   getFullCityRegions, getAllApprovedCities,
   addCustomApprovedCity, removeCustomApprovedCity, getCustomApprovedCities,
 } from "../../data/restaurants";
-import { deleteCommunityRestaurant, updateCommunityRestaurant } from "../../lib/supabase";
+import { upsertRestaurant, softDeleteRestaurant } from "../../lib/supabase";
 
 const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_PLACES_KEY;
 
@@ -307,7 +307,7 @@ function UnapprovedPanel({ cities, allRestaurants, noCityRestaurants, flash, onA
 
     let deleted = 0;
     for (const r of communityOnes) {
-      const { error } = await deleteCommunityRestaurant(r.id);
+      const { error } = await softDeleteRestaurant(r.id);
       if (!error) deleted++;
     }
 
@@ -478,7 +478,7 @@ function UnapprovedPanel({ cities, allRestaurants, noCityRestaurants, flash, onA
                       const communityOnes = cityRestaurants.filter(r => r.id >= 100000);
                       let updated = 0;
                       for (const r of communityOnes) {
-                        const { error } = await updateCommunityRestaurant(r.id, { city: assignTarget });
+                        const { error } = await upsertRestaurant({ id: r.id, city: assignTarget });
                         if (!error) updated++;
                       }
                       setGrouping(false);
@@ -554,7 +554,7 @@ function NoCityPanel({ restaurants, flash, onRestaurantsChanged }) {
 
         // Only update community restaurants (id >= 100000)
         if (r.id >= 100000) {
-          await updateCommunityRestaurant(r.id, updates);
+          await upsertRestaurant({ id: r.id, ...updates });
         }
 
         fixResults.push({ id: r.id, name: r.name, city: normalizedCity, neighborhood: data.neighborhood, status: "fixed" });

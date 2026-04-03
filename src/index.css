@@ -1750,7 +1750,7 @@ a.det-info-val:hover { color: #ff9632; }
 .d-stats-gear {
   width: 40px; height: 40px; flex-shrink: 0; margin-left: 8px;
   display: flex; align-items: center; justify-content: center;
-  color: rgba(245,240,235,0.3); font-size: 24px;
+  color: rgba(245,240,235,0.25);
   cursor: pointer;
   transition: color 0.2s;
 }

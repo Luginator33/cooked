@@ -408,22 +408,17 @@ export async function getHiddenGems(limit = 10) {
   }));
 }
 
-// City Readiness — how explored each followed city is
+// City Readiness — how explored each followed city is (optimized)
 export async function getCityReadiness(clerkUserId) {
   if (!clerkUserId) return [];
   const records = await runQuery(
     `MATCH (me:User {id: $myId})-[:FOLLOWS_CITY]->(c:City)<-[:LOCATED_IN]-(r:Restaurant)
-     WITH me, c, collect(DISTINCT r) AS allRests
-     UNWIND allRests AS r
-     OPTIONAL MATCH (me)-[l:LOVED]->(r)
-     WITH c, count(DISTINCT r) AS totalInCity, count(DISTINCT l) AS lovedInCity,
-          collect(DISTINCT r.cuisine) AS allCuisines,
-          collect(DISTINCT CASE WHEN l IS NOT NULL THEN r.cuisine ELSE NULL END) AS triedCuisinesRaw
-     WITH c, totalInCity, lovedInCity,
-          CASE WHEN totalInCity > 0 THEN toFloat(lovedInCity) / totalInCity ELSE 0 END AS pctExplored,
-          allCuisines, [x IN triedCuisinesRaw WHERE x IS NOT NULL] AS triedCuisines
-     RETURN c.name AS city, totalInCity, lovedInCity, pctExplored,
-            [cuisine IN allCuisines WHERE NOT cuisine IN triedCuisines] AS untriedCuisines
+     WITH me, c, count(DISTINCT r) AS totalInCity
+     OPTIONAL MATCH (me)-[:LOVED]->(loved:Restaurant)-[:LOCATED_IN]->(c)
+     WITH c, totalInCity, count(DISTINCT loved) AS lovedInCity
+     WHERE totalInCity > 0
+     RETURN c.name AS city, totalInCity, lovedInCity,
+            toFloat(lovedInCity) / totalInCity AS pctExplored
      ORDER BY pctExplored DESC`,
     { myId: clerkUserId }
   );
@@ -432,7 +427,7 @@ export async function getCityReadiness(clerkUserId) {
     totalInCity: rec.get('totalInCity').toNumber(),
     lovedInCity: rec.get('lovedInCity').toNumber(),
     pctExplored: rec.get('pctExplored'),
-    untriedCuisines: (rec.get('untriedCuisines') || []).filter(Boolean),
+    untriedCuisines: [],
   }));
 }
 
