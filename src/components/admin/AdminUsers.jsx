@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { C, cardStyle, inputStyle, btnPrimary, btnDanger, btnSmall, btnOutline, sectionHeader, badge, SearchBar, ConfirmDialog, Toast } from "./adminHelpers";
 import { getAllUsers, setUserAdmin, deleteUserData, blockUser, unblockUser, getBlockedUsers, logAdminAction, saveUserData } from "../../lib/supabase";
 import { deleteUserFromGraph } from "../../lib/neo4j";
+import { ProfilePhoto } from "../AvatarIcon";
 
 export default function AdminUsers({ userId }) {
   const [search, setSearch] = useState("");
@@ -116,13 +117,7 @@ export default function AdminUsers({ userId }) {
           {filteredUsers.map(u => (
             <div key={u.clerk_user_id} style={cardStyle}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                <div style={{ width: 42, height: 42, borderRadius: "50%", overflow: "hidden", flexShrink: 0, background: C.bg, border: `1.5px solid ${C.border}` }}>
-                  {u.profile_photo ? <img src={u.profile_photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (
-                    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: 16, fontFamily: "Georgia, serif", fontStyle: "italic" }}>
-                      {(u.profile_name || "U")[0].toUpperCase()}
-                    </div>
-                  )}
-                </div>
+                <ProfilePhoto photo={u.profile_photo} size={42} userId={u.clerk_user_id} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 15, color: C.text, fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: "bold" }}>{u.profile_name || "User"}</span>

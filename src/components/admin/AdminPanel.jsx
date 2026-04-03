@@ -10,6 +10,7 @@ import AdminSystem from "./AdminSystem";
 import AdminImports from "./AdminImports";
 import AdminCities from "./AdminCities";
 import AdminBugReports from "./AdminBugReports";
+import BugReportButton from "../BugReportButton";
 const TABS = [
   { key: "bugs", label: "🆘 Bugs" },
   { key: "restaurants", label: "Restaurants" },
@@ -107,6 +108,7 @@ export default function AdminPanel({ onClose, allRestaurants, userId, onRestaura
           )}
         </div>
       </div>
+      <BugReportButton />
     </div>,
     document.body
   );
