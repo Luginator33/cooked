@@ -3572,7 +3572,7 @@ Return a JSON object with exactly these fields:
       {/* Header */}
       <div ref={headerRef} className="d-home-header" style={{ display: (tab === "heat" || tab === "profile") ? "none" : "flex" }}>
         <div className="header-left">
-          <div className="d-logo" onClick={() => setTab("home")} style={{ cursor:"pointer" }}>cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span><span style={{ fontFamily:"'Dancing Script', cursive", fontSize:"0.55em", color:"#f0ebe2", marginLeft:2, fontWeight:400, fontStyle:"normal", position:"relative", top:"0.15em", WebkitTextFillColor:"#f0ebe2", background:"none", WebkitBackgroundClip:"unset", backgroundClip:"unset" }}>beta</span></div>
+          <div className="d-logo" onClick={() => setTab("home")} style={{ cursor:"pointer" }}>cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span><span style={{ fontFamily:"'Bettina Signature', cursive", fontSize:"0.5em", color:"#f0ebe2", fontWeight:400, fontStyle:"normal", position:"absolute", bottom:"-0.55em", right:"-0.7em", WebkitTextFillColor:"#f0ebe2", background:"none", WebkitBackgroundClip:"unset", backgroundClip:"unset" }}>beta</span></div>
         </div>
         {(tab === "home" || tab === "discover" || tab === "map") && (
           <div style={{ position:"relative" }}>
@@ -4478,7 +4478,7 @@ Return a JSON object with exactly these fields:
             {/* Header */}
             <div className="d-heat-header">
               <div className="header-left">
-                <div className="d-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span><span style={{ fontFamily:"'Dancing Script', cursive", fontSize:"0.55em", color:"#f0ebe2", marginLeft:2, fontWeight:400, fontStyle:"normal", position:"relative", top:"0.15em", WebkitTextFillColor:"#f0ebe2", background:"none", WebkitBackgroundClip:"unset", backgroundClip:"unset" }}>beta</span></div>
+                <div className="d-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span><span style={{ fontFamily:"'Bettina Signature', cursive", fontSize:"0.5em", color:"#f0ebe2", fontWeight:400, fontStyle:"normal", position:"absolute", bottom:"-0.55em", right:"-0.7em", WebkitTextFillColor:"#f0ebe2", background:"none", WebkitBackgroundClip:"unset", backgroundClip:"unset" }}>beta</span></div>
               </div>
               <div className="header-right">
                 <div className="heat-label">
@@ -5011,7 +5011,7 @@ Return a JSON object with exactly these fields:
               {/* top bar */}
               <div className="det-hero-top">
                 <button type="button" className="det-back-btn" onClick={() => { setDetailRestaurant(null); setSixDegreesResult(null); setSixDegreesTarget(null); setSixDegreesLoading(false); }}>‹</button>
-                <div className="det-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span><span style={{ fontFamily:"'Dancing Script', cursive", fontSize:"0.55em", color:"#f0ebe2", marginLeft:2, fontWeight:400, fontStyle:"normal", position:"relative", top:"0.15em", WebkitTextFillColor:"#f0ebe2", background:"none", WebkitBackgroundClip:"unset", backgroundClip:"unset" }}>beta</span></div>
+                <div className="det-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span><span style={{ fontFamily:"'Bettina Signature', cursive", fontSize:"0.5em", color:"#f0ebe2", fontWeight:400, fontStyle:"normal", position:"absolute", bottom:"-0.55em", right:"-0.7em", WebkitTextFillColor:"#f0ebe2", background:"none", WebkitBackgroundClip:"unset", backgroundClip:"unset" }}>beta</span></div>
               </div>
               {/* bottom overlay */}
               <div className="det-hero-bottom">

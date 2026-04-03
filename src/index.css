@@ -1,4 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Inter:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&family=Cormorant+Garamond:ital,wght@0,700;1,700&family=Dancing+Script:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Inter:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&family=Cormorant+Garamond:ital,wght@0,700;1,700&display=swap');
+
+@font-face {
+  font-family: 'Bettina Signature';
+  src: url('/fonts/BettinaSignature.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   font-family: 'Inter', -apple-system, system-ui, sans-serif;
@@ -392,7 +400,7 @@ button:focus-visible {
 /* Onboarding logo + tagline + dots + buttons */
 .logo-big {
   font-family: 'Playfair Display', Georgia, serif; font-style: italic;
-  font-weight: 700; font-size: 60px; text-align: center; margin-bottom: 6px;
+  font-weight: 700; font-size: 60px; text-align: center; margin-bottom: 6px; position: relative; display: inline-block;
   background: linear-gradient(135deg, #4a1a0a 0%, #9a3818 12%, #e07838 30%, #ffaa44 48%, #ff8844 58%, #d4504a 72%, #b83a5c 85%, #3a0e10 100%);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   background-clip: text; position: relative; z-index: 2;
@@ -893,7 +901,7 @@ button:focus-visible {
 .d-greeting { font-size: 13px; color: rgba(245,240,235,0.3); font-weight: 300; margin-bottom: 2px; }
 .d-logo {
   font-family: 'Playfair Display', Georgia, serif; font-style: italic;
-  font-weight: 700; font-size: 28px;
+  font-weight: 700; font-size: 28px; position: relative;
   background: linear-gradient(135deg, #3a1c0e 0%, #7a2e1a 15%, #d4712a 35%, #ff9632 50%, #e87040 65%, #8b3018 80%, #2a0e06 100%);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
   filter: drop-shadow(0 0 12px rgba(255,140,50,0.25)) drop-shadow(0 0 25px rgba(224,100,40,0.1));
@@ -1269,7 +1277,7 @@ button:focus-visible {
 }
 .det-logo {
   font-family: 'Playfair Display', Georgia, serif; font-style: italic;
-  font-weight: 700; font-size: 20px;
+  font-weight: 700; font-size: 20px; position: relative;
   background: linear-gradient(135deg, #3a1c0e 0%, #7a2e1a 15%, #d4712a 35%, #ff9632 50%, #e87040 65%, #8b3018 80%, #2a0e06 100%);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
   filter: drop-shadow(0 0 10px rgba(255,140,50,0.3)) drop-shadow(0 0 20px rgba(224,100,40,0.12));
