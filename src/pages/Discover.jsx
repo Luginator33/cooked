@@ -2351,9 +2351,13 @@ export default function Discover({ tasteProfile, initialTab }) {
   const [heatDeckIndex, setHeatDeckIndex] = useState(0);
   const heatDeckCityRef = useRef(null);
 
-  // Rebuild deck when city changes or on first load
+  // Rebuild deck when city changes or when entering heat tab with no deck
+  const heatDeckBuiltRef = useRef(false);
   useEffect(() => {
+    // Skip if deck already built for this city
     if (heatDeckCityRef.current === heatCity && heatDeckRef.current.length > 0) return;
+    // Need restaurants loaded
+    if (heatCityRestaurants.length === 0) return;
     heatDeckCityRef.current = heatCity;
 
     const active = heatCityRestaurants.filter(r => !isLovedCheck(r.id) && !heatResults.noped.includes(r.id) && !heatResults.skipped.includes(r.id));
@@ -2405,7 +2409,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     }
     heatDeckRef.current = [...final, ...deferred];
     setHeatDeckIndex(0);
-  }, [heatCity, allRestaurants.length]);
+  }, [heatCity, heatCityRestaurants.length > 0]);
 
   // Current visible cards from the stable deck
   const heatDeck = heatDeckRef.current.slice(heatDeckIndex);

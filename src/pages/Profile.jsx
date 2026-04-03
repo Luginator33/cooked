@@ -1092,6 +1092,14 @@ export default function Profile({
             <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderRadius: "20px 20px 0 0", padding: "24px 18px 44px", maxHeight: "85vh", overflowY: "auto" }}>
               <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 20, color: C.text, marginBottom: 4 }}>Settings</div>
 
+              {/* ADMIN — at the top for quick access */}
+              {isAdmin && (
+                <button type="button" onClick={() => { setSettingsOpen(false); setSettingsSection(null); setAdminOpen(true); }}
+                  style={{ width: "100%", padding: "14px 16px", background: C.terracotta, border: "none", borderRadius: 12, color: "#fff", fontSize: 14, cursor: "pointer", fontFamily: "'Inter', -apple-system, sans-serif", textAlign: "center", marginBottom: 12, marginTop: 8, fontWeight: 600 }}>
+                  Open Admin Panel
+                </button>
+              )}
+
               {/* ACCOUNT */}
               <SectionLabel>Account</SectionLabel>
               <Row label="Edit Profile" sub="Name, username, photo" onClick={() => { setSettingsOpen(false); setSettingsSection(null); setEditing(true); setEditName(name); setEditUsername(username); }} />
