@@ -255,7 +255,7 @@ function CardFanSlide({ onNext, onSignIn }) {
         ))}
       </div>
 
-      <div className="logo-big" style={{ opacity: 0, animation: "fadeSlideUp 0.6s ease 0.3s forwards" }}>cooked<span style={{ fontFamily:"'Dancing Script', cursive", fontSize:"0.35em", color:"rgba(245,240,235,0.5)", marginLeft:6, fontWeight:400 }}>beta</span></div>
+      <div className="logo-big" style={{ opacity: 0, animation: "fadeSlideUp 0.6s ease 0.3s forwards" }}>cooked<span style={{ fontFamily:"'Dancing Script', cursive", fontSize:"0.4em", color:"#f0ebe2", marginLeft:4, fontWeight:400, position:"relative", top:"0.15em" }}>beta</span></div>
       <div style={{ textAlign: "center", position: "relative", zIndex: 2, marginTop: 10, opacity: 0, animation: "fadeSlideUp 0.6s ease 0.5s forwards" }}>
         <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: 700, fontSize: 22, color: "#f5f0eb", marginBottom: 10 }}>Your personal concierge</div>
         <div style={{ fontSize: 14, color: "rgba(240,235,226,0.5)", fontFamily: "'Inter', -apple-system, sans-serif", letterSpacing: "0.02em" }}>
@@ -1749,7 +1749,7 @@ export default function Onboarding({ onComplete, isGoogleSignup = false }) {
         <span style={{ fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontWeight: "bold", fontSize: 32 }}>
           <span style={{ color: "#f5f0eb" }}>cook</span>
           <span style={{ color: "#ff9632" }}>ed</span>
-          <span style={{ fontFamily:"'Dancing Script', cursive", fontSize:"0.4em", color:"rgba(245,240,235,0.5)", marginLeft:4, fontWeight:400, fontStyle:"normal" }}>beta</span>
+          <span style={{ fontFamily:"'Dancing Script', cursive", fontSize:"0.45em", color:"#f0ebe2", marginLeft:2, fontWeight:400, fontStyle:"normal", position:"relative", top:"0.15em" }}>beta</span>
         </span>
         <p style={{ marginTop: 16, color: "rgba(245,240,235,0.4)", fontSize: 14 }}>Setting up your experience...</p>
       </div>
