@@ -117,6 +117,11 @@ const COOKED_PHOTOS_LRU_KEY = "cooked_photos_lru";
 const PHOTO_CACHE_MAX_BYTES = 3 * 1024 * 1024;
 const PHOTO_CACHE_KEEP_COUNT = 50;
 
+// Session-level guard: tracks restaurants we've already attempted to fetch photos for.
+// Prevents repeated Google API calls within a single session.
+const _photoFetchAttempted = new Set();
+const _placeDetailsFetchAttempted = new Set();
+
 function isQuotaExceededError(e) {
   return (
     (e instanceof DOMException && (e.name === "QuotaExceededError" || e.code === 22)) ||
@@ -670,11 +675,12 @@ function RestCard({ r, loved, watched, onLove, onWatch, onShare, onOpenDetail, o
     try {
       const cached = getCachedPhotoForId?.(r.id);
       if (cached) {
-        if (!usingSupabasePhotoCache) touchPhotoCacheAccess(r.id);
         setImgSrc(cached);
         return;
       }
     } catch {}
+    // Session guard — don't re-fetch from Google if already attempted
+    if (_photoFetchAttempted.has(String(r.id))) return;
     const el = cardRef.current;
     if (!el) return;
     const observer = new IntersectionObserver(([entry]) => {
@@ -684,7 +690,7 @@ function RestCard({ r, loved, watched, onLove, onWatch, onShare, onOpenDetail, o
     }, { rootMargin: '400px' });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [r.id, r.img, photoCacheVersion, getCachedPhotoForId, usingSupabasePhotoCache, onPhotoFetched]);
+  }, [r.id, r.img, photoCacheVersion, getCachedPhotoForId, onPhotoFetched]);
 
   const score = flameScore != null ? flameScore : Math.min(5, r.googleRating || (r.rating ? r.rating / 2 : 3));
   const litCount = Math.round(score);
@@ -1966,6 +1972,11 @@ export default function Discover({ tasteProfile, initialTab }) {
   const fetchAndCachePhoto = async (restaurant, setImgSrc) => {
     const googleKey = import.meta.env.VITE_GOOGLE_PLACES_KEY;
     if (!googleKey) return;
+
+    // Session guard — never call Google twice for the same restaurant
+    const rid = String(restaurant.id);
+    if (_photoFetchAttempted.has(rid)) return;
+
     // Check vault + preview first
     try {
       const cached = getAnyCachedPhotoForId(restaurant.id);
@@ -1975,6 +1986,14 @@ export default function Discover({ tasteProfile, initialTab }) {
         return;
       }
     } catch {}
+
+    // Restaurant already has a real (non-picsum) photo — skip Google
+    if (restaurant.img && !String(restaurant.img).includes("picsum")) {
+      setImgSrc(restaurant.img);
+      return;
+    }
+
+    _photoFetchAttempted.add(rid);
 
     const normName = s => s.toLowerCase().replace(/[^a-z0-9]/g,'');
     const rn = normName(restaurant.name);
@@ -2041,29 +2060,14 @@ export default function Discover({ tasteProfile, initialTab }) {
       setImgSrc(photoUri);
       setAllRestaurants(prev => prev.map(r => r.id === restaurant.id ? { ...r, img: photoUri, img2: photoUri } : r));
 
-      // Save to global shared library (fire-and-forget).
+      // Save photo URL permanently to the restaurants table — one-time fetch, never again.
+      upsertRestaurant({ id: restaurant.id, img: photoUri, img2: photoUri }).catch(e => console.error("save photo to restaurant:", e));
+
+      // Also save to shared photo library (legacy, keeps working for now).
       void saveSharedPhoto(String(restaurant.id), photoUri);
 
-      // Persist to the primary photo cache.
-      if (usingSupabasePhotoCache) {
-        const updatedPhotos = { ...(photoCacheRef.current || {}), [restaurant.id]: photoUri };
-        photoCacheRef.current = updatedPhotos;
-      } else {
-        // Save to preview cache (not vault — stays unresolved for user to confirm)
-        try {
-          const preview = JSON.parse(safeLocalStorageGetItem("cooked_photos_preview") || "{}");
-          preview[restaurant.id] = photoUri;
-          safeSetItem("cooked_photos_preview", JSON.stringify(preview));
-          touchPhotoCacheAccess(restaurant.id);
-
-          // Fire-and-forget: also push the updated photo cache to Supabase (when signed in).
-          if (user?.id) {
-            let vault = {};
-            try { vault = JSON.parse(safeLocalStorageGetItem("cooked_photos") || "{}"); } catch {}
-            const updatedPhotos = { ...(vault || {}), ...(preview || {}), [restaurant.id]: photoUri };
-          }
-        } catch {}
-      }
+      // Update in-memory cache so other components see it immediately.
+      photoCacheRef.current = { ...(photoCacheRef.current || {}), [restaurant.id]: photoUri };
     }
   };
 
@@ -2073,24 +2077,25 @@ export default function Discover({ tasteProfile, initialTab }) {
     const cardRef = useRef(null);
 
     useEffect(() => {
-      setImgSrc(photoSrc);
-    }, [photoSrc, r.id, r.img, photoCacheVersion]);
+      setImgSrc(getAnyCachedPhotoForId(r.id) || r.img || "");
+    }, [r.id, r.img, photoCacheVersion]);
 
     useEffect(() => {
+      // Already has a real photo — nothing to do
+      if (imgSrc && !imgSrc.includes("picsum")) return;
+      // Check cache
       try {
         const cached = getAnyCachedPhotoForId(r.id);
         if (cached) {
-          if (!usingSupabasePhotoCache) touchPhotoCacheAccess(r.id);
           setImgSrc(cached);
-          r.img = cached;
           return;
         }
-      } catch (e) {}
-
-      if (!imgSrc || imgSrc.includes("picsum")) {
+      } catch {}
+      // Only auto-fetch if not already attempted this session
+      if (!_photoFetchAttempted.has(String(r.id))) {
         fetchAndCachePhoto(r, setImgSrc);
       }
-    }, [r.id, r.img, imgSrc, usingSupabasePhotoCache, photoCacheVersion]);
+    }, [r.id]);
 
     return (
       <div
@@ -2123,6 +2128,24 @@ export default function Discover({ tasteProfile, initialTab }) {
 
   const fetchPlaceDetails = async (restaurant) => {
     if (placeDetails[restaurant.id]) return;
+    const rid = String(restaurant.id);
+    if (_placeDetailsFetchAttempted.has(rid)) return;
+
+    // Check if restaurant already has saved details from a previous fetch
+    const existing = allRestaurants.find(r => r.id === restaurant.id);
+    if (existing?.phone || existing?.website || existing?.hours) {
+      setPlaceDetails(prev => ({ ...prev, [restaurant.id]: {
+        internationalPhoneNumber: existing.phone,
+        websiteUri: existing.website,
+        regularOpeningHours: existing.hours ? JSON.parse(existing.hours) : null,
+        rating: existing.googleRating,
+        userRatingCount: existing.googleReviews,
+        formattedAddress: existing.address,
+      }}));
+      return;
+    }
+
+    _placeDetailsFetchAttempted.add(rid);
     const key = import.meta.env.VITE_GOOGLE_PLACES_KEY;
     try {
       const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
@@ -2132,7 +2155,19 @@ export default function Discover({ tasteProfile, initialTab }) {
       });
       const data = await res.json();
       const place = data.places?.[0];
-      if (place) setPlaceDetails(prev => ({ ...prev, [restaurant.id]: place }));
+      if (place) {
+        setPlaceDetails(prev => ({ ...prev, [restaurant.id]: place }));
+        // Save place details permanently to restaurants table so we never call Google again
+        const updates = { id: restaurant.id };
+        if (place.internationalPhoneNumber) updates.phone = place.internationalPhoneNumber;
+        if (place.websiteUri) updates.website = place.websiteUri;
+        if (place.formattedAddress) updates.address = place.formattedAddress;
+        if (place.regularOpeningHours) updates.hours = JSON.stringify(place.regularOpeningHours);
+        if (place.rating) updates.google_rating = place.rating;
+        if (place.userRatingCount) updates.google_reviews = place.userRatingCount;
+        if (place.id) updates.place_id = place.id;
+        upsertRestaurant(updates).catch(e => console.error("save place details:", e));
+      }
     } catch (e) {}
   };
 
@@ -5010,15 +5045,13 @@ Return a JSON object with exactly these fields:
       {detailRestaurant && (() => {
         const detail = detailRestaurant;
         const place = placeDetails[detail.id];
-        // Priority: 1) vault (user-confirmed), 2) preview (auto-fetched, unresolved), 3) non-picsum img, 4) Places API, 5) picsum
+        // Priority: 1) vault (user-confirmed), 2) preview (auto-fetched, unresolved), 3) non-picsum img, 4) picsum fallback
         const vaultPhoto = getVaultPhotoForId(detail.id);
         const previewPhoto = getPreviewPhotoForId(detail.id);
         const liveImg = (allRestaurants.find(r => r.id === detail.id) || detail).img;
-        const isPicsum = !vaultPhoto && !previewPhoto && liveImg && String(liveImg).includes("picsum.photos");
         const detailPhoto = vaultPhoto
           || previewPhoto
           || (liveImg && !String(liveImg).includes("picsum.photos") ? liveImg : null)
-          || (isPicsum && place?.photos?.[0]?.name ? `https://places.googleapis.com/v1/${place.photos[0].name}/media?maxWidthPx=800&skipHttpRedirect=true&key=${import.meta.env.VITE_GOOGLE_PLACES_KEY}` : null)
           || liveImg || detail.img2;
         const detailTags = (allRestaurants.find(r => r.id === detail.id) || detail).tags || [];
         const addOrRemoveTag = (tag) => {
