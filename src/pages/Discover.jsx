@@ -849,19 +849,23 @@ export default function Discover({ tasteProfile, initialTab, navigate, location 
     try { return localStorage.getItem("cooked_default_city") || "Los Angeles"; } catch { return "Los Angeles"; }
   });
   // Handle deep links: /r/:id or /u/:id on initial load
+  const deepLinkHandledRef = useRef(false);
   useEffect(() => {
-    if (!location) return;
-    const path = location.pathname;
-    const rMatch = path.match(/^\/r\/(\d+)$/);
-    const uMatch = path.match(/^\/u\/(.+)$/);
-    if (rMatch && allRestaurants.length > 0 && !detailRestaurant) {
-      const id = Number(rMatch[1]);
-      const r = allRestaurants.find(ar => ar.id === id || Number(ar.id) === id);
-      if (r) setDetailRestaurantRaw(r);
-    }
-    if (uMatch && !viewingUserId) {
-      setViewingUserIdRaw(uMatch[1]);
-    }
+    if (!location?.pathname || deepLinkHandledRef.current) return;
+    try {
+      const path = location.pathname;
+      const rMatch = path.match(/^\/r\/(\d+)$/);
+      const uMatch = path.match(/^\/u\/(.+)$/);
+      if (rMatch && allRestaurants.length > 0) {
+        const id = Number(rMatch[1]);
+        const r = allRestaurants.find(ar => ar.id === id || Number(ar.id) === id);
+        if (r) { setDetailRestaurantRaw(r); deepLinkHandledRef.current = true; }
+      }
+      if (uMatch) {
+        setViewingUserIdRaw(uMatch[1]);
+        deepLinkHandledRef.current = true;
+      }
+    } catch (e) { console.error("Deep link error:", e); }
   }, [location?.pathname, allRestaurants.length]);
 
   const [followedCities, setFollowedCities] = useState([]);
@@ -914,11 +918,13 @@ export default function Discover({ tasteProfile, initialTab, navigate, location 
   const [viewingUserId, setViewingUserIdRaw] = useState(null);
   const setViewingUserId = useCallback((id) => {
     setViewingUserIdRaw(id);
-    if (navigate) {
-      if (id) navigate(`/u/${id}`, { replace: false });
-      else if (!id && location?.pathname?.startsWith("/u/")) navigate(-1);
-    }
-  }, [navigate, location?.pathname]);
+    try {
+      if (navigate) {
+        if (id) navigate(`/u/${id}`, { replace: false });
+        else if (!id) navigate(-1);
+      }
+    } catch (e) { /* navigation may fail during mount */ }
+  }, [navigate]);
   /** Friends (following) who loved this spot — from Neo4j when detail opens. */
   const [friendsBeenHere, setFriendsBeenHere] = useState({ loading: false, list: [] });
   const [friendsBeenHereSheetOpen, setFriendsBeenHereSheetOpen] = useState(false);
@@ -1062,11 +1068,13 @@ export default function Discover({ tasteProfile, initialTab, navigate, location 
   // Wrapper: navigate to /r/:id when opening a restaurant, navigate back when closing
   const setDetailRestaurant = useCallback((r) => {
     setDetailRestaurantRaw(r);
-    if (navigate) {
-      if (r && r.id) navigate(`/r/${r.id}`, { replace: false });
-      else if (!r && location?.pathname?.startsWith("/r/")) navigate(-1);
-    }
-  }, [navigate, location?.pathname]);
+    try {
+      if (navigate) {
+        if (r && r.id) navigate(`/r/${r.id}`, { replace: false });
+        else if (!r) navigate(-1);
+      }
+    } catch (e) { /* navigation may fail during mount */ }
+  }, [navigate]);
   const [placeDetails, setPlaceDetails] = useState({});
   const [userRatings, setUserRatings] = useState(() => {
     try { return JSON.parse(safeLocalStorageGetItem("cooked_ratings") || "{}"); } catch { return {}; }
