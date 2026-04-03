@@ -13,6 +13,7 @@
     "@clerk/clerk-react": "^5.61.3",
     "@supabase/supabase-js": "^2.99.2",
     "@use-gesture/react": "^10.3.1",
+    "html2canvas": "^1.4.1",
     "mapbox-gl": "^3.20.0",
     "neo4j-driver": "^6.0.1",
     "react": "^19.2.0",

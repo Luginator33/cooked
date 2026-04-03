@@ -9,7 +9,9 @@ import AdminAnalytics from "./AdminAnalytics";
 import AdminSystem from "./AdminSystem";
 import AdminImports from "./AdminImports";
 import AdminCities from "./AdminCities";
+import AdminBugReports from "./AdminBugReports";
 const TABS = [
+  { key: "bugs", label: "🆘 Bugs" },
   { key: "restaurants", label: "Restaurants" },
   { key: "imports", label: "Imports" },
   { key: "cities", label: "Cities" },
@@ -92,6 +94,7 @@ export default function AdminPanel({ onClose, allRestaurants, userId, onRestaura
             </div>
           ) : (
             <>
+              {tab === "bugs" && <AdminBugReports />}
               {tab === "restaurants" && <AdminRestaurants {...tabProps} />}
               {tab === "imports" && <AdminImports {...tabProps} />}
               {tab === "cities" && <AdminCities {...tabProps} />}

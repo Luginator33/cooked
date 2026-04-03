@@ -5,6 +5,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { SignInButton, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
 import { RESTAURANTS, ALL_TAGS, normalizeCity, CITY_REGIONS as CANONICAL_CITY_REGIONS, sortCityRegions, getFullCityRegions } from "../data/restaurants";
 import { ProfilePhoto, getDefaultAvatar, AvatarIcon } from "../components/AvatarIcon";
+import BugReportButton from "../components/BugReportButton";
 
 /** All cities — base + any admin-approved custom cities */
 const BASE_CITY_REGIONS = getFullCityRegions();
@@ -3571,7 +3572,7 @@ Return a JSON object with exactly these fields:
       {/* Header */}
       <div ref={headerRef} className="d-home-header" style={{ display: (tab === "heat" || tab === "profile") ? "none" : "flex" }}>
         <div className="header-left">
-          <div className="d-logo" onClick={() => setTab("home")} style={{ cursor:"pointer" }}>cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span></div>
+          <div className="d-logo" onClick={() => setTab("home")} style={{ cursor:"pointer" }}>cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span><span style={{ fontFamily:"'Dancing Script', cursive", fontSize:"0.45em", color:"rgba(245,240,235,0.5)", marginLeft:4, fontWeight:400, fontStyle:"normal", letterSpacing:"0.02em", verticalAlign:"baseline" }}>beta</span></div>
         </div>
         {(tab === "home" || tab === "discover" || tab === "map") && (
           <div style={{ position:"relative" }}>
@@ -4477,7 +4478,7 @@ Return a JSON object with exactly these fields:
             {/* Header */}
             <div className="d-heat-header">
               <div className="header-left">
-                <div className="d-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span></div>
+                <div className="d-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span><span style={{ fontFamily:"'Dancing Script', cursive", fontSize:"0.45em", color:"rgba(245,240,235,0.5)", marginLeft:4, fontWeight:400, fontStyle:"normal", letterSpacing:"0.02em", verticalAlign:"baseline" }}>beta</span></div>
               </div>
               <div className="header-right">
                 <div className="heat-label">
@@ -5010,7 +5011,7 @@ Return a JSON object with exactly these fields:
               {/* top bar */}
               <div className="det-hero-top">
                 <button type="button" className="det-back-btn" onClick={() => { setDetailRestaurant(null); setSixDegreesResult(null); setSixDegreesTarget(null); setSixDegreesLoading(false); }}>‹</button>
-                <div className="det-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span></div>
+                <div className="det-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span><span style={{ fontFamily:"'Dancing Script', cursive", fontSize:"0.45em", color:"rgba(245,240,235,0.5)", marginLeft:4, fontWeight:400, fontStyle:"normal", letterSpacing:"0.02em", verticalAlign:"baseline" }}>beta</span></div>
               </div>
               {/* bottom overlay */}
               <div className="det-hero-bottom">
@@ -5655,6 +5656,15 @@ Return a JSON object with exactly these fields:
       )}
     </div>
     </div>
+    {/* Bug Report Button — visible on every page */}
+    <BugReportButton
+      userId={user?.id}
+      userName={user?.fullName}
+      userEmail={user?.primaryEmailAddress?.emailAddress}
+      currentTab={tab}
+      detailRestaurant={detailRestaurant}
+      viewingUserId={viewingUserId}
+    />
     {/* </SignedIn> — temporarily bypassed for design work */}
     </>
   );
