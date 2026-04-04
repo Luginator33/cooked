@@ -2163,10 +2163,12 @@ export default function Discover({ tasteProfile, initialTab }) {
     // Check if restaurant already has saved details from a previous fetch
     const existing = allRestaurants.find(r => r.id === restaurant.id);
     if (existing?.phone || existing?.website || existing?.hours) {
+      let parsedHours = null;
+      try { parsedHours = existing.hours ? JSON.parse(existing.hours) : null; } catch { /* hours stored as plain string, not JSON */ }
       setPlaceDetails(prev => ({ ...prev, [restaurant.id]: {
         internationalPhoneNumber: existing.phone,
         websiteUri: existing.website,
-        regularOpeningHours: existing.hours ? JSON.parse(existing.hours) : null,
+        regularOpeningHours: parsedHours,
         rating: existing.googleRating,
         userRatingCount: existing.googleReviews,
         formattedAddress: existing.address,
