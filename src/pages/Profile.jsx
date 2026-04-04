@@ -86,6 +86,7 @@ export default function Profile({
   onOpenIgImport,
   onRestaurantsChanged,
   getFlameScore,
+  getAnyCachedPhotoForId,
 }) {
   const { user } = useUser();
   const { signOut } = useClerk();
@@ -258,6 +259,11 @@ export default function Profile({
   // Banner rotates through loved photos
   const lovedPhotos = lovedRestaurants.map(r => {
     try {
+      // Try Discover's shared photo cache first
+      if (getAnyCachedPhotoForId) {
+        const cached = getAnyCachedPhotoForId(r.id);
+        if (cached) return cached;
+      }
       if (photoCache && Object.keys(photoCache).length > 0) {
         return (
           photoCache?.[r.id] ||
@@ -269,7 +275,7 @@ export default function Profile({
       const cached = JSON.parse(localStorage.getItem("cooked_photos") || "{}");
       return cached[r.id] || r.img;
     } catch { return r.img; }
-  }).filter(Boolean);
+  }).filter(url => url && !String(url).includes("picsum.photos"));
 
   useEffect(() => {
     if (customBanner || lovedPhotos.length <= 1) return;
@@ -783,11 +789,12 @@ export default function Profile({
         ) : (
           <div className="d-loved-scroll" style={{ padding:"0 20px" }}>
             {activeItems.map(r => {
-              const imgSrc = (photoCache && (photoCache[r.id] || photoCache[String(r.id)])) || r.img;
+              const _rawImgCard = (getAnyCachedPhotoForId && getAnyCachedPhotoForId(r.id)) || (photoCache && (photoCache[r.id] || photoCache[String(r.id)])) || r.img;
+              const imgSrc = _rawImgCard && !String(_rawImgCard).includes("picsum.photos") ? _rawImgCard : null;
               const score = getFlameScore ? getFlameScore(r) : Math.min(5, r.googleRating || (r.rating ? r.rating / 2 : 3));
               return (
                 <div key={r.id} className="d-loved-card" onClick={() => onOpenDetail && onOpenDetail(r)}>
-                  {imgSrc && <img src={imgSrc} alt={r.name} />}
+                  {imgSrc ? <img src={imgSrc} alt={r.name} /> : <div style={{ position: "absolute", inset: 0, background: "linear-gradient(145deg, #2a2030, #1a1520)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>🍽</div>}
                   <div className="shade" />
                   <div className="card-flame glass-pill">🔥 {score.toFixed(1)}</div>
                   <div className="card-info">
@@ -893,11 +900,12 @@ export default function Profile({
           <div className="d-activity-section">
             <div className="p-section-label">Recent Activity</div>
             {activityItems.map(r => {
-              const imgSrc = (photoCache && (photoCache[r.id] || photoCache[String(r.id)])) || r.img;
+              const _rawImg = (getAnyCachedPhotoForId && getAnyCachedPhotoForId(r.id)) || (photoCache && (photoCache[r.id] || photoCache[String(r.id)])) || r.img;
+              const imgSrc = _rawImg && !String(_rawImg).includes("picsum.photos") ? _rawImg : null;
               const score = computeFlame(r);
               return (
                 <div key={r.id} className="d-activity-item" onClick={() => onOpenDetail && onOpenDetail(r)} style={{ cursor:"pointer" }}>
-                  {imgSrc && <img className="d-activity-img" src={imgSrc} alt={r.name} />}
+                  {imgSrc ? <img className="d-activity-img" src={imgSrc} alt={r.name} /> : <div className="d-activity-img" style={{ background: "linear-gradient(145deg, #1e1a24, #12101a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🍽</div>}
                   <div className="d-activity-info">
                     <div className="d-activity-text">Loved <strong>{r.name}</strong></div>
                     <div className="d-activity-time">{formatTime(r.lovedAt)}</div>
@@ -922,7 +930,7 @@ export default function Profile({
               {listModal.items.map((r, i) => (
                 r.cuisine !== undefined ? (
                   <div key={r.id} style={{ marginTop: i === 0 ? 6 : 0, marginBottom: 8 }}>
-                    <RestCard r={r} compact onOpen={onOpenDetail} photoCache={photoCache} />
+                    <RestCard r={r} compact onOpen={onOpenDetail} photoCache={photoCache} getAnyCachedPhotoForId={getAnyCachedPhotoForId} />
                   </div>
                 ) : (
                   <div key={r.id || r.name} style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, color: C.text, fontFamily: "'Playfair Display', Georgia, serif", fontStyle: "italic", fontSize: 16 }}>
@@ -1304,15 +1312,16 @@ export default function Profile({
   );
 }
 
-function RestCard({ r, compact, onOpen, photoCache }) {
+function RestCard({ r, compact, onOpen, photoCache, getAnyCachedPhotoForId }) {
   const [imgSrc, setImgSrc] = useState(
-    (photoCache && (photoCache[r.id] || photoCache[String(r.id)])) || r.img
+    (getAnyCachedPhotoForId && getAnyCachedPhotoForId(r.id)) || (photoCache && (photoCache[r.id] || photoCache[String(r.id)])) || r.img
   );
   useEffect(() => {
+    if (getAnyCachedPhotoForId) { const cached = getAnyCachedPhotoForId(r.id); if (cached) { setImgSrc(cached); return; } }
     const fromCache = photoCache && (photoCache[r.id] || photoCache[String(r.id)]);
     if (fromCache) { setImgSrc(fromCache); return; }
     try { const cached = JSON.parse(localStorage.getItem("cooked_photos") || "{}"); if (cached[r.id]) setImgSrc(cached[r.id]); } catch {}
-  }, [r.id, photoCache]);
+  }, [r.id, photoCache, getAnyCachedPhotoForId]);
 
   const flameCount = Math.min(3, Math.max(1, Math.round((r.googleRating || (r.rating ? r.rating / 2 : 3)) * 2) / 2));
 

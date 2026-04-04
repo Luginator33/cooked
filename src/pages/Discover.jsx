@@ -512,7 +512,7 @@ function notificationMessage(row) {
   if (row?.message != null && String(row.message).trim()) return String(row.message);
   if (row?.body != null && String(row.body).trim()) return String(row.body);
   if (row?.content != null && String(row.content).trim()) return String(row.content);
-  const userName = row?._fromUser?.profile_name || "Someone";
+  const userName = row?._fromUser?.profile_name || row?._fromUser?.profile_username || "A user";
   const restName = row?.restaurant_name || "a restaurant";
   switch (row?.type) {
     case "followed_you": return `${userName} started following you`;
@@ -587,7 +587,7 @@ function buildNotifMessage(row) {
     if (row.type === "restaurant_trending") return { bold: restName, text: `${restName} is trending right now` };
     return { bold: "", text: notificationMessage(row) };
   }
-  const firstName = users[0]?.profile_name || "Someone";
+  const firstName = users[0]?.profile_name || users[0]?.profile_username || "A user";
   const othersCount = users.length - 1;
   switch (row.type) {
     case "followed_you":
@@ -4759,6 +4759,7 @@ Return a JSON object with exactly these fields:
             onViewUser={setViewingUserId}
             allCitiesFromDb={dynamicAllCities}
             onRestaurantsChanged={refreshRestaurants}
+            getAnyCachedPhotoForId={getAnyCachedPhotoForId}
             onOpenIgImport={() => { setIgError(null); setIgAddedRestaurants([]); setIgDone(false); setIgImporting(false); setPickerMode("ig-import"); setIgModal(true); }}
             onSharedPhotoSaved={(restaurantId, photoUrl) => {
               setPhotoResolved((prev) => [...new Set([...prev, restaurantId])]);
@@ -5645,7 +5646,8 @@ Return a JSON object with exactly these fields:
                   // LEFT: always the actor's profile photo
                   const profileSrc = fromUser?.profile_photo;
                   // RIGHT: restaurant photo for restaurant notifs, Follow button for follows
-                  const restaurantPhotoSrc = restaurant ? (getAnyCachedPhotoForId(restaurant.id) || restaurant.img) : null;
+                  const _rPhotoRaw = restaurant ? (getAnyCachedPhotoForId(restaurant.id) || restaurant.img) : null;
+                  const restaurantPhotoSrc = _rPhotoRaw && !String(_rPhotoRaw).includes("picsum.photos") ? _rPhotoRaw : null;
                   const alreadyFollowing = isFollow && item.from_user_id && notifFollowedBack.has(item.from_user_id);
 
                   const msg = buildNotifMessage(item);
@@ -5674,7 +5676,7 @@ Return a JSON object with exactly these fields:
                         border: `2px solid ${C.terracotta}`,
                         boxShadow: `0 0 12px rgba(255,150,50,0.3), 0 0 20px rgba(255,150,50,0.1)`,
                       } : undefined}>
-                        {profileSrc ? <img src={profileSrc} alt="" /> : (
+                        {fromUser ? <ProfilePhoto photo={fromUser.profile_photo} size={40} userId={fromUser.clerk_user_id} /> : (
                           <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                             <NotificationTypeIcon type={item.type} size={18} />
                           </div>
