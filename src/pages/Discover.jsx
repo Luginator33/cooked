@@ -826,12 +826,15 @@ export default function Discover({ tasteProfile, initialTab }) {
   });
 
   // Custom setTab that also navigates
+  // Uses replace: true so tab switches don't create history entries —
+  // this prevents the iOS PWA back-swipe from sliding the whole screen
+  // between tabs (only real "pages" like restaurant detail push history)
   const setTab = useCallback((newTab) => {
     if (!VALID_TABS.includes(newTab)) return;
     setTabInternal(newTab);
     const targetPath = TAB_TO_PATH[newTab] || "/";
     if (location.pathname !== targetPath) {
-      navigate(targetPath);
+      navigate(targetPath, { replace: true });
     }
   }, [navigate, location.pathname]);
 
