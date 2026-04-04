@@ -13,6 +13,9 @@ export class AppErrorBoundary extends React.Component {
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
+  componentDidCatch(error, errorInfo) {
+    console.error("[AppErrorBoundary]", error, errorInfo);
+  }
   render() {
     if (this.state.hasError) {
       return (
@@ -36,6 +39,11 @@ export class AppErrorBoundary extends React.Component {
           <p style={{ marginTop: 16, color: "rgba(245,240,235,0.3)", fontSize: 14, textAlign: "center" }}>
             Something went wrong. Tap below to reset.
           </p>
+          {this.state.error && (
+            <p style={{ marginTop: 8, color: "rgba(255,150,50,0.5)", fontSize: 11, textAlign: "center", maxWidth: 340, wordBreak: "break-word" }}>
+              {this.state.error.message || String(this.state.error)}
+            </p>
+          )}
           <button
             onClick={() => {
               localStorage.removeItem("cooked_photos");
