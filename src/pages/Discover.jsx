@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { SignInButton, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
 import { RESTAURANTS, ALL_TAGS, normalizeCity, CITY_REGIONS as CANONICAL_CITY_REGIONS, sortCityRegions, getFullCityRegions } from "../data/restaurants";
 import { ProfilePhoto, getDefaultAvatar, AvatarIcon } from "../components/AvatarIcon";
 import BugReportButton from "../components/BugReportButton";
+import SectionErrorBoundary from "../components/SectionErrorBoundary";
 
 /** All cities — base + any admin-approved custom cities */
 const BASE_CITY_REGIONS = getFullCityRegions();
@@ -800,16 +802,47 @@ function LazyPhotoRow({ item, pickerIndex, onLoad, onSelect, onRefresh, C }) {
   );
 }
 
+// URL path ↔ tab name mapping
+const PATH_TO_TAB = { "/": "home", "/home": "home", "/heat": "heat", "/discover": "discover", "/map": "map", "/profile": "profile" };
+const TAB_TO_PATH = { home: "/", heat: "/heat", discover: "/discover", map: "/map", profile: "/profile" };
+const VALID_TABS = ["home", "heat", "discover", "map", "profile"];
+
 export default function Discover({ tasteProfile, initialTab }) {
   const { user } = useUser();
+  const navigate = useNavigate();
+  const location = useLocation();
   const skipNextTabPersistRef = useRef(false);
-  const [tab, setTab] = useState(() => {
+
+  // Derive tab from URL, falling back to localStorage then "home"
+  const tabFromUrl = PATH_TO_TAB[location.pathname] || null;
+  const [tab, setTabInternal] = useState(() => {
+    if (tabFromUrl) return tabFromUrl;
+    // If URL is a deep-link (like /r/123), default to "home" background tab
     try {
       const last = localStorage.getItem("cooked_last_tab");
-      if (last && ["home", "heat", "discover", "map", "profile"].includes(last)) return last;
+      if (last && VALID_TABS.includes(last)) return last;
     } catch {}
     return "home";
   });
+
+  // Custom setTab that also navigates
+  const setTab = useCallback((newTab) => {
+    if (!VALID_TABS.includes(newTab)) return;
+    setTabInternal(newTab);
+    const targetPath = TAB_TO_PATH[newTab] || "/";
+    if (location.pathname !== targetPath) {
+      navigate(targetPath);
+    }
+  }, [navigate, location.pathname]);
+
+  // Sync tab when URL changes (browser back/forward)
+  useEffect(() => {
+    const t = PATH_TO_TAB[location.pathname];
+    if (t && t !== tab) {
+      setTabInternal(t);
+    }
+  }, [location.pathname]);
+
   const [showOnboarding, setShowOnboarding] = useState(() => {
     try {
       return !localStorage.getItem("cooked_onboarding_done");
@@ -817,23 +850,6 @@ export default function Discover({ tasteProfile, initialTab }) {
       return false;
     }
   });
-
-  // PWA tab navigation history — back-swipe goes to previous tab, not Google sign-in
-  const prevTabRef = useRef(null);
-  useEffect(() => {
-    if (prevTabRef.current === null) { prevTabRef.current = tab; return; } // skip initial
-    if (prevTabRef.current !== tab) {
-      window.history.pushState({ tab }, "");
-      prevTabRef.current = tab;
-    }
-  }, [tab]);
-  useEffect(() => {
-    const handlePop = (e) => {
-      if (e.state?.tab) setTab(e.state.tab);
-    };
-    window.addEventListener("popstate", handlePop);
-    return () => window.removeEventListener("popstate", handlePop);
-  }, []);
 
   const [showHeatTip, setShowHeatTip] = useState(false);
   const [heatTipFading, setHeatTipFading] = useState(false);
@@ -895,7 +911,20 @@ export default function Discover({ tasteProfile, initialTab }) {
   const filteredRef = useRef([]);
   const [mapsReady, setMapsReady] = useState(false);
   const [selectedRest, setSelectedRest] = useState(null);
-  const [viewingUserId, setViewingUserId] = useState(null);
+  const [viewingUserId, setViewingUserIdInternal] = useState(null);
+  // Wrap setViewingUserId to also update URL
+  const setViewingUserId = useCallback((id) => {
+    if (id) {
+      setViewingUserIdInternal(id);
+      navigate(`/u/${id}`);
+    } else {
+      setViewingUserIdInternal(null);
+      // Go back if we're on a /u/ page, otherwise just clear
+      if (location.pathname.startsWith("/u/")) {
+        navigate(-1);
+      }
+    }
+  }, [navigate, location.pathname]);
   /** Friends (following) who loved this spot — from Neo4j when detail opens. */
   const [friendsBeenHere, setFriendsBeenHere] = useState({ loading: false, list: [] });
   const [friendsBeenHereSheetOpen, setFriendsBeenHereSheetOpen] = useState(false);
@@ -2180,47 +2209,60 @@ export default function Discover({ tasteProfile, initialTab }) {
     setShowTagPicker(false);
   }, [detailRestaurant]);
 
-  // Log restaurant detail view + push history state for back navigation
+  // Log restaurant detail view + sync URL
   useEffect(() => {
     if (!detailRestaurant) return;
     if (user?.id) logInteraction(user.id, detailRestaurant.id, 'view');
-    window.history.pushState({ restaurantDetail: true }, "");
-    const handlePop = () => {
+    // Push /r/:id URL so back button works
+    const detailPath = `/r/${detailRestaurant.id}`;
+    if (location.pathname !== detailPath) {
+      navigate(detailPath);
+    }
+  }, [detailRestaurant?.id]);
+
+  // Close detail/user when navigating away via back button
+  useEffect(() => {
+    if (detailRestaurant && !location.pathname.startsWith("/r/")) {
       setDetailRestaurant(null);
       setSixDegreesResult(null);
       setSixDegreesTarget(null);
       setSixDegreesLoading(false);
+    }
+    if (viewingUserId && !location.pathname.startsWith("/u/")) {
+      setViewingUserIdInternal(null);
+    }
+  }, [location.pathname]);
+
+  // Deep-link: open /r/:id when landing directly on that URL
+  const deepLinkHandledRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandledRef.current) return;
+    const rMatch = location.pathname.match(/^\/r\/(.+)$/);
+    if (rMatch && !detailRestaurant && allRestaurants.length > 0) {
+      const id = rMatch[1];
+      const r = allRestaurants.find(rest => String(rest.id) === id);
+      if (r) { setDetailRestaurant(r); deepLinkHandledRef.current = true; }
+    }
+    const uMatch = location.pathname.match(/^\/u\/(.+)$/);
+    if (uMatch && !viewingUserId) {
+      setViewingUserIdInternal(uMatch[1]);
+      deepLinkHandledRef.current = true;
+    }
+  }, [location.pathname, allRestaurants.length]);
+
+  // PWA back-swipe for overlays (DM, notifications, filter) — single listener
+  useEffect(() => {
+    const activeOverlay = dmOpen ? "dm" : notifSheetOpen ? "notifications" : showFilterSheet ? "filter" : null;
+    if (!activeOverlay) return;
+    window.history.pushState({ overlay: activeOverlay }, "");
+    const handlePop = () => {
+      if (dmOpen) { setDmOpen(false); setDmConvo(null); }
+      else if (notifSheetOpen) setNotifSheetOpen(false);
+      else if (showFilterSheet) setShowFilterSheet(false);
     };
     window.addEventListener("popstate", handlePop);
     return () => window.removeEventListener("popstate", handlePop);
-  }, [detailRestaurant?.id]);
-
-  // PWA back-swipe for DM modal
-  useEffect(() => {
-    if (!dmOpen) return;
-    window.history.pushState({ overlay: "dm" }, "");
-    const handlePop = () => { setDmOpen(false); setDmConvo(null); };
-    window.addEventListener("popstate", handlePop);
-    return () => window.removeEventListener("popstate", handlePop);
-  }, [dmOpen]);
-
-  // PWA back-swipe for notifications sheet
-  useEffect(() => {
-    if (!notifSheetOpen) return;
-    window.history.pushState({ overlay: "notifications" }, "");
-    const handlePop = () => setNotifSheetOpen(false);
-    window.addEventListener("popstate", handlePop);
-    return () => window.removeEventListener("popstate", handlePop);
-  }, [notifSheetOpen]);
-
-  // PWA back-swipe for filter sheet
-  useEffect(() => {
-    if (!showFilterSheet) return;
-    window.history.pushState({ overlay: "filter" }, "");
-    const handlePop = () => setShowFilterSheet(false);
-    window.addEventListener("popstate", handlePop);
-    return () => window.removeEventListener("popstate", handlePop);
-  }, [showFilterSheet]);
+  }, [dmOpen, notifSheetOpen, showFilterSheet]);
 
   useEffect(() => {
     if (window.google?.maps) { setMapsReady(true); return; }
@@ -3736,6 +3778,7 @@ Return a JSON object with exactly these fields:
       {/* Spacer for fixed header */}
       <div style={{ height: 0, margin: 0, padding: 0 }} />
 
+      <SectionErrorBoundary name="Content" icon="🍽">
       {/* Home Tab */}
       {tab === "home" && (() => {
         const getCity = (r) => r.city || r.location || r.region || "";
@@ -4772,6 +4815,7 @@ Return a JSON object with exactly these fields:
           />
         </div>
       )}
+      </SectionErrorBoundary>
 
       {/* Bottom Nav */}
       <div className="bottom-nav">
@@ -5086,7 +5130,7 @@ Return a JSON object with exactly these fields:
               <div className="det-hero-grad" />
               {/* top bar */}
               <div className="det-hero-top">
-                <button type="button" className="det-back-btn" onClick={() => { setDetailRestaurant(null); setSixDegreesResult(null); setSixDegreesTarget(null); setSixDegreesLoading(false); }}>‹</button>
+                <button type="button" className="det-back-btn" onClick={() => { setDetailRestaurant(null); setSixDegreesResult(null); setSixDegreesTarget(null); setSixDegreesLoading(false); navigate(-1); }}>‹</button>
                 <div className="det-logo">cook<span style={{ WebkitTextFillColor:"#e07850", filter:"drop-shadow(0 0 8px rgba(224,112,80,0.4))" }}>ed</span><span style={{ fontFamily:"'Bettina Signature', cursive", fontSize:"0.5em", color:"#f0ebe2", fontWeight:400, fontStyle:"normal", position:"absolute", bottom:"-0.55em", right:"-0.7em", WebkitTextFillColor:"#f0ebe2", background:"none", WebkitBackgroundClip:"unset", backgroundClip:"unset" }}>beta</span></div>
               </div>
               {/* bottom overlay */}
@@ -5390,7 +5434,7 @@ Return a JSON object with exactly these fields:
               <div className="det-section-label">TAGS</div>
               <div className="det-tags-wrap">
                 {detailTags.map(tag => (
-                  <button key={tag} type="button" className="det-tag-active" onClick={() => { setActiveFilter(tag); setDetailRestaurant(null); }}>{tag}</button>
+                  <button key={tag} type="button" className="det-tag-active" onClick={() => { setActiveFilter(tag); setDetailRestaurant(null); navigate("/discover"); }}>{tag}</button>
                 ))}
                 <button type="button" className="det-tag-add" onClick={() => setShowTagPicker(p => !p)}>+ Add tag</button>
               </div>
@@ -5455,7 +5499,7 @@ Return a JSON object with exactly these fields:
               <div className="det-sheet-handle" />
               <div className="det-sheet-title">Friends here</div>
               {friendsBeenHere.list.map((f) => (
-                <div key={f.clerkUserId} className="det-sheet-row" onClick={() => { setFriendsBeenHereSheetOpen(false); setDetailRestaurant(null); setViewingUserId(f.clerkUserId); }}>
+                <div key={f.clerkUserId} className="det-sheet-row" onClick={() => { setFriendsBeenHereSheetOpen(false); setDetailRestaurant(null); setViewingUserId(f.clerkUserId); /* navigate happens in setViewingUserId */ }}>
                   <div className="det-sheet-av">
                     {f.profilePhoto ? (
                       <img src={f.profilePhoto} alt="" />
@@ -5482,27 +5526,31 @@ Return a JSON object with exactly these fields:
       {/* Toast */}
       {toast && <div style={{ position:"fixed", top:76, left:"50%", transform:"translateX(-50%)", background:C.terracotta, color:"#fff", borderRadius:20, padding:"10px 20px", fontSize:13, fontWeight:600, zIndex:300, fontFamily:"'Inter', -apple-system, sans-serif", whiteSpace:"nowrap", boxShadow:"0 4px 20px rgba(196,96,58,0.4)" }}>Link copied — {toast} 📋</div>}
       {showTasteProfile && (
+        <SectionErrorBoundary name="Taste Profile" icon="🎯">
         <TasteProfile
           onBack={() => setShowTasteProfile(false)}
           onViewUser={(id) => setViewingUserId(id)}
           onOpenDetail={(r) => { setShowTasteProfile(false); setDetailRestaurant(r); }}
           allRestaurants={allRestaurants}
         />
+        </SectionErrorBoundary>
       )}
       {viewingUserId && (
+        <SectionErrorBoundary name="User Profile" icon="👤">
         <UserProfile
           clerkUserId={viewingUserId}
           onClose={() => setViewingUserId(null)}
           onOpenDetail={setDetailRestaurant}
           onViewUser={(id) => setViewingUserId(id)}
           onMessage={(partnerId, partnerName, partnerPhoto) => {
-            setViewingUserId(null);
+            setViewingUserIdInternal(null); // close without navigating back — DM will open
             setDmConvo({ partnerId, partnerName, partnerPhoto });
             setDmOpen(true);
             getConversation(user?.id, partnerId).then(msgs => { setDmMessages(msgs); markMessagesRead(user?.id, partnerId); });
             setTimeout(() => dmMessagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 200);
           }}
         />
+        </SectionErrorBoundary>
       )}
 
       {/* ── DM INBOX MODAL ── */}
