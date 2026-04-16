@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AuthenticateWithRedirectCallback, useUser } from "@clerk/clerk-react";
-import { loadUserData } from "./lib/supabase";
+import { loadUserData, syncIdentity } from "./lib/supabase";
 import Onboarding from "./pages/Onboarding";
 import Discover from "./pages/Discover";
 
@@ -95,6 +95,21 @@ function AppRoutes() {
     if (localStorage.getItem("cooked_onboarding_v3") === "1") return "discover";
     return "loading";
   });
+
+  // ── Identity sync ───────────────────────────────────────────────
+  // Stamp email + last_login_at on the current clerk_user_id row, and
+  // auto-merge any orphan rows from a previous Clerk identity.  Fires
+  // once per signed-in user per page-load.  Heals the "new Clerk user_id
+  // orphans my old messages" class of bug silently.
+  useEffect(() => {
+    if (!isLoaded || !user?.id) return;
+    const email = user.primaryEmailAddress?.emailAddress || null;
+    const name = [user.firstName, user.lastName]
+      .map(s => (s || "").trim())
+      .filter(Boolean)
+      .join(" ") || user.fullName || null;
+    syncIdentity({ clerkUserId: user.id, email, name }).catch(() => {});
+  }, [isLoaded, user?.id]);
 
   // Once Clerk is loaded, determine where to go
   useEffect(() => {

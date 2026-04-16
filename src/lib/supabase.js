@@ -211,6 +211,32 @@ export async function saveUserData(clerkUserId, updates) {
   if (error) console.error(error)
 }
 
+// ── Identity sync ────────────────────────────────────────────
+// Called on every login.  Stamps email + last_login_at on the current
+// clerk_user_id row, then auto-merges any orphan rows that still point
+// at an old Clerk id for the same email.  This heals identity drift
+// silently (e.g. when Clerk reissues a user_id on provider switch).
+//
+// Backed by the `sync_identity` Postgres RPC — see
+// cooked-ios/sql/identity_and_photos_fix.sql.
+export async function syncIdentity({ clerkUserId, email, name }) {
+  if (!clerkUserId) return 0;
+  const { data, error } = await supabase.rpc('sync_identity', {
+    new_clerk_id: clerkUserId,
+    user_email:   email || null,
+    user_name:    name  || null,
+  });
+  if (error) {
+    console.warn('syncIdentity error:', error.message || error);
+    return 0;
+  }
+  const merged = Number(data ?? 0);
+  if (merged > 0) {
+    console.log(`[identity] merged ${merged} orphan row(s) into ${clerkUserId}`);
+  }
+  return merged;
+}
+
 // Save photo cache (both preview + confirmed) to Supabase `user_data.photos`.
 export async function saveUserPhotos(clerkUserId, photos) {
   if (!clerkUserId) return;
