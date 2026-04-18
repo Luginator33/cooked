@@ -360,11 +360,18 @@ async function runAutoResearch(env) {
 //   SUPABASE_URL              — https://jfwtyqyglxknubvhgifw.supabase.co
 //   SUPABASE_SERVICE_ROLE_KEY — service role key (server-side only, bypasses RLS)
 //
+//   SUPABASE_WEBHOOK_SECRET  — shared secret sent in `x-webhook-secret` header
+//                              from Supabase Database Webhooks (follows, DMs, etc.)
+//
 // Endpoints:
 //   POST /push/send       — admin → one user
 //   POST /push/broadcast  — admin → every user with a token
+//   POST /push/event      — Supabase DB webhook → auto-pushes for follows/DMs/etc.
 //
-// Auth: body.admin_clerk_user_id must match a user_data row with is_admin=true.
+// Auth:
+//   /push/send, /push/broadcast — body.admin_clerk_user_id must match a
+//                                 user_data row with is_admin=true.
+//   /push/event — x-webhook-secret header must equal SUPABASE_WEBHOOK_SECRET.
 
 const APNS_JWT_CACHE = { token: null, expiresAt: 0 };
 
@@ -523,6 +530,141 @@ async function handlePushSend(request, env) {
   return jsonResponse({ sent, tried: results.length, results });
 }
 
+// ─── Auto-push from Supabase DB webhooks ─────────────────────────────────────
+//
+// Supabase Database Webhook POSTs JSON like:
+//   { type: "INSERT", table: "notifications", record: { ... }, old_record: null }
+// We wire two webhooks in the Supabase dashboard (notifications INSERT,
+// messages INSERT). Both hit this one endpoint with the shared secret header.
+
+function mapNotifTypeToPrefKey(type) {
+  // notifications.type → notification_prefs.type (key mismatch for one row)
+  if (type === "friend_visited_city") return "friend_visited_your_city";
+  return type;
+}
+
+async function isNotifPrefEnabled(env, clerkUserId, prefKey) {
+  // notification_prefs stores each pref key as its own column on a single
+  // row-per-user, e.g. { clerk_user_id, followed_you, friend_new_find, ... }.
+  try {
+    const res = await sbFetch(env,
+      `notification_prefs?clerk_user_id=eq.${encodeURIComponent(clerkUserId)}&select=*&limit=1`
+    );
+    const rows = await res.json();
+    if (rows.length === 0) return true; // no prefs row yet → default ON
+    const val = rows[0][prefKey];
+    if (val === undefined || val === null) return true; // column missing / unset → default ON
+    return val !== false;
+  } catch (err) {
+    console.log("[push] pref lookup failed:", err.message);
+    return true; // fail open — better to send than drop
+  }
+}
+
+async function getDisplayName(env, clerkUserId) {
+  if (!clerkUserId) return "Someone";
+  try {
+    const res = await sbFetch(env,
+      `user_data?clerk_user_id=eq.${encodeURIComponent(clerkUserId)}&select=profile_name,profile_username&limit=1`
+    );
+    const rows = await res.json();
+    if (rows.length === 0) return "Someone";
+    const r = rows[0];
+    return r.profile_name || r.profile_username || "Someone";
+  } catch { return "Someone"; }
+}
+
+function formatNotifCopy(type, actorName, restaurantName) {
+  const rest = restaurantName || "a restaurant";
+  switch (type) {
+    case "followed_you":
+      return { title: "New follower", body: `${actorName} started following you` };
+    case "friend_loved_your_watchlist":
+      return { title: "Watchlist love", body: `${actorName} loved ${rest}` };
+    case "friend_new_find":
+      return { title: "New find", body: `${actorName} added ${restaurantName ? rest : "a new find"}` };
+    case "friend_visited_city":
+      return { title: "Friend in your city", body: `${actorName} checked out ${rest}` };
+    case "restaurant_trending":
+      return { title: "Trending 🔥", body: `${rest} is trending right now` };
+    default:
+      return { title: "cooked", body: `${actorName} has an update for you` };
+  }
+}
+
+async function dispatchPush(env, recipientId, senderId, category, title, body, payload) {
+  const tokens = await tokensForUser(env, recipientId);
+  if (tokens.length === 0) {
+    await logSend(env, {
+      recipient_id: recipientId, sender_id: senderId, category, title, body,
+      payload: payload || null, apns_status: null, apns_response: "No tokens on file",
+    });
+    return { sent: 0, tried: 0, note: "no devices" };
+  }
+  const jwt = await getApnsJwt(env);
+  const results = [];
+  for (const t of tokens) {
+    const r = await sendOne(env, jwt, t.device_token, t.platform, title, body, payload);
+    results.push({ status: r.status });
+    await logSend(env, {
+      recipient_id: recipientId, sender_id: senderId, category, title, body,
+      payload: payload || null, apns_status: r.status, apns_response: r.response,
+    });
+  }
+  return { sent: results.filter(r => r.status === 200).length, tried: results.length };
+}
+
+async function handlePushEvent(request, env) {
+  const secret = request.headers.get("x-webhook-secret");
+  if (!env.SUPABASE_WEBHOOK_SECRET || secret !== env.SUPABASE_WEBHOOK_SECRET) {
+    return jsonResponse({ error: "Not authorized" }, 401);
+  }
+  let payload;
+  try { payload = await request.json(); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
+  if (payload.type !== "INSERT") {
+    return jsonResponse({ ok: true, skipped: `non-insert event (${payload.type})` });
+  }
+  const table = payload.table;
+  const record = payload.record || {};
+
+  if (table === "notifications") {
+    const { user_id, type, from_user_id, restaurant_name, id } = record;
+    if (!user_id || !type) return jsonResponse({ error: "Missing user_id or type" }, 400);
+    if (from_user_id && from_user_id === user_id) {
+      return jsonResponse({ ok: true, skipped: "self-action" });
+    }
+    const prefKey = mapNotifTypeToPrefKey(type);
+    if (!(await isNotifPrefEnabled(env, user_id, prefKey))) {
+      return jsonResponse({ ok: true, skipped: "pref disabled", type });
+    }
+    const actorName = await getDisplayName(env, from_user_id);
+    const { title, body } = formatNotifCopy(type, actorName, restaurant_name);
+    const result = await dispatchPush(env, user_id, from_user_id, type, title, body, { notification_id: id, kind: type });
+    return jsonResponse({ ok: true, ...result, type });
+  }
+
+  if (table === "messages") {
+    const { sender_id, recipient_id, content, restaurant_name, id } = record;
+    if (!recipient_id) return jsonResponse({ error: "Missing recipient_id" }, 400);
+    if (sender_id === recipient_id) {
+      return jsonResponse({ ok: true, skipped: "self-message" });
+    }
+    const senderName = await getDisplayName(env, sender_id);
+    let body;
+    if (content && content.trim()) {
+      body = content.length > 120 ? content.slice(0, 117) + "…" : content;
+    } else if (restaurant_name) {
+      body = `shared ${restaurant_name} 🍽`;
+    } else {
+      body = "sent you a message";
+    }
+    const result = await dispatchPush(env, recipient_id, sender_id, "new_dm", senderName, body, { message_id: id, conversation_with: sender_id });
+    return jsonResponse({ ok: true, ...result });
+  }
+
+  return jsonResponse({ ok: true, skipped: `unknown table ${table}` });
+}
+
 async function handlePushBroadcast(request, env) {
   let body;
   try { body = await request.json(); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
@@ -574,6 +716,10 @@ export default {
       try { return await handlePushBroadcast(request, env); }
       catch (err) { return jsonResponse({ error: err.message }, 500); }
     }
+    if (request.method === "POST" && path === "/push/event") {
+      try { return await handlePushEvent(request, env); }
+      catch (err) { return jsonResponse({ error: err.message }, 500); }
+    }
 
     // Auto-research routes
     if (request.method === "POST" && path === "/auto-research/run") {
@@ -614,7 +760,7 @@ export default {
       }
     }
 
-    return jsonResponse({ error: "Not found", routes: ["/", "/fetch-url", "/crawl", "/auto-research/run", "/auto-research/status", "/push/send", "/push/broadcast"] }, 404);
+    return jsonResponse({ error: "Not found", routes: ["/", "/fetch-url", "/crawl", "/auto-research/run", "/auto-research/status", "/push/send", "/push/broadcast", "/push/event"] }, 404);
   },
 
   // ── Cron trigger (twice a week) ─────────────────────────
