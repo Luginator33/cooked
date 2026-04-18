@@ -347,6 +347,206 @@ async function runAutoResearch(env) {
   }
 }
 
+// ╔════════════════════════════════════════════════════════╗
+// ║  PUSH NOTIFICATIONS  (APNs via token-based auth)       ║
+// ╚════════════════════════════════════════════════════════╝
+//
+// Env vars required in Cloudflare:
+//   APNS_KEY_ID      — 10-char Key ID from the APNs auth key (e.g. 4F3FCFBNHR)
+//   APNS_TEAM_ID     — 10-char Apple Team ID (e.g. Q7JF27M927)
+//   APNS_BUNDLE_ID   — com.cookedapp.cooked
+//   APNS_P8_KEY      — full .p8 file contents (multi-line PEM, including
+//                      -----BEGIN PRIVATE KEY----- / -----END PRIVATE KEY-----)
+//   SUPABASE_URL              — https://jfwtyqyglxknubvhgifw.supabase.co
+//   SUPABASE_SERVICE_ROLE_KEY — service role key (server-side only, bypasses RLS)
+//
+// Endpoints:
+//   POST /push/send       — admin → one user
+//   POST /push/broadcast  — admin → every user with a token
+//
+// Auth: body.admin_clerk_user_id must match a user_data row with is_admin=true.
+
+const APNS_JWT_CACHE = { token: null, expiresAt: 0 };
+
+function base64UrlEncode(bytes) {
+  let s = btoa(String.fromCharCode(...new Uint8Array(bytes)));
+  return s.replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+function base64UrlEncodeString(str) {
+  return base64UrlEncode(new TextEncoder().encode(str));
+}
+
+function pemToArrayBuffer(pem) {
+  const b64 = pem
+    .replace(/-----BEGIN [^-]+-----/g, "")
+    .replace(/-----END [^-]+-----/g, "")
+    .replace(/\s+/g, "");
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
+async function getApnsJwt(env) {
+  const now = Math.floor(Date.now() / 1000);
+  if (APNS_JWT_CACHE.token && APNS_JWT_CACHE.expiresAt > now + 60) {
+    return APNS_JWT_CACHE.token;
+  }
+  const header = { alg: "ES256", kid: env.APNS_KEY_ID, typ: "JWT" };
+  const claims = { iss: env.APNS_TEAM_ID, iat: now };
+  const signingInput =
+    base64UrlEncodeString(JSON.stringify(header)) + "." +
+    base64UrlEncodeString(JSON.stringify(claims));
+  const keyData = pemToArrayBuffer(env.APNS_P8_KEY);
+  const cryptoKey = await crypto.subtle.importKey(
+    "pkcs8", keyData,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    cryptoKey,
+    new TextEncoder().encode(signingInput)
+  );
+  const jwt = signingInput + "." + base64UrlEncode(sig);
+  APNS_JWT_CACHE.token = jwt;
+  APNS_JWT_CACHE.expiresAt = now + 50 * 60;
+  return jwt;
+}
+
+async function sbFetch(env, path, init = {}) {
+  const url = `${env.SUPABASE_URL}/rest/v1/${path}`;
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      "apikey": env.SUPABASE_SERVICE_ROLE_KEY,
+      "Authorization": `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...(init.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Supabase ${res.status}: ${text}`);
+  }
+  return res;
+}
+
+async function verifyAdmin(env, clerkUserId) {
+  if (!clerkUserId) return false;
+  const res = await sbFetch(env,
+    `user_data?clerk_user_id=eq.${encodeURIComponent(clerkUserId)}&select=is_admin&limit=1`
+  );
+  const rows = await res.json();
+  return rows.length > 0 && rows[0].is_admin === true;
+}
+
+async function tokensForUser(env, clerkUserId) {
+  const res = await sbFetch(env,
+    `user_push_tokens?clerk_user_id=eq.${encodeURIComponent(clerkUserId)}&select=device_token,platform`
+  );
+  return res.json();
+}
+
+async function allTokens(env) {
+  const res = await sbFetch(env,
+    `user_push_tokens?select=clerk_user_id,device_token,platform`
+  );
+  return res.json();
+}
+
+async function logSend(env, entry) {
+  try {
+    await sbFetch(env, "notifications_log", {
+      method: "POST",
+      body: JSON.stringify(entry),
+    });
+  } catch (err) {
+    console.log("[push] log write failed:", err.message);
+  }
+}
+
+async function sendOne(env, jwt, token, platform, title, body, payload) {
+  const host = platform === "ios_sandbox"
+    ? "api.sandbox.push.apple.com"
+    : "api.push.apple.com";
+  const apsPayload = {
+    aps: { alert: { title, body }, sound: "default", badge: 1 },
+    ...(payload || {}),
+  };
+  const res = await fetch(`https://${host}/3/device/${token}`, {
+    method: "POST",
+    headers: {
+      "authorization": `bearer ${jwt}`,
+      "apns-topic": env.APNS_BUNDLE_ID,
+      "apns-push-type": "alert",
+      "apns-priority": "10",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(apsPayload),
+  });
+  const responseText = res.ok ? "" : await res.text();
+  return { status: res.status, response: responseText };
+}
+
+async function handlePushSend(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
+  const { admin_clerk_user_id, recipient_clerk_user_id, title, body: msgBody, payload } = body;
+  if (!title || !msgBody || !recipient_clerk_user_id) {
+    return jsonResponse({ error: "Missing title, body, or recipient_clerk_user_id" }, 400);
+  }
+  if (!(await verifyAdmin(env, admin_clerk_user_id))) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  const tokens = await tokensForUser(env, recipient_clerk_user_id);
+  if (tokens.length === 0) {
+    await logSend(env, {
+      recipient_id: recipient_clerk_user_id, sender_id: admin_clerk_user_id,
+      category: "admin_broadcast", title, body: msgBody, payload: payload || null,
+      apns_status: null, apns_response: "No tokens on file",
+    });
+    return jsonResponse({ sent: 0, note: "recipient has no registered devices" });
+  }
+  const jwt = await getApnsJwt(env);
+  const results = [];
+  for (const t of tokens) {
+    const r = await sendOne(env, jwt, t.device_token, t.platform, title, msgBody, payload);
+    results.push({ token: t.device_token.slice(0, 8) + "…", platform: t.platform, ...r });
+    await logSend(env, {
+      recipient_id: recipient_clerk_user_id, sender_id: admin_clerk_user_id,
+      category: "admin_broadcast", title, body: msgBody, payload: payload || null,
+      apns_status: r.status, apns_response: r.response,
+    });
+  }
+  const sent = results.filter(r => r.status === 200).length;
+  return jsonResponse({ sent, tried: results.length, results });
+}
+
+async function handlePushBroadcast(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
+  const { admin_clerk_user_id, title, body: msgBody, payload } = body;
+  if (!title || !msgBody) return jsonResponse({ error: "Missing title or body" }, 400);
+  if (!(await verifyAdmin(env, admin_clerk_user_id))) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  const tokens = await allTokens(env);
+  if (tokens.length === 0) return jsonResponse({ sent: 0, note: "no registered devices" });
+  const jwt = await getApnsJwt(env);
+  let sent = 0, failed = 0;
+  for (const t of tokens) {
+    const r = await sendOne(env, jwt, t.device_token, t.platform, title, msgBody, payload);
+    if (r.status === 200) sent++; else failed++;
+    await logSend(env, {
+      recipient_id: t.clerk_user_id, sender_id: admin_clerk_user_id,
+      category: "admin_broadcast", title, body: msgBody, payload: payload || null,
+      apns_status: r.status, apns_response: r.response,
+    });
+  }
+  return jsonResponse({ sent, failed, tried: tokens.length });
+}
+
 // ── Main handler ──────────────────────────────────────────
 export default {
   async fetch(request, env) {
@@ -363,6 +563,16 @@ export default {
     }
     if (request.method === "POST" && path === "/crawl") {
       return handleCrawl(request);
+    }
+
+    // Push notification routes
+    if (request.method === "POST" && path === "/push/send") {
+      try { return await handlePushSend(request, env); }
+      catch (err) { return jsonResponse({ error: err.message }, 500); }
+    }
+    if (request.method === "POST" && path === "/push/broadcast") {
+      try { return await handlePushBroadcast(request, env); }
+      catch (err) { return jsonResponse({ error: err.message }, 500); }
     }
 
     // Auto-research routes
@@ -404,7 +614,7 @@ export default {
       }
     }
 
-    return jsonResponse({ error: "Not found", routes: ["/", "/fetch-url", "/crawl", "/auto-research/run", "/auto-research/status"] }, 404);
+    return jsonResponse({ error: "Not found", routes: ["/", "/fetch-url", "/crawl", "/auto-research/run", "/auto-research/status", "/push/send", "/push/broadcast"] }, 404);
   },
 
   // ── Cron trigger (twice a week) ─────────────────────────
