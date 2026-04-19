@@ -362,6 +362,10 @@ async function runAutoResearch(env) {
 //
 //   SUPABASE_WEBHOOK_SECRET  — shared secret sent in `x-webhook-secret` header
 //                              from Supabase Database Webhooks (follows, DMs, etc.)
+//   ADMIN_PUSH_SECRET        — shared secret sent in `x-admin-secret` header
+//                              from the PWA admin panel. Required on /push/send
+//                              and /push/broadcast in addition to the admin
+//                              user id check (defense-in-depth).
 //
 // Endpoints:
 //   POST /push/send       — admin → one user
@@ -369,8 +373,9 @@ async function runAutoResearch(env) {
 //   POST /push/event      — Supabase DB webhook → auto-pushes for follows/DMs/etc.
 //
 // Auth:
-//   /push/send, /push/broadcast — body.admin_clerk_user_id must match a
-//                                 user_data row with is_admin=true.
+//   /push/send, /push/broadcast — x-admin-secret header must match
+//                                 ADMIN_PUSH_SECRET AND body.admin_clerk_user_id
+//                                 must match a user_data row with is_admin=true.
 //   /push/event — x-webhook-secret header must equal SUPABASE_WEBHOOK_SECRET.
 
 const APNS_JWT_CACHE = { token: null, expiresAt: 0 };
@@ -434,9 +439,25 @@ async function sbFetch(env, path, init = {}) {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Supabase ${res.status}: ${text}`);
+    // Scrub raw PostgREST bodies — they leak schema info. Log full detail
+    // server-side, surface only the status code to callers.
+    console.log(`[push] Supabase ${res.status} on ${path}: ${text}`);
+    throw new Error(`Supabase ${res.status}`);
   }
   return res;
+}
+
+// Constant-time string compare — defense-in-depth against timing attacks on
+// our webhook/admin shared secrets. Through Cloudflare's edge, the practical
+// timing signal is negligible, but the cost is ~5 lines and sets a good pattern.
+function timingSafeEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const ae = new TextEncoder().encode(a);
+  const be = new TextEncoder().encode(b);
+  if (ae.length !== be.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ae.length; i++) diff |= ae[i] ^ be[i];
+  return diff === 0;
 }
 
 async function verifyAdmin(env, clerkUserId) {
@@ -456,10 +477,37 @@ async function tokensForUser(env, clerkUserId) {
 }
 
 async function allTokens(env) {
-  const res = await sbFetch(env,
-    `user_push_tokens?select=clerk_user_id,device_token,platform`
-  );
-  return res.json();
+  // Paginate via Range headers. PostgREST caps each response at db-max-rows
+  // (Supabase default: 1000) and silently truncates — so a single select
+  // would drop devices past row 1000 once the fleet grows.
+  const PAGE = 500;
+  const out = [];
+  let offset = 0;
+  while (true) {
+    const res = await sbFetch(env,
+      `user_push_tokens?select=clerk_user_id,device_token,platform&order=id.asc`,
+      { headers: { "Range-Unit": "items", "Range": `${offset}-${offset + PAGE - 1}` } }
+    );
+    const page = await res.json();
+    out.push(...page);
+    if (page.length < PAGE) break;
+    offset += PAGE;
+  }
+  return out;
+}
+
+async function deleteDeadToken(env, deviceToken) {
+  // APNs 410 = token permanently invalid (app uninstalled, token rotated).
+  // Prune so future broadcasts don't keep retrying dead endpoints.
+  try {
+    await sbFetch(env,
+      `user_push_tokens?device_token=eq.${encodeURIComponent(deviceToken)}`,
+      { method: "DELETE" }
+    );
+    console.log(`[push] pruned dead token ${deviceToken.slice(0, 8)}…`);
+  } catch (err) {
+    console.log(`[push] prune failed for ${deviceToken.slice(0, 8)}…: ${err.message}`);
+  }
 }
 
 async function logSend(env, entry) {
@@ -477,9 +525,16 @@ async function sendOne(env, jwt, token, platform, title, body, payload) {
   const host = platform === "ios_sandbox"
     ? "api.sandbox.push.apple.com"
     : "api.push.apple.com";
+  // Spread caller-supplied payload FIRST so our `aps` dictionary wins. Prevents
+  // a malicious/buggy `payload.aps` from overriding the alert we just built
+  // (silent pushes, alert stripping, sound/badge tampering). The caller can
+  // still attach arbitrary top-level keys for deep-linking (notification_id etc).
+  const callerPayload = payload || {};
+  const safeCallerPayload = { ...callerPayload };
+  delete safeCallerPayload.aps; // hard-block aps override
   const apsPayload = {
+    ...safeCallerPayload,
     aps: { alert: { title, body }, sound: "default", badge: 1 },
-    ...(payload || {}),
   };
   const res = await fetch(`https://${host}/3/device/${token}`, {
     method: "POST",
@@ -493,7 +548,25 @@ async function sendOne(env, jwt, token, platform, title, body, payload) {
     body: JSON.stringify(apsPayload),
   });
   const responseText = res.ok ? "" : await res.text();
+  // 410 Unregistered → token permanently dead. Prune so we don't keep retrying.
+  if (res.status === 410) {
+    await deleteDeadToken(env, token);
+  }
   return { status: res.status, response: responseText };
+}
+
+// Defense-in-depth admin auth: require BOTH the shared secret header AND an
+// admin user_id. Clerk IDs leak in profile URLs and follow graphs — they are
+// NOT secrets — so the body field alone can't gate these endpoints.
+async function verifyAdminAuth(request, env, body) {
+  const provided = request.headers.get("x-admin-secret") || "";
+  if (!env.ADMIN_PUSH_SECRET || !timingSafeEqual(provided, env.ADMIN_PUSH_SECRET)) {
+    return { ok: false, code: 401, error: "Not authorized" };
+  }
+  if (!(await verifyAdmin(env, body.admin_clerk_user_id))) {
+    return { ok: false, code: 403, error: "Not authorized" };
+  }
+  return { ok: true };
 }
 
 async function handlePushSend(request, env) {
@@ -503,31 +576,32 @@ async function handlePushSend(request, env) {
   if (!title || !msgBody || !recipient_clerk_user_id) {
     return jsonResponse({ error: "Missing title, body, or recipient_clerk_user_id" }, 400);
   }
-  if (!(await verifyAdmin(env, admin_clerk_user_id))) {
-    return jsonResponse({ error: "Not authorized" }, 403);
-  }
+  const auth = await verifyAdminAuth(request, env, body);
+  if (!auth.ok) return jsonResponse({ error: auth.error }, auth.code);
+
   const tokens = await tokensForUser(env, recipient_clerk_user_id);
   if (tokens.length === 0) {
     await logSend(env, {
       recipient_id: recipient_clerk_user_id, sender_id: admin_clerk_user_id,
-      category: "admin_broadcast", title, body: msgBody, payload: payload || null,
+      category: "admin_direct", title, body: msgBody, payload: payload || null,
       apns_status: null, apns_response: "No tokens on file",
     });
     return jsonResponse({ sent: 0, note: "recipient has no registered devices" });
   }
   const jwt = await getApnsJwt(env);
-  const results = [];
-  for (const t of tokens) {
-    const r = await sendOne(env, jwt, t.device_token, t.platform, title, msgBody, payload);
-    results.push({ token: t.device_token.slice(0, 8) + "…", platform: t.platform, ...r });
-    await logSend(env, {
-      recipient_id: recipient_clerk_user_id, sender_id: admin_clerk_user_id,
-      category: "admin_broadcast", title, body: msgBody, payload: payload || null,
-      apns_status: r.status, apns_response: r.response,
-    });
-  }
+  const results = await Promise.all(
+    tokens.map(t => sendOne(env, jwt, t.device_token, t.platform, title, msgBody, payload)
+      .then(r => ({ token: t.device_token.slice(0, 8) + "…", platform: t.platform, ...r }))
+    )
+  );
+  // Log after sends so a slow Supabase insert doesn't stall APNs delivery.
+  await Promise.all(results.map((r, i) => logSend(env, {
+    recipient_id: recipient_clerk_user_id, sender_id: admin_clerk_user_id,
+    category: "admin_direct", title, body: msgBody, payload: payload || null,
+    apns_status: r.status, apns_response: r.response,
+  })));
   const sent = results.filter(r => r.status === 200).length;
-  return jsonResponse({ sent, tried: results.length, results });
+  return jsonResponse({ sent, tried: results.length });
 }
 
 // ─── Auto-push from Supabase DB webhooks ─────────────────────────────────────
@@ -592,31 +666,71 @@ function formatNotifCopy(type, actorName, restaurantName) {
   }
 }
 
-async function dispatchPush(env, recipientId, senderId, category, title, body, payload) {
+async function dispatchPush(env, recipientId, senderId, category, title, body, payload, logBody) {
+  // `logBody` (optional) is the body to persist to notifications_log when it
+  // differs from what's delivered to APNs — specifically for DMs, where we
+  // want the preview on the device but a generic placeholder in the admin log
+  // to avoid exposing private message content in the admin History UI.
+  const storedBody = logBody ?? body;
   const tokens = await tokensForUser(env, recipientId);
   if (tokens.length === 0) {
     await logSend(env, {
-      recipient_id: recipientId, sender_id: senderId, category, title, body,
+      recipient_id: recipientId, sender_id: senderId, category, title, body: storedBody,
       payload: payload || null, apns_status: null, apns_response: "No tokens on file",
     });
     return { sent: 0, tried: 0, note: "no devices" };
   }
   const jwt = await getApnsJwt(env);
-  const results = [];
-  for (const t of tokens) {
-    const r = await sendOne(env, jwt, t.device_token, t.platform, title, body, payload);
-    results.push({ status: r.status });
-    await logSend(env, {
-      recipient_id: recipientId, sender_id: senderId, category, title, body,
-      payload: payload || null, apns_status: r.status, apns_response: r.response,
-    });
-  }
+  // Parallelise — user may have multiple devices; no reason to send serially.
+  const results = await Promise.all(
+    tokens.map(t => sendOne(env, jwt, t.device_token, t.platform, title, body, payload))
+  );
+  await Promise.all(results.map(r => logSend(env, {
+    recipient_id: recipientId, sender_id: senderId, category, title, body: storedBody,
+    payload: payload || null, apns_status: r.status, apns_response: r.response,
+  })));
   return { sent: results.filter(r => r.status === 200).length, tried: results.length };
+}
+
+// Codepoint-safe truncation. `String.prototype.slice` works in UTF-16 code
+// units; cutting in the middle of a surrogate pair (e.g. most emoji) produces
+// a lone surrogate that iOS renders as U+FFFD (replacement char). This slices
+// by codepoint and strips any dangling combining marks at the seam.
+function truncateSafe(s, max) {
+  const cps = Array.from(s);
+  if (cps.length <= max) return s;
+  return cps.slice(0, max - 1).join("") + "…";
+}
+
+// In-memory dedup cache so Supabase webhook retries (at-least-once delivery)
+// don't re-push already-delivered events. Scoped to a single Worker isolate
+// lifetime — for stronger guarantees across restarts we'd need a unique
+// constraint on notifications_log(payload->notification_id). Good enough for
+// the retry-within-seconds case that's by far the most common.
+const DISPATCHED_RECENTLY = new Map();
+const DEDUP_TTL_MS = 5 * 60 * 1000;
+function markDispatched(key) {
+  const now = Date.now();
+  DISPATCHED_RECENTLY.set(key, now);
+  if (DISPATCHED_RECENTLY.size > 500) {
+    for (const [k, t] of DISPATCHED_RECENTLY) {
+      if (now - t > DEDUP_TTL_MS) DISPATCHED_RECENTLY.delete(k);
+    }
+  }
+}
+function alreadyDispatched(key) {
+  const t = DISPATCHED_RECENTLY.get(key);
+  if (!t) return false;
+  if (Date.now() - t > DEDUP_TTL_MS) {
+    DISPATCHED_RECENTLY.delete(key);
+    return false;
+  }
+  return true;
 }
 
 async function handlePushEvent(request, env) {
   const secret = request.headers.get("x-webhook-secret");
-  if (!env.SUPABASE_WEBHOOK_SECRET || secret !== env.SUPABASE_WEBHOOK_SECRET) {
+  if (!env.SUPABASE_WEBHOOK_SECRET || !timingSafeEqual(secret || "", env.SUPABASE_WEBHOOK_SECRET)) {
     return jsonResponse({ error: "Not authorized" }, 401);
   }
   let payload;
@@ -633,6 +747,10 @@ async function handlePushEvent(request, env) {
     if (from_user_id && from_user_id === user_id) {
       return jsonResponse({ ok: true, skipped: "self-action" });
     }
+    const dedupKey = `notif:${id}`;
+    if (alreadyDispatched(dedupKey)) {
+      return jsonResponse({ ok: true, skipped: "already dispatched (retry)" });
+    }
     const prefKey = mapNotifTypeToPrefKey(type);
     if (!(await isNotifPrefEnabled(env, user_id, prefKey))) {
       return jsonResponse({ ok: true, skipped: "pref disabled", type });
@@ -640,6 +758,7 @@ async function handlePushEvent(request, env) {
     const actorName = await getDisplayName(env, from_user_id);
     const { title, body } = formatNotifCopy(type, actorName, restaurant_name);
     const result = await dispatchPush(env, user_id, from_user_id, type, title, body, { notification_id: id, kind: type });
+    markDispatched(dedupKey);
     return jsonResponse({ ok: true, ...result, type });
   }
 
@@ -649,16 +768,29 @@ async function handlePushEvent(request, env) {
     if (sender_id === recipient_id) {
       return jsonResponse({ ok: true, skipped: "self-message" });
     }
+    const dedupKey = `msg:${id}`;
+    if (alreadyDispatched(dedupKey)) {
+      return jsonResponse({ ok: true, skipped: "already dispatched (retry)" });
+    }
     const senderName = await getDisplayName(env, sender_id);
     let body;
     if (content && content.trim()) {
-      body = content.length > 120 ? content.slice(0, 117) + "…" : content;
+      body = truncateSafe(content, 120);
     } else if (restaurant_name) {
       body = `shared ${restaurant_name} 🍽`;
     } else {
       body = "sent you a message";
     }
-    const result = await dispatchPush(env, recipient_id, sender_id, "new_dm", senderName, body, { message_id: id, conversation_with: sender_id });
+    // Do NOT persist raw DM content in notifications_log — it would let any
+    // admin read private messages in the Push History UI. Keep the preview
+    // on-device (via APNs body) but write a generic placeholder to the log.
+    const logBody = "new direct message";
+    const result = await dispatchPush(
+      env, recipient_id, sender_id, "new_dm", senderName, body,
+      { message_id: id, conversation_with: sender_id },
+      logBody
+    );
+    markDispatched(dedupKey);
     return jsonResponse({ ok: true, ...result });
   }
 
@@ -670,22 +802,36 @@ async function handlePushBroadcast(request, env) {
   try { body = await request.json(); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
   const { admin_clerk_user_id, title, body: msgBody, payload } = body;
   if (!title || !msgBody) return jsonResponse({ error: "Missing title or body" }, 400);
-  if (!(await verifyAdmin(env, admin_clerk_user_id))) {
-    return jsonResponse({ error: "Not authorized" }, 403);
-  }
+  const auth = await verifyAdminAuth(request, env, body);
+  if (!auth.ok) return jsonResponse({ error: auth.error }, auth.code);
+
   const tokens = await allTokens(env);
   if (tokens.length === 0) return jsonResponse({ sent: 0, note: "no registered devices" });
   const jwt = await getApnsJwt(env);
-  let sent = 0, failed = 0;
-  for (const t of tokens) {
-    const r = await sendOne(env, jwt, t.device_token, t.platform, title, msgBody, payload);
-    if (r.status === 200) sent++; else failed++;
-    await logSend(env, {
-      recipient_id: t.clerk_user_id, sender_id: admin_clerk_user_id,
-      category: "admin_broadcast", title, body: msgBody, payload: payload || null,
-      apns_status: r.status, apns_response: r.response,
-    });
+
+  // Parallelise sends in chunks. Serial loops hit the 30s wall-time limit
+  // around ~200-400 users (2 subrequests each); Promise.all in chunks of
+  // CHUNK keeps latency flat at ~APNs RTT regardless of fleet size.
+  // Cloudflare Workers cap subrequests at 1000/request on the paid plan — so
+  // one broadcast scales cleanly to ~500 devices without hitting limits.
+  // For larger fleets, offload to a Cloudflare Queue.
+  const CHUNK = 50;
+  const results = [];
+  for (let i = 0; i < tokens.length; i += CHUNK) {
+    const chunk = tokens.slice(i, i + CHUNK);
+    const chunkResults = await Promise.all(chunk.map((t, idx) =>
+      sendOne(env, jwt, t.device_token, t.platform, title, msgBody, payload)
+        .then(r => ({ clerk_user_id: t.clerk_user_id, ...r }))
+    ));
+    results.push(...chunkResults);
   }
+  await Promise.all(results.map(r => logSend(env, {
+    recipient_id: r.clerk_user_id, sender_id: admin_clerk_user_id,
+    category: "admin_broadcast", title, body: msgBody, payload: payload || null,
+    apns_status: r.status, apns_response: r.response,
+  })));
+  const sent = results.filter(r => r.status === 200).length;
+  const failed = results.length - sent;
   return jsonResponse({ sent, failed, tried: tokens.length });
 }
 
@@ -707,18 +853,20 @@ export default {
       return handleCrawl(request);
     }
 
-    // Push notification routes
+    // Push notification routes. Errors are logged but NOT returned verbatim —
+    // `err.message` can contain PostgREST payloads (column names, hints) that
+    // leak schema to unauthenticated callers.
     if (request.method === "POST" && path === "/push/send") {
       try { return await handlePushSend(request, env); }
-      catch (err) { return jsonResponse({ error: err.message }, 500); }
+      catch (err) { console.log("[push/send] error:", err.message); return jsonResponse({ error: "Internal error" }, 500); }
     }
     if (request.method === "POST" && path === "/push/broadcast") {
       try { return await handlePushBroadcast(request, env); }
-      catch (err) { return jsonResponse({ error: err.message }, 500); }
+      catch (err) { console.log("[push/broadcast] error:", err.message); return jsonResponse({ error: "Internal error" }, 500); }
     }
     if (request.method === "POST" && path === "/push/event") {
       try { return await handlePushEvent(request, env); }
-      catch (err) { return jsonResponse({ error: err.message }, 500); }
+      catch (err) { console.log("[push/event] error:", err.message); return jsonResponse({ error: "Internal error" }, 500); }
     }
 
     // Auto-research routes

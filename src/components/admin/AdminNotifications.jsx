@@ -58,7 +58,10 @@ export default function AdminNotifications({ userId }) {
       };
       const res = await fetch(`${WORKER_URL}${path}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-secret": import.meta.env.VITE_ADMIN_PUSH_SECRET || "",
+        },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
