@@ -347,6 +347,348 @@ async function runAutoResearch(env) {
   }
 }
 
+// ╔════════════════════════════════════════════════════════╗
+// ║  PUSH NOTIFICATIONS  (APNs via token-based auth)       ║
+// ╚════════════════════════════════════════════════════════╝
+//
+// Env vars required in Cloudflare:
+//   APNS_KEY_ID      — 10-char Key ID from the APNs auth key (e.g. 4F3FCFBNHR)
+//   APNS_TEAM_ID     — 10-char Apple Team ID (e.g. Q7JF27M927)
+//   APNS_BUNDLE_ID   — com.cookedapp.cooked
+//   APNS_P8_KEY      — full .p8 file contents (multi-line PEM, including
+//                      -----BEGIN PRIVATE KEY----- / -----END PRIVATE KEY-----)
+//   SUPABASE_URL              — https://jfwtyqyglxknubvhgifw.supabase.co
+//   SUPABASE_SERVICE_ROLE_KEY — service role key (server-side only, bypasses RLS)
+//
+//   SUPABASE_WEBHOOK_SECRET  — shared secret sent in `x-webhook-secret` header
+//                              from Supabase Database Webhooks (follows, DMs, etc.)
+//
+// Endpoints:
+//   POST /push/send       — admin → one user
+//   POST /push/broadcast  — admin → every user with a token
+//   POST /push/event      — Supabase DB webhook → auto-pushes for follows/DMs/etc.
+//
+// Auth:
+//   /push/send, /push/broadcast — body.admin_clerk_user_id must match a
+//                                 user_data row with is_admin=true.
+//   /push/event — x-webhook-secret header must equal SUPABASE_WEBHOOK_SECRET.
+
+const APNS_JWT_CACHE = { token: null, expiresAt: 0 };
+
+function base64UrlEncode(bytes) {
+  let s = btoa(String.fromCharCode(...new Uint8Array(bytes)));
+  return s.replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+function base64UrlEncodeString(str) {
+  return base64UrlEncode(new TextEncoder().encode(str));
+}
+
+function pemToArrayBuffer(pem) {
+  const b64 = pem
+    .replace(/-----BEGIN [^-]+-----/g, "")
+    .replace(/-----END [^-]+-----/g, "")
+    .replace(/\s+/g, "");
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
+async function getApnsJwt(env) {
+  const now = Math.floor(Date.now() / 1000);
+  if (APNS_JWT_CACHE.token && APNS_JWT_CACHE.expiresAt > now + 60) {
+    return APNS_JWT_CACHE.token;
+  }
+  const header = { alg: "ES256", kid: env.APNS_KEY_ID, typ: "JWT" };
+  const claims = { iss: env.APNS_TEAM_ID, iat: now };
+  const signingInput =
+    base64UrlEncodeString(JSON.stringify(header)) + "." +
+    base64UrlEncodeString(JSON.stringify(claims));
+  const keyData = pemToArrayBuffer(env.APNS_P8_KEY);
+  const cryptoKey = await crypto.subtle.importKey(
+    "pkcs8", keyData,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    cryptoKey,
+    new TextEncoder().encode(signingInput)
+  );
+  const jwt = signingInput + "." + base64UrlEncode(sig);
+  APNS_JWT_CACHE.token = jwt;
+  APNS_JWT_CACHE.expiresAt = now + 50 * 60;
+  return jwt;
+}
+
+async function sbFetch(env, path, init = {}) {
+  const url = `${env.SUPABASE_URL}/rest/v1/${path}`;
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      "apikey": env.SUPABASE_SERVICE_ROLE_KEY,
+      "Authorization": `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      ...(init.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Supabase ${res.status}: ${text}`);
+  }
+  return res;
+}
+
+async function verifyAdmin(env, clerkUserId) {
+  if (!clerkUserId) return false;
+  const res = await sbFetch(env,
+    `user_data?clerk_user_id=eq.${encodeURIComponent(clerkUserId)}&select=is_admin&limit=1`
+  );
+  const rows = await res.json();
+  return rows.length > 0 && rows[0].is_admin === true;
+}
+
+async function tokensForUser(env, clerkUserId) {
+  const res = await sbFetch(env,
+    `user_push_tokens?clerk_user_id=eq.${encodeURIComponent(clerkUserId)}&select=device_token,platform`
+  );
+  return res.json();
+}
+
+async function allTokens(env) {
+  const res = await sbFetch(env,
+    `user_push_tokens?select=clerk_user_id,device_token,platform`
+  );
+  return res.json();
+}
+
+async function logSend(env, entry) {
+  try {
+    await sbFetch(env, "notifications_log", {
+      method: "POST",
+      body: JSON.stringify(entry),
+    });
+  } catch (err) {
+    console.log("[push] log write failed:", err.message);
+  }
+}
+
+async function sendOne(env, jwt, token, platform, title, body, payload) {
+  const host = platform === "ios_sandbox"
+    ? "api.sandbox.push.apple.com"
+    : "api.push.apple.com";
+  const apsPayload = {
+    aps: { alert: { title, body }, sound: "default", badge: 1 },
+    ...(payload || {}),
+  };
+  const res = await fetch(`https://${host}/3/device/${token}`, {
+    method: "POST",
+    headers: {
+      "authorization": `bearer ${jwt}`,
+      "apns-topic": env.APNS_BUNDLE_ID,
+      "apns-push-type": "alert",
+      "apns-priority": "10",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(apsPayload),
+  });
+  const responseText = res.ok ? "" : await res.text();
+  return { status: res.status, response: responseText };
+}
+
+async function handlePushSend(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
+  const { admin_clerk_user_id, recipient_clerk_user_id, title, body: msgBody, payload } = body;
+  if (!title || !msgBody || !recipient_clerk_user_id) {
+    return jsonResponse({ error: "Missing title, body, or recipient_clerk_user_id" }, 400);
+  }
+  if (!(await verifyAdmin(env, admin_clerk_user_id))) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  const tokens = await tokensForUser(env, recipient_clerk_user_id);
+  if (tokens.length === 0) {
+    await logSend(env, {
+      recipient_id: recipient_clerk_user_id, sender_id: admin_clerk_user_id,
+      category: "admin_broadcast", title, body: msgBody, payload: payload || null,
+      apns_status: null, apns_response: "No tokens on file",
+    });
+    return jsonResponse({ sent: 0, note: "recipient has no registered devices" });
+  }
+  const jwt = await getApnsJwt(env);
+  const results = [];
+  for (const t of tokens) {
+    const r = await sendOne(env, jwt, t.device_token, t.platform, title, msgBody, payload);
+    results.push({ token: t.device_token.slice(0, 8) + "…", platform: t.platform, ...r });
+    await logSend(env, {
+      recipient_id: recipient_clerk_user_id, sender_id: admin_clerk_user_id,
+      category: "admin_broadcast", title, body: msgBody, payload: payload || null,
+      apns_status: r.status, apns_response: r.response,
+    });
+  }
+  const sent = results.filter(r => r.status === 200).length;
+  return jsonResponse({ sent, tried: results.length, results });
+}
+
+// ─── Auto-push from Supabase DB webhooks ─────────────────────────────────────
+//
+// Supabase Database Webhook POSTs JSON like:
+//   { type: "INSERT", table: "notifications", record: { ... }, old_record: null }
+// We wire two webhooks in the Supabase dashboard (notifications INSERT,
+// messages INSERT). Both hit this one endpoint with the shared secret header.
+
+function mapNotifTypeToPrefKey(type) {
+  // notifications.type → notification_prefs.type (key mismatch for one row)
+  if (type === "friend_visited_city") return "friend_visited_your_city";
+  return type;
+}
+
+async function isNotifPrefEnabled(env, clerkUserId, prefKey) {
+  // notification_prefs stores each pref key as its own column on a single
+  // row-per-user, e.g. { clerk_user_id, followed_you, friend_new_find, ... }.
+  try {
+    const res = await sbFetch(env,
+      `notification_prefs?clerk_user_id=eq.${encodeURIComponent(clerkUserId)}&select=*&limit=1`
+    );
+    const rows = await res.json();
+    if (rows.length === 0) return true; // no prefs row yet → default ON
+    const val = rows[0][prefKey];
+    if (val === undefined || val === null) return true; // column missing / unset → default ON
+    return val !== false;
+  } catch (err) {
+    console.log("[push] pref lookup failed:", err.message);
+    return true; // fail open — better to send than drop
+  }
+}
+
+async function getDisplayName(env, clerkUserId) {
+  if (!clerkUserId) return "Someone";
+  try {
+    const res = await sbFetch(env,
+      `user_data?clerk_user_id=eq.${encodeURIComponent(clerkUserId)}&select=profile_name,profile_username&limit=1`
+    );
+    const rows = await res.json();
+    if (rows.length === 0) return "Someone";
+    const r = rows[0];
+    return r.profile_name || r.profile_username || "Someone";
+  } catch { return "Someone"; }
+}
+
+function formatNotifCopy(type, actorName, restaurantName) {
+  const rest = restaurantName || "a restaurant";
+  switch (type) {
+    case "followed_you":
+      return { title: "New follower", body: `${actorName} started following you` };
+    case "friend_loved_your_watchlist":
+      return { title: "Watchlist love", body: `${actorName} loved ${rest}` };
+    case "friend_new_find":
+      return { title: "New find", body: `${actorName} added ${restaurantName ? rest : "a new find"}` };
+    case "friend_visited_city":
+      return { title: "Friend in your city", body: `${actorName} checked out ${rest}` };
+    case "restaurant_trending":
+      return { title: "Trending 🔥", body: `${rest} is trending right now` };
+    default:
+      return { title: "cooked", body: `${actorName} has an update for you` };
+  }
+}
+
+async function dispatchPush(env, recipientId, senderId, category, title, body, payload) {
+  const tokens = await tokensForUser(env, recipientId);
+  if (tokens.length === 0) {
+    await logSend(env, {
+      recipient_id: recipientId, sender_id: senderId, category, title, body,
+      payload: payload || null, apns_status: null, apns_response: "No tokens on file",
+    });
+    return { sent: 0, tried: 0, note: "no devices" };
+  }
+  const jwt = await getApnsJwt(env);
+  const results = [];
+  for (const t of tokens) {
+    const r = await sendOne(env, jwt, t.device_token, t.platform, title, body, payload);
+    results.push({ status: r.status });
+    await logSend(env, {
+      recipient_id: recipientId, sender_id: senderId, category, title, body,
+      payload: payload || null, apns_status: r.status, apns_response: r.response,
+    });
+  }
+  return { sent: results.filter(r => r.status === 200).length, tried: results.length };
+}
+
+async function handlePushEvent(request, env) {
+  const secret = request.headers.get("x-webhook-secret");
+  if (!env.SUPABASE_WEBHOOK_SECRET || secret !== env.SUPABASE_WEBHOOK_SECRET) {
+    return jsonResponse({ error: "Not authorized" }, 401);
+  }
+  let payload;
+  try { payload = await request.json(); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
+  if (payload.type !== "INSERT") {
+    return jsonResponse({ ok: true, skipped: `non-insert event (${payload.type})` });
+  }
+  const table = payload.table;
+  const record = payload.record || {};
+
+  if (table === "notifications") {
+    const { user_id, type, from_user_id, restaurant_name, id } = record;
+    if (!user_id || !type) return jsonResponse({ error: "Missing user_id or type" }, 400);
+    if (from_user_id && from_user_id === user_id) {
+      return jsonResponse({ ok: true, skipped: "self-action" });
+    }
+    const prefKey = mapNotifTypeToPrefKey(type);
+    if (!(await isNotifPrefEnabled(env, user_id, prefKey))) {
+      return jsonResponse({ ok: true, skipped: "pref disabled", type });
+    }
+    const actorName = await getDisplayName(env, from_user_id);
+    const { title, body } = formatNotifCopy(type, actorName, restaurant_name);
+    const result = await dispatchPush(env, user_id, from_user_id, type, title, body, { notification_id: id, kind: type });
+    return jsonResponse({ ok: true, ...result, type });
+  }
+
+  if (table === "messages") {
+    const { sender_id, recipient_id, content, restaurant_name, id } = record;
+    if (!recipient_id) return jsonResponse({ error: "Missing recipient_id" }, 400);
+    if (sender_id === recipient_id) {
+      return jsonResponse({ ok: true, skipped: "self-message" });
+    }
+    const senderName = await getDisplayName(env, sender_id);
+    let body;
+    if (content && content.trim()) {
+      body = content.length > 120 ? content.slice(0, 117) + "…" : content;
+    } else if (restaurant_name) {
+      body = `shared ${restaurant_name} 🍽`;
+    } else {
+      body = "sent you a message";
+    }
+    const result = await dispatchPush(env, recipient_id, sender_id, "new_dm", senderName, body, { message_id: id, conversation_with: sender_id });
+    return jsonResponse({ ok: true, ...result });
+  }
+
+  return jsonResponse({ ok: true, skipped: `unknown table ${table}` });
+}
+
+async function handlePushBroadcast(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return jsonResponse({ error: "Invalid JSON" }, 400); }
+  const { admin_clerk_user_id, title, body: msgBody, payload } = body;
+  if (!title || !msgBody) return jsonResponse({ error: "Missing title or body" }, 400);
+  if (!(await verifyAdmin(env, admin_clerk_user_id))) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  const tokens = await allTokens(env);
+  if (tokens.length === 0) return jsonResponse({ sent: 0, note: "no registered devices" });
+  const jwt = await getApnsJwt(env);
+  let sent = 0, failed = 0;
+  for (const t of tokens) {
+    const r = await sendOne(env, jwt, t.device_token, t.platform, title, msgBody, payload);
+    if (r.status === 200) sent++; else failed++;
+    await logSend(env, {
+      recipient_id: t.clerk_user_id, sender_id: admin_clerk_user_id,
+      category: "admin_broadcast", title, body: msgBody, payload: payload || null,
+      apns_status: r.status, apns_response: r.response,
+    });
+  }
+  return jsonResponse({ sent, failed, tried: tokens.length });
+}
+
 // ── Main handler ──────────────────────────────────────────
 export default {
   async fetch(request, env) {
@@ -363,6 +705,20 @@ export default {
     }
     if (request.method === "POST" && path === "/crawl") {
       return handleCrawl(request);
+    }
+
+    // Push notification routes
+    if (request.method === "POST" && path === "/push/send") {
+      try { return await handlePushSend(request, env); }
+      catch (err) { return jsonResponse({ error: err.message }, 500); }
+    }
+    if (request.method === "POST" && path === "/push/broadcast") {
+      try { return await handlePushBroadcast(request, env); }
+      catch (err) { return jsonResponse({ error: err.message }, 500); }
+    }
+    if (request.method === "POST" && path === "/push/event") {
+      try { return await handlePushEvent(request, env); }
+      catch (err) { return jsonResponse({ error: err.message }, 500); }
     }
 
     // Auto-research routes
@@ -404,7 +760,7 @@ export default {
       }
     }
 
-    return jsonResponse({ error: "Not found", routes: ["/", "/fetch-url", "/crawl", "/auto-research/run", "/auto-research/status"] }, 404);
+    return jsonResponse({ error: "Not found", routes: ["/", "/fetch-url", "/crawl", "/auto-research/run", "/auto-research/status", "/push/send", "/push/broadcast", "/push/event"] }, 404);
   },
 
   // ── Cron trigger (twice a week) ─────────────────────────

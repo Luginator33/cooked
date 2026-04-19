@@ -10,6 +10,7 @@ import AdminSystem from "./AdminSystem";
 import AdminImports from "./AdminImports";
 import AdminCities from "./AdminCities";
 import AdminBugReports from "./AdminBugReports";
+import AdminNotifications from "./AdminNotifications";
 import BugReportButton from "../BugReportButton";
 const TABS = [
   { key: "bugs", label: "🆘 Bugs" },
@@ -19,6 +20,7 @@ const TABS = [
   { key: "users", label: "Users" },
   { key: "photos", label: "Photos" },
   { key: "content", label: "Content" },
+  { key: "notifications", label: "📣 Push" },
   { key: "analytics", label: "Analytics" },
   { key: "system", label: "System" },
 ];
@@ -102,6 +104,7 @@ export default function AdminPanel({ onClose, allRestaurants, userId, onRestaura
               {tab === "users" && <AdminUsers {...tabProps} />}
               {tab === "photos" && <AdminPhotos {...tabProps} />}
               {tab === "content" && <AdminContent {...tabProps} />}
+              {tab === "notifications" && <AdminNotifications {...tabProps} />}
               {tab === "analytics" && <AdminAnalytics {...tabProps} />}
               {tab === "system" && <AdminSystem {...tabProps} />}
             </>
