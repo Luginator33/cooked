@@ -1337,7 +1337,7 @@ export default function Discover({ tasteProfile, initialTab }) {
       const esc = q.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_").replace(/,/g, "").replace(/"/g, '\\"');
       const pattern = `%${esc}%`;
       let req = supabase
-        .from("user_data")
+        .from("user_public")
         .select("*")
         .or(`profile_username.ilike."${pattern}",profile_name.ilike."${pattern}"`)
         .limit(20);
@@ -1399,15 +1399,18 @@ export default function Discover({ tasteProfile, initialTab }) {
         return;
       }
       setFollowingPicksNoFollows(false);
-      // Fetch friend profiles for "Your Friends" section
+      // Fetch friend profiles for "Your Friends" section (RLS-safe view)
       const { data: friendProfiles } = await supabase
-        .from("user_data")
+        .from("user_public")
         .select("clerk_user_id, profile_name, profile_username, profile_photo")
         .in("clerk_user_id", followingIds);
       if (!cancelled) setYourFriends((friendProfiles || []).filter(p => p.clerk_user_id !== user.id));
+      // Friends' loved + watchlist (heat is now owner-only since it's the
+      // private swipe-game state — `row.loved` is the public love list and
+      // it's already synced from heat.loved at write time).
       const { data: userRows, error } = await supabase
-        .from("user_data")
-        .select("loved,watchlist,heat,clerk_user_id")
+        .from("user_public")
+        .select("loved,watchlist,clerk_user_id")
         .in("clerk_user_id", followingIds);
       if (cancelled) return;
       if (error) {
@@ -1550,7 +1553,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     // Enrich with user profile data
     const partnerIds = inbox.map(c => c.partnerId);
     if (partnerIds.length) {
-      const { data: profiles } = await supabase.from('user_data').select('clerk_user_id, profile_name, profile_username, profile_photo').in('clerk_user_id', partnerIds);
+      const { data: profiles } = await supabase.from('user_public').select('clerk_user_id, profile_name, profile_username, profile_photo').in('clerk_user_id', partnerIds);
       const profileMap = {};
       (profiles || []).forEach(p => { profileMap[p.clerk_user_id] = p; });
       inbox.forEach(c => {
@@ -1622,7 +1625,7 @@ export default function Discover({ tasteProfile, initialTab }) {
         const { data } = await getFollowing(user?.id);
         if (!data?.length) return setDmShareResults([]);
         const ids = data.map(f => f.following_id);
-        const { data: profiles } = await supabase.from('user_data').select('clerk_user_id, profile_name, profile_username, profile_photo').in('clerk_user_id', ids);
+        const { data: profiles } = await supabase.from('user_public').select('clerk_user_id, profile_name, profile_username, profile_photo').in('clerk_user_id', ids);
         setDmShareResults(profiles || []);
       })();
       return;
@@ -1630,7 +1633,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     const timer = setTimeout(async () => {
       const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
       const pattern = `%${esc}%`;
-      const { data } = await supabase.from('user_data').select('clerk_user_id, profile_name, profile_username, profile_photo')
+      const { data } = await supabase.from('user_public').select('clerk_user_id, profile_name, profile_username, profile_photo')
         .or(`profile_username.ilike."${pattern}",profile_name.ilike."${pattern}"`).neq('clerk_user_id', user?.id).limit(10);
       setDmShareResults(data || []);
     }, 300);
@@ -1656,7 +1659,7 @@ export default function Discover({ tasteProfile, initialTab }) {
     const userIds = [...new Set(rows.map(r => r.from_user_id).filter(Boolean))];
     const userProfiles = {};
     if (userIds.length > 0) {
-      const { data: profiles } = await supabase.from("user_data").select("clerk_user_id, profile_name, profile_username, profile_photo").in("clerk_user_id", userIds);
+      const { data: profiles } = await supabase.from("user_public").select("clerk_user_id, profile_name, profile_username, profile_photo").in("clerk_user_id", userIds);
       (profiles || []).forEach(p => { userProfiles[p.clerk_user_id] = p; });
     }
     const enriched = rows.map(r => ({

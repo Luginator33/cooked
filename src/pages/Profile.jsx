@@ -451,7 +451,7 @@ export default function Profile({
       // Batch check which users exist in user_data
       const allIds = [...new Set([...followerIds, ...followingIds])];
       if (allIds.length > 0) {
-        const { data: existing } = await supabase.from('user_data').select('clerk_user_id').in('clerk_user_id', allIds);
+        const { data: existing } = await supabase.from('user_public').select('clerk_user_id').in('clerk_user_id', allIds);
         const existingIds = new Set((existing || []).map(u => u.clerk_user_id));
         setFollowersCount(followerIds.filter(id => existingIds.has(id)).length);
         setFollowingCount(followingIds.filter(id => existingIds.has(id)).length);
@@ -494,9 +494,10 @@ export default function Profile({
       setSocialModal({ title: kind === "followers" ? "Followers" : "Following", users: [], loading: false });
       return;
     }
-    // Batch query — single request instead of N individual getUserProfile calls
+    // Batch query — single request instead of N individual getUserProfile calls.
+    // user_public is the RLS-safe view that exposes only non-PII columns.
     const { data: profiles } = await supabase
-      .from('user_data')
+      .from('user_public')
       .select('clerk_user_id, profile_name, profile_username, profile_photo')
       .in('clerk_user_id', ids);
     const results = (profiles || []).map(data => {

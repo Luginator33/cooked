@@ -1120,7 +1120,8 @@ function SignUpSlide({ onNext, onSignIn, onBack }) {
     setLoading(true);
     try {
       // Check username uniqueness
-      const { data: existing } = await supabase.from("user_data").select("clerk_user_id").eq("profile_username", form.username.trim()).limit(1);
+      // user_public is the RLS-safe view that anon can read during sign-up.
+      const { data: existing } = await supabase.from("user_public").select("clerk_user_id").eq("profile_username", form.username.trim()).limit(1);
       if (existing?.length > 0) {
         setError("That username is already taken. Please choose another.");
         setLoading(false);
@@ -1204,7 +1205,8 @@ function SignUpSlide({ onNext, onSignIn, onBack }) {
     setLoading(true);
     try {
       // Check username uniqueness
-      const { data: existing } = await supabase.from("user_data").select("clerk_user_id").eq("profile_username", form.username.trim()).limit(1);
+      // user_public is the RLS-safe view that anon can read during sign-up.
+      const { data: existing } = await supabase.from("user_public").select("clerk_user_id").eq("profile_username", form.username.trim()).limit(1);
       if (existing?.length > 0) {
         setError("That username is already taken. Please choose another.");
         setLoading(false);

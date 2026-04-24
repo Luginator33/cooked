@@ -3,7 +3,36 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Supabase Third-Party Auth (TPA) integration with Clerk.
+//
+// Before: this client passed only the anon key, so every PWA query ran
+// as the anon role. That worked while RLS was wide open, but the
+// Phase 2/3 lockdown (April 2026) introduced owner-only and admin-only
+// policies that depend on auth.jwt() ->> 'sub' to identify the caller.
+// Without the JWT, signed-in users couldn't load their own profile,
+// love a restaurant, follow anyone, or read their DMs.
+//
+// After: the `accessToken` callback runs before every request and
+// returns Clerk's standard session JWT. Supabase trusts Clerk via TPA
+// (configured in the dashboard under Authentication → Third-Party Auth)
+// and validates the JWT against Clerk's JWKS. The JWT's `sub` claim is
+// the Clerk user ID, which is exactly what our RLS policies compare to.
+//
+// Falls back to the anon key when nobody's signed in (splash, sign-in
+// screen, public restaurant browse) so those still work.
+async function getClerkToken() {
+  try {
+    // window.Clerk is set by ClerkProvider after the SDK loads.
+    return (await window.Clerk?.session?.getToken?.()) ?? null
+  } catch (err) {
+    console.warn('[Supabase] Clerk getToken failed:', err)
+    return null
+  }
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  accessToken: async () => await getClerkToken(),
+})
 
 // ── UNIFIED RESTAURANT TABLE ────────────────────────────────
 // Field mapping: DB snake_case ↔ JS camelCase
@@ -419,10 +448,13 @@ export async function getFollowedCities(clerkUserId) {
   return { data, error }
 }
 
-// Get user profile data by clerk_user_id
+// Get user profile data by clerk_user_id.
+// Reads from `user_public` (the RLS-safe view that excludes email, dob,
+// is_admin, admin_permissions). Admin tooling that needs the full row
+// should call into the admin-specific helpers below.
 export async function getUserProfile(clerkUserId) {
   const { data, error } = await supabase
-    .from('user_data')
+    .from('user_public')
     .select('*')
     .eq('clerk_user_id', clerkUserId)
     .single()
