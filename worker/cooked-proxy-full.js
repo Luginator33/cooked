@@ -130,20 +130,20 @@ async function handleExtractFromSocial(request, env) {
     }
   }
 
-  // Phase 2: if HTML metadata didn't give us a concrete place name
-  // (no POI tag, caption is empty or hashtag-only), kick off the
-  // transcribe service to "watch" the video. yt-dlp + Whisper turns
-  // the audio into text we can hand to Claude.
+  // Phase 2: kick off the transcribe service whenever we don't have a
+  // TikTok POI tag. yt-dlp + Whisper turns the audio into text we can
+  // hand to Claude.
   //
-  // Heuristic for "should we transcribe":
-  //   - No POI tag (so we don't already know the place)
-  //   - AND (no caption OR caption is mostly hashtags / under 20 chars)
-  //
-  // Instagram ALWAYS gets transcribed because we have no other signal.
-  const captionLooksThin = !signals.caption
-    || signals.caption.length < 20
-    || isMostlyHashtags(signals.caption);
-  const shouldTranscribe = !signals.poi && (isInstagram || captionLooksThin);
+  // Why aggressive (transcribe even when there's a caption):
+  //   - Captions on TikTok are overwhelmingly hashtag soup or short
+  //     teaser phrases ("the BEST omakase 😱"). The creator usually
+  //     names the place in the voiceover, not the caption.
+  //   - Whisper costs $0.006/video. At our 100-finds/mo target that's
+  //     $0.60/mo. The accuracy gain pays for itself instantly.
+  //   - Only skip when there's a POI tag — that's TikTok-confirmed
+  //     truth (the creator manually tagged the location), so the audio
+  //     can only confirm what we already know.
+  const shouldTranscribe = !signals.poi;
 
   let transcript = null;
   let transcribeError = null;
@@ -185,17 +185,6 @@ async function handleExtractFromSocial(request, env) {
     transcribeError,  // null on success, surfaced for debugging
     identifiedPlaces,
   });
-}
-
-// Heuristic — does a caption consist almost entirely of hashtags?
-// E.g. "#londonhotspots #traveltok #london #placestovisit #viral"
-// Returns true when 70%+ of word tokens start with #.
-function isMostlyHashtags(s) {
-  if (!s) return true;
-  const tokens = s.trim().split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return true;
-  const tags = tokens.filter(t => t.startsWith("#")).length;
-  return tags / tokens.length >= 0.7;
 }
 
 // Call the cooked-video-transcribe Render service. Returns the
@@ -302,17 +291,27 @@ async function extractTikTokSignals(url) {
       });
       if (fbRes.ok) {
         const fbHtml = await fbRes.text();
-        // og:description on TikTok looks like:
-        //   "80.4K likes, 237 comments. "actual caption goes here""
-        // We want just the caption part inside the inner quotes.
+        // og:description on TikTok looks like one of:
+        //   `80.4K likes, 237 comments. "actual caption"`     ← fancy quotes
+        //   `80.4K likes, 237 comments. "actual caption"`     ← straight quotes
+        //   `80.4K likes, 237 comments. actual caption`       ← no wrapping quotes
+        // First strip the "NK likes, M comments." prefix, then peel any
+        // quote wrapping around the remainder. Robust to all three.
         const ogDesc = fbHtml.match(/property="og:description"\s+content="([^"]+)"/)?.[1];
         if (ogDesc) {
-          // The inner caption is wrapped in fancy quotes “ ”.
-          // Fall back to plain quotes if the fancy ones aren't present.
-          const innerMatch = ogDesc.match(/“([^”]+)”/)
-            || ogDesc.match(/"([^"]+)"/);
-          caption = innerMatch ? decodeHtmlEntities(innerMatch[1].trim()) : decodeHtmlEntities(ogDesc);
-          console.log("[extract] OG-fallback caption:", caption?.slice(0, 100));
+          // “ and ” are the curly double quotes; using escapes
+          // here so the source bytes can't get mangled by a paste-into-
+          // editor that auto-corrects exotic chars.
+          let stripped = ogDesc
+            // "80.4K likes, 237 comments. " or "127 likes, 5 comments. "
+            .replace(/^\s*[\d.,]+K?\s+likes,?\s*\d*\s*comments?\.?\s*/i, "")
+            .trim();
+          // Peel one layer of wrapping quotes (curly or straight)
+          stripped = stripped
+            .replace(/^[“"](.*)[”"]\s*$/s, "$1")
+            .trim();
+          caption = decodeHtmlEntities(stripped || ogDesc);
+          console.log("[extract] OG-fallback caption:", caption?.slice(0, 120));
         }
         // og:title looks like "TikTok · Karen Vestli" — pull the
         // username out as a fallback author when the SSR blob is gone.
