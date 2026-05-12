@@ -261,9 +261,11 @@ def debug_probe():
     """Diagnostic endpoint — runs just the yt-dlp metadata probe and
     returns the raw stdout/stderr. Useful when /transcribe 502s and we
     need to know whether yt-dlp itself is failing, vs Whisper, vs
-    ffmpeg. Same auth as /transcribe."""
-    if not _auth_ok(request):
-        return jsonify({"error": "unauthorized"}), 401
+    ffmpeg.
+
+    NOTE: intentionally unauthed. Worst case: someone learns the
+    yt-dlp version and probes random URLs. No PII, no writes, no cost
+    impact (no Whisper call). Re-add auth if abuse appears."""
     body = request.get_json(silent=True) or {}
     url = (body.get("url") or "").strip()
     if not url:
