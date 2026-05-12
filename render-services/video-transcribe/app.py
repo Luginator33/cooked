@@ -37,6 +37,20 @@ import requests
 
 app = Flask(__name__)
 
+
+# Belt-and-suspenders: any uncaught exception (subprocess crash, OOM
+# kill, malformed JSON from yt-dlp) gets turned into a JSON 500 with
+# the actual message so the caller — and our Render logs — can see
+# what blew up. Without this, gunicorn returns a generic HTML 502
+# that swallows the cause.
+@app.errorhandler(Exception)
+def _handle_uncaught(e):
+    import traceback
+    print(f"[uncaught] {type(e).__name__}: {e}\n{traceback.format_exc()}", flush=True)
+    return jsonify({
+        "error": f"{type(e).__name__}: {e}",
+    }), 500
+
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
 SHARED_SECRET = os.environ.get("SHARED_SECRET", "").strip()
 
@@ -240,6 +254,57 @@ def health():
         "openai_configured": bool(OPENAI_API_KEY),
         "secret_configured": bool(SHARED_SECRET),
     })
+
+
+@app.route("/debug-probe", methods=["POST"])
+def debug_probe():
+    """Diagnostic endpoint — runs just the yt-dlp metadata probe and
+    returns the raw stdout/stderr. Useful when /transcribe 502s and we
+    need to know whether yt-dlp itself is failing, vs Whisper, vs
+    ffmpeg. Same auth as /transcribe."""
+    if not _auth_ok(request):
+        return jsonify({"error": "unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    url = (body.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "url required"}), 400
+
+    # Probe metadata
+    try:
+        proc = subprocess.run(
+            ["yt-dlp", "--dump-json", "--no-warnings", "--no-playlist",
+             "--socket-timeout", "20", url],
+            capture_output=True, text=True, timeout=30,
+        )
+        meta_ok = proc.returncode == 0
+        meta_summary = None
+        if meta_ok:
+            try:
+                m = json.loads(proc.stdout)
+                meta_summary = {
+                    "id": m.get("id"),
+                    "title": (m.get("title") or "")[:120],
+                    "duration": m.get("duration"),
+                    "ext": m.get("ext"),
+                    "extractor": m.get("extractor"),
+                    "uploader": m.get("uploader"),
+                    "description_len": len(m.get("description") or ""),
+                    "has_audio": "audio" in (m.get("ext") or "").lower() or m.get("acodec") not in (None, "none"),
+                }
+            except Exception as e:
+                meta_summary = {"parse_error": str(e)}
+        return jsonify({
+            "ytdlp_returncode": proc.returncode,
+            "ytdlp_stderr_tail": "\n".join((proc.stderr or "").splitlines()[-15:]),
+            "ytdlp_stdout_first_500": (proc.stdout or "")[:500],
+            "metadata": meta_summary,
+            "ffmpeg_check": subprocess.run(["which", "ffmpeg"], capture_output=True, text=True).stdout.strip() or "MISSING",
+            "ytdlp_version": subprocess.run(["yt-dlp", "--version"], capture_output=True, text=True).stdout.strip(),
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "yt-dlp probe timed out (30s)"}), 504
+    except Exception as e:
+        return jsonify({"error": f"probe crashed: {e}"}), 500
 
 
 if __name__ == "__main__":
