@@ -871,8 +871,17 @@ export default {
 
     // Auto-research routes
     if (request.method === "POST" && path === "/auto-research/run") {
-      const result = await runAutoResearch(env);
-      return jsonResponse(result);
+      // Don't await — the crawl can take 5-10 minutes (8 sources × 10
+      // pages × 5-10s/Claude call) which is well past any reasonable
+      // HTTP request budget. Background it with waitUntil() so the
+      // worker stays alive long enough to finish without blocking the
+      // client, and return immediately. Mirrors the scheduled() pattern.
+      ctx.waitUntil(runAutoResearch(env));
+      return jsonResponse({
+        success: true,
+        started: true,
+        message: "Auto-research started in background. Refresh Sources tab in 5-10 min to see updated crawl timestamps."
+      });
     }
     if (request.method === "GET" && path === "/auto-research/status") {
       try {
