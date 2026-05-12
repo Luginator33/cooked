@@ -415,8 +415,12 @@ def health():
 def debug_pipeline():
     """End-to-end pipeline trace, SKIPPING Whisper (to keep it free).
     Returns timing + intermediate state for each step so we can see
-    where a /transcribe call drops data on the floor. Unauthed —
-    safe because we don't actually call OpenAI."""
+    where a /transcribe call drops data on the floor.
+
+    Auth required — we don't want randos burning our Render dyno
+    downloading videos. Use the SHARED_SECRET set in env."""
+    if not _auth_ok(request):
+        return jsonify({"error": "unauthorized"}), 401
     body = request.get_json(silent=True) or {}
     url = (body.get("url") or "").strip()
     if not url:
@@ -476,7 +480,9 @@ def debug_probe():
     """Read-only diagnostic. Tries to resolve a URL via TikWM (and
     falls back to yt-dlp). Returns whichever signals we got. Doesn't
     actually download or transcribe — just tells you whether the
-    resolve step would have worked."""
+    resolve step would have worked. Auth required."""
+    if not _auth_ok(request):
+        return jsonify({"error": "unauthorized"}), 401
     body = request.get_json(silent=True) or {}
     url = (body.get("url") or "").strip()
     if not url:
