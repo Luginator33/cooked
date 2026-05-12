@@ -116,38 +116,106 @@ async function handleExtractFromSocial(request, env) {
   if (!isTikTok && !isInstagram) {
     return jsonResponse({ error: "Only TikTok and Instagram URLs are supported." }, 400);
   }
-  if (isInstagram) {
-    // Instagram needs the yt-dlp service we'll build next session.
-    return jsonResponse({
-      error: "Instagram support is coming soon. For now, paste a TikTok link."
-    }, 400);
+
+  // Pull cheap metadata signals first (caption / POI / hashtags via OG
+  // fallback). For TikTok this is fast and often enough. Instagram has
+  // no public OG path so we'll go straight to the transcribe service.
+  let signals = { caption: null, poi: null, author: null, thumbnail: null, finalUrl: url };
+  if (isTikTok) {
+    try {
+      signals = await extractTikTokSignals(url);
+    } catch (err) {
+      console.log("[extract-from-social] TikTok HTML scrape failed:", err.message);
+      // Don't return — transcript path below may still succeed.
+    }
   }
 
-  // TikTok path
-  let signals;
-  try {
-    signals = await extractTikTokSignals(url);
-  } catch (err) {
-    return jsonResponse({ error: `Could not read the TikTok page: ${err.message}` }, 502);
+  // Phase 2: if HTML metadata didn't give us a concrete place name
+  // (no POI tag, caption is empty or hashtag-only), kick off the
+  // transcribe service to "watch" the video. yt-dlp + Whisper turns
+  // the audio into text we can hand to Claude.
+  //
+  // Heuristic for "should we transcribe":
+  //   - No POI tag (so we don't already know the place)
+  //   - AND (no caption OR caption is mostly hashtags / under 20 chars)
+  //
+  // Instagram ALWAYS gets transcribed because we have no other signal.
+  const captionLooksThin = !signals.caption
+    || signals.caption.length < 20
+    || isMostlyHashtags(signals.caption);
+  const shouldTranscribe = !signals.poi && (isInstagram || captionLooksThin);
+
+  let transcript = null;
+  let transcribeError = null;
+  if (shouldTranscribe && env.TRANSCRIBE_SERVICE_URL && env.TRANSCRIBE_SHARED_SECRET) {
+    try {
+      const t = await transcribeVideo(env, url);
+      transcript = t.transcript || null;
+      // The transcribe service also returns yt-dlp's view of the
+      // description / title / uploader — fill in any blanks the HTML
+      // scrape missed.
+      if (!signals.caption && t.description) signals.caption = t.description;
+      if (!signals.author && t.uploader) signals.author = t.uploader;
+      if (!signals.thumbnail && t.thumbnail) signals.thumbnail = t.thumbnail;
+      console.log(`[extract-from-social] transcribed ${transcript?.length || 0} chars in ${t.elapsed_s}s`);
+    } catch (err) {
+      transcribeError = err.message;
+      console.log("[extract-from-social] transcribe failed:", err.message);
+    }
+  } else if (shouldTranscribe) {
+    console.log("[extract-from-social] would transcribe but TRANSCRIBE_SERVICE_URL not configured");
   }
 
-  // Ask Claude to identify places from caption + POI + hashtags
+  // Ask Claude to identify places from everything we have.
   let identifiedPlaces;
   try {
-    identifiedPlaces = await identifyPlacesFromSignals(env, signals);
+    identifiedPlaces = await identifyPlacesFromSignals(env, { ...signals, transcript });
   } catch (err) {
     console.log("[extract-from-social] Claude error:", err.message);
     identifiedPlaces = [];
   }
 
   return jsonResponse({
-    platform: "tiktok",
+    platform: isTikTok ? "tiktok" : "instagram",
     caption: signals.caption || "",
     author: signals.author || null,
     thumbnail: signals.thumbnail || null,
     poi: signals.poi || null,
+    transcript: transcript || null,
+    transcribeError,  // null on success, surfaced for debugging
     identifiedPlaces,
   });
+}
+
+// Heuristic — does a caption consist almost entirely of hashtags?
+// E.g. "#londonhotspots #traveltok #london #placestovisit #viral"
+// Returns true when 70%+ of word tokens start with #.
+function isMostlyHashtags(s) {
+  if (!s) return true;
+  const tokens = s.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+  const tags = tokens.filter(t => t.startsWith("#")).length;
+  return tags / tokens.length >= 0.7;
+}
+
+// Call the cooked-video-transcribe Render service. Returns the
+// transcribe payload or throws with the error message.
+async function transcribeVideo(env, url) {
+  const endpoint = env.TRANSCRIBE_SERVICE_URL.replace(/\/$/, "") + "/transcribe";
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Shared-Secret": env.TRANSCRIBE_SHARED_SECRET,
+    },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    let detail = "";
+    try { detail = (await res.json()).error || ""; } catch {}
+    throw new Error(`HTTP ${res.status}${detail ? `: ${detail}` : ""}`);
+  }
+  return await res.json();
 }
 
 // Resolve short URLs + fetch the canonical /video/{id} page and pull out
@@ -164,10 +232,22 @@ async function extractTikTokSignals(url) {
   });
   const finalUrl = headRes.url || url;
 
-  // Fetch the full HTML
+  // Two-pass fetch:
+  //   1. Chrome UA — when TikTok serves the real SSR page (still works for
+  //      many videos), we get the rich `desc` + `poi` + `author` blob.
+  //   2. Facebook crawler UA — when TikTok serves the generic
+  //      "Make Your Day" landing page (most photo carousels + an
+  //      increasing % of videos), the FB UA still gets us the
+  //      `og:description` meta tag with the actual caption embedded
+  //      after the like/comment counts.
+  // Combining both means we degrade gracefully instead of returning
+  // empty fields and a "we found nothing" UX.
+  const chromeUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+  const fbUA = "facebookexternalhit/1.1";
+
   const res = await fetch(finalUrl, {
     headers: {
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "User-Agent": chromeUA,
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "Accept-Language": "en-US,en;q=0.9",
     },
@@ -178,7 +258,7 @@ async function extractTikTokSignals(url) {
 
   // Caption — the most reliable signal, in "desc" field
   const captionMatch = html.match(/"desc":"((?:[^"\\]|\\.){10,2000})"/);
-  const caption = captionMatch
+  let caption = captionMatch
     ? JSON.parse(`"${captionMatch[1]}"`)  // decode unicode escapes
     : null;
 
@@ -202,12 +282,71 @@ async function extractTikTokSignals(url) {
   }
 
   // Author handle
-  const author = html.match(/"author":\{[^}]*"uniqueId":"([^"]+)"/)?.[1] || null;
+  let author = html.match(/"author":\{[^}]*"uniqueId":"([^"]+)"/)?.[1] || null;
 
   // Thumbnail (cover image URL)
-  const thumbnail = html.match(/"cover":"(https?:[^"]+)"/)?.[1]?.replace(/\\u002F/g, "/") || null;
+  let thumbnail = html.match(/"cover":"(https?:[^"]+)"/)?.[1]?.replace(/\\u002F/g, "/") || null;
+
+  // If the Chrome-UA fetch returned the generic landing page (no caption
+  // AND no POI), retry with the Facebook crawler UA to at least pull
+  // OG metadata out. This is the path for TikTok photo carousels and
+  // many bot-gated videos.
+  if (!caption && !poi) {
+    try {
+      const fbRes = await fetch(finalUrl, {
+        headers: {
+          "User-Agent": fbUA,
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+        redirect: "follow",
+      });
+      if (fbRes.ok) {
+        const fbHtml = await fbRes.text();
+        // og:description on TikTok looks like:
+        //   "80.4K likes, 237 comments. "actual caption goes here""
+        // We want just the caption part inside the inner quotes.
+        const ogDesc = fbHtml.match(/property="og:description"\s+content="([^"]+)"/)?.[1];
+        if (ogDesc) {
+          // The inner caption is wrapped in fancy quotes “ ”.
+          // Fall back to plain quotes if the fancy ones aren't present.
+          const innerMatch = ogDesc.match(/“([^”]+)”/)
+            || ogDesc.match(/"([^"]+)"/);
+          caption = innerMatch ? decodeHtmlEntities(innerMatch[1].trim()) : decodeHtmlEntities(ogDesc);
+          console.log("[extract] OG-fallback caption:", caption?.slice(0, 100));
+        }
+        // og:title looks like "TikTok · Karen Vestli" — pull the
+        // username out as a fallback author when the SSR blob is gone.
+        if (!author) {
+          const ogTitle = fbHtml.match(/property="og:title"\s+content="([^"]+)"/)?.[1];
+          if (ogTitle) {
+            const named = ogTitle.match(/TikTok\s*[·•∙]\s*(.+)/)?.[1];
+            if (named) author = decodeHtmlEntities(named.trim());
+          }
+        }
+        if (!thumbnail) {
+          const ogImage = fbHtml.match(/property="og:image"\s+content="([^"]+)"/)?.[1];
+          if (ogImage) thumbnail = decodeHtmlEntities(ogImage);
+        }
+      }
+    } catch (err) {
+      console.log("[extract] FB-UA fallback failed:", err.message);
+    }
+  }
 
   return { caption, poi, author, thumbnail, finalUrl };
+}
+
+// Minimal HTML-entity decode for the few entities TikTok actually
+// emits in OG meta tags (&amp;, &quot;, &#39;, &lt;, &gt;). Worker
+// runtime has no DOMParser so a tiny inline pass is the simplest fix.
+function decodeHtmlEntities(s) {
+  if (!s) return s;
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }
 
 // Send caption + POI + hashtags to Claude and ask it to return a clean
@@ -221,21 +360,36 @@ async function identifyPlacesFromSignals(env, signals) {
     parts.push(`Tagged location: ${signals.poi.name}${signals.poi.address ? " — " + signals.poi.address : ""}`);
   }
   if (signals.author) parts.push(`Posted by: @${signals.author}`);
+  if (signals.transcript) {
+    // Whisper output. The creator's voice — often where restaurant
+    // names actually live ("This is Sushi by Bou in midtown..."). We
+    // pass the full transcript; even a 60s video is under 200 words
+    // so this barely touches Claude's input budget.
+    parts.push(`Video transcript (auto-generated): ${signals.transcript}`);
+  }
 
-  const prompt = `You are extracting restaurant/bar/hotel mentions from a TikTok food post.
+  const prompt = `You are extracting restaurant/bar/hotel mentions from a TikTok or Instagram food post.
 
 ${parts.join("\n")}
 
 Return ONLY a JSON array of places explicitly mentioned. Each entry:
 { "name": "...", "city": "...", "neighborhood": "...", "type": "restaurant|bar|hotel|cafe", "confidence": "high|medium|low" }
 
+Signal priority (most → least reliable):
+1. Tagged location (POI) — verbatim truth. Use the name exactly. Confidence "high".
+2. Video transcript naming a specific place — the creator literally said the name.
+   Match phrases like "this is [Name]", "we're at [Name]", "[Name] in [City]".
+   Confidence "high" if name + location both stated, "medium" if name only.
+3. Caption naming a place explicitly (not just a hashtag).
+4. Hashtags as a last resort.
+
 Rules:
-- If a "Tagged location" is present, that's the primary place with confidence "high". Use its city/address.
 - Decode hashtags: #folkspizzeria → "Folks Pizzeria", #grandcentralmarket → "Grand Central Market".
-- City hashtags help: #losangelesfood / #culvercity / #nycfood → use the city.
-- Skip generic hashtags: #foodie, #fyp, #viral, #dinnerideas, #pizza, #foodtiktok, #datenight, #yum.
-- Skip dish names: "carbonara", "ramen" are not places.
-- If the caption mentions a place by name like "Margot at The Platform", extract "Margot".
+- City hashtags help: #losangelesfood / #culvercity / #nycfood → use the city as a hint.
+- Skip generic hashtags: #foodie, #fyp, #viral, #dinnerideas, #pizza, #foodtiktok, #datenight, #yum, #placestovisit.
+- Skip dish names: "carbonara", "ramen", "matcha" are not places.
+- Whisper transcripts have typos in proper nouns. If the transcript says "Soosh by Boo" and looks like it's trying to say a restaurant name, do your best to identify the likely real name ("Sushi by Bou") and set confidence "medium".
+- If the transcript is just music/no-speech ("[Music]", "♪", silent), ignore it.
 - If unsure whether a hashtag is a place, set confidence "low".
 - Return [] if nothing is clearly a place.
 - Do NOT invent places not directly mentioned.`;
