@@ -147,17 +147,25 @@ async function handleExtractFromSocial(request, env) {
 
   let transcript = null;
   let transcribeError = null;
+  // frames[] = base64 video frames; imageUrls[] = direct CDN URLs
+  // (photo carousels). Both flow through to Claude as image blocks.
+  let frames = [];
+  let imageUrls = [];
+  let isVideo = true;
   if (shouldTranscribe && env.TRANSCRIBE_SERVICE_URL && env.TRANSCRIBE_SHARED_SECRET) {
     try {
       const t = await transcribeVideo(env, url);
       transcript = t.transcript || null;
-      // The transcribe service also returns yt-dlp's view of the
-      // description / title / uploader — fill in any blanks the HTML
-      // scrape missed.
+      frames = Array.isArray(t.frames) ? t.frames : [];
+      imageUrls = Array.isArray(t.image_urls) ? t.image_urls : [];
+      isVideo = t.is_video !== false;
+      // The transcribe service also returns its view of the
+      // description / title / uploader / thumbnail — fill in any
+      // blanks the HTML scrape missed.
       if (!signals.caption && t.description) signals.caption = t.description;
       if (!signals.author && t.uploader) signals.author = t.uploader;
       if (!signals.thumbnail && t.thumbnail) signals.thumbnail = t.thumbnail;
-      console.log(`[extract-from-social] transcribed ${transcript?.length || 0} chars in ${t.elapsed_s}s`);
+      console.log(`[extract-from-social] transcribed ${transcript?.length || 0} chars, ${frames.length} frames, ${imageUrls.length} carousel imgs, ${t.elapsed_s}s`);
     } catch (err) {
       transcribeError = err.message;
       console.log("[extract-from-social] transcribe failed:", err.message);
@@ -166,10 +174,18 @@ async function handleExtractFromSocial(request, env) {
     console.log("[extract-from-social] would transcribe but TRANSCRIBE_SERVICE_URL not configured");
   }
 
-  // Ask Claude to identify places from everything we have.
+  // Ask Claude to identify places from everything we have — caption,
+  // transcript, AND any video frames or carousel images. The prompt
+  // tells it to read text from images (sign names, "Top 5" lists,
+  // overlay captions).
   let identifiedPlaces;
   try {
-    identifiedPlaces = await identifyPlacesFromSignals(env, { ...signals, transcript });
+    identifiedPlaces = await identifyPlacesFromSignals(env, {
+      ...signals,
+      transcript,
+      frames,
+      imageUrls,
+    });
   } catch (err) {
     console.log("[extract-from-social] Claude error:", err.message);
     identifiedPlaces = [];
@@ -183,6 +199,9 @@ async function handleExtractFromSocial(request, env) {
     poi: signals.poi || null,
     transcript: transcript || null,
     transcribeError,  // null on success, surfaced for debugging
+    isVideo,
+    framesCount: frames.length,
+    imageUrlsCount: imageUrls.length,
     identifiedPlaces,
   });
 }
@@ -361,37 +380,83 @@ async function identifyPlacesFromSignals(env, signals) {
   if (signals.author) parts.push(`Posted by: @${signals.author}`);
   if (signals.transcript) {
     // Whisper output. The creator's voice — often where restaurant
-    // names actually live ("This is Sushi by Bou in midtown..."). We
-    // pass the full transcript; even a 60s video is under 200 words
-    // so this barely touches Claude's input budget.
+    // names actually live. Full transcript is small enough to drop
+    // straight in.
     parts.push(`Video transcript (auto-generated): ${signals.transcript}`);
   }
 
+  // Image blocks — frames are inline base64 (from the Render service
+  // for videos), image_urls are direct TikTok CDN URLs (for photo
+  // carousels). Claude accepts both formats in the same request.
+  // Cap at 8 images total to stay well under the per-request budget
+  // and keep cost predictable (~$0.04 max for an 8-image carousel).
+  const imageBlocks = [];
+  const frames = Array.isArray(signals.frames) ? signals.frames : [];
+  const urls = Array.isArray(signals.imageUrls) ? signals.imageUrls : [];
+  for (const f of frames.slice(0, 8)) {
+    if (!f?.data) continue;
+    imageBlocks.push({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: f.media_type || "image/jpeg",
+        data: f.data,
+      },
+    });
+  }
+  const remaining = 8 - imageBlocks.length;
+  for (const u of urls.slice(0, remaining)) {
+    imageBlocks.push({
+      type: "image",
+      source: { type: "url", url: u },
+    });
+  }
+
+  const contextNote = imageBlocks.length > 0
+    ? `\n\n${imageBlocks.length} image${imageBlocks.length === 1 ? "" : "s"} from the post follow. Read any visible text — restaurant names on signs, menu headers, on-screen captions, "Top N" lists, location stickers.`
+    : "";
+
   const prompt = `You are extracting restaurant/bar/hotel mentions from a TikTok or Instagram food post.
 
-${parts.join("\n")}
+${parts.join("\n")}${contextNote}
 
 Return ONLY a JSON array of places explicitly mentioned. Each entry:
 { "name": "...", "city": "...", "neighborhood": "...", "type": "restaurant|bar|hotel|cafe", "confidence": "high|medium|low" }
 
 Signal priority (most → least reliable):
 1. Tagged location (POI) — verbatim truth. Use the name exactly. Confidence "high".
-2. Video transcript naming a specific place — the creator literally said the name.
+2. Restaurant name VISIBLE in an image (sign, menu, overlay text, "Top 5" list slide) — high confidence, this is the creator's intent.
+3. Video transcript naming a specific place — the creator literally said it.
    Match phrases like "this is [Name]", "we're at [Name]", "[Name] in [City]".
    Confidence "high" if name + location both stated, "medium" if name only.
-3. Caption naming a place explicitly (not just a hashtag).
-4. Hashtags as a last resort.
+4. Caption naming a place explicitly (not just a hashtag).
+5. Hashtags as a last resort.
+
+A single post can name MANY places — especially "Top 5 NYC spots" style lists. Extract every distinct place, in the order they appear. Up to 20 places per post.
 
 Rules:
+- READ TEXT IN IMAGES carefully. Slideshow lists like "1. Carbone 2. Lilia 3. Don Angie" should produce 3 entries.
 - Decode hashtags: #folkspizzeria → "Folks Pizzeria", #grandcentralmarket → "Grand Central Market".
-- City hashtags help: #losangelesfood / #culvercity / #nycfood → use the city as a hint.
+- City hashtags help: #losangelesfood / #culvercity / #nycfood → use the city as a hint for ALL extracted places when no other city is given.
 - Skip generic hashtags: #foodie, #fyp, #viral, #dinnerideas, #pizza, #foodtiktok, #datenight, #yum, #placestovisit.
 - Skip dish names: "carbonara", "ramen", "matcha" are not places.
-- Whisper transcripts have typos in proper nouns. If the transcript says "Soosh by Boo" and looks like it's trying to say a restaurant name, do your best to identify the likely real name ("Sushi by Bou") and set confidence "medium".
-- If the transcript is just music/no-speech ("[Music]", "♪", silent), ignore it.
-- If unsure whether a hashtag is a place, set confidence "low".
-- Return [] if nothing is clearly a place.
-- Do NOT invent places not directly mentioned.`;
+- Whisper transcripts have typos in proper nouns. "Soosh by Boo" → most likely "Sushi by Bou", confidence "medium".
+- If the transcript is just music ("[Music]", "♪") or silent, ignore it and rely on images/caption.
+- If you can read a restaurant name from an image AND hear it confirmed in audio, confidence "high".
+- Don't invent places. If an image shows food but no name is visible, don't guess.
+- Return [] if nothing is clearly a place.`;
+
+  // User content is a mix of text + images. The text instruction goes
+  // first so Claude sees the task, then the images, then a tiny
+  // closing nudge to ground its output.
+  const userContent = [{ type: "text", text: prompt }];
+  for (const img of imageBlocks) userContent.push(img);
+  if (imageBlocks.length > 0) {
+    userContent.push({
+      type: "text",
+      text: "Now produce the JSON array. Include every place you can identify from the text AND the images.",
+    });
+  }
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -402,12 +467,15 @@ Rules:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 500,
+      max_tokens: 1500,  // bigger ceiling — a "Top 10" list could need it
       system: "Return ONLY valid JSON. No markdown fences, no preamble.",
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content: userContent }],
     }),
   });
-  if (!res.ok) throw new Error(`Claude HTTP ${res.status}`);
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Claude HTTP ${res.status}: ${errText.slice(0, 200)}`);
+  }
   const data = await res.json();
   let text = data.content?.[0]?.text || "[]";
   // Strip any accidental markdown fences

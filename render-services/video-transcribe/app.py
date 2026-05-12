@@ -85,6 +85,8 @@ def _tikwm_resolve(url):
         "title":        string (full caption with hashtags),
         "uploader":     string (TikTok handle),
         "thumbnail":    string (cover URL),
+        "image_urls":   list (photo carousel images, in display order;
+                              empty for videos),
       }
     """
     try:
@@ -106,6 +108,14 @@ def _tikwm_resolve(url):
     media_url = d.get("play") or d.get("music") or ""
     if not media_url:
         raise RuntimeError("tikwm returned no playable media URL")
+    # Photo carousels — TikWM returns the slideshow images as URLs.
+    # These are the same CDN URLs the TikTok app uses, so they work
+    # from any IP. Claude can fetch them directly via the vision API.
+    images = d.get("images") or []
+    if isinstance(images, list):
+        image_urls = [u for u in images if isinstance(u, str) and u.startswith("http")]
+    else:
+        image_urls = []
     return {
         "media_url": media_url,
         "is_video": is_video,
@@ -115,6 +125,7 @@ def _tikwm_resolve(url):
                     or (d.get("author") or {}).get("nickname")
                     or "",
         "thumbnail": d.get("cover") or d.get("origin_cover") or "",
+        "image_urls": image_urls,
     }
 
 
@@ -137,6 +148,7 @@ def _ytdlp_resolve(url):
         "title": m.get("title") or m.get("description") or "",
         "uploader": m.get("uploader") or m.get("uploader_id") or "",
         "thumbnail": m.get("thumbnail") or "",
+        "image_urls": [],
     }
 
 
@@ -176,6 +188,74 @@ def _download_to_temp(media_url, dest_path):
         raise RuntimeError(f"media download failed: {e}")
     if not os.path.exists(dest_path) or os.path.getsize(dest_path) == 0:
         raise RuntimeError("downloaded media is empty")
+
+
+def _ffmpeg_extract_frames(src, dst_dir, n_frames=5, max_w=720):
+    """Sample `n_frames` evenly-spaced JPG frames from a video. Used
+    to OCR on-screen text / restaurant signs / overlay captions when
+    the voiceover alone isn't enough.
+
+    - 720px max width keeps each frame ~50-100KB (Claude vision happily
+      reads at this res; bigger = more tokens, no quality win).
+    - JPEG quality 5 is ffmpeg's "decent web" level — readable text,
+      not bloated.
+    - Returns list of file paths in chronological order.
+    """
+    # Probe duration so we can pick timestamps.
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", src],
+        capture_output=True, text=True, timeout=15,
+    )
+    try:
+        duration = float((probe.stdout or "").strip())
+    except (ValueError, TypeError):
+        duration = 0.0
+    if duration <= 0:
+        # Can't probe duration — just sample one frame at the start.
+        timestamps = [0.5]
+    else:
+        # Skip the first half-second and last half-second (often dark
+        # frames or transitions). Distribute evenly in between.
+        if duration <= 2:
+            timestamps = [duration / 2]
+        else:
+            start, end = 0.5, max(duration - 0.5, 1.0)
+            if n_frames == 1:
+                timestamps = [(start + end) / 2]
+            else:
+                step = (end - start) / (n_frames - 1)
+                timestamps = [start + step * i for i in range(n_frames)]
+
+    paths = []
+    for i, ts in enumerate(timestamps):
+        out = os.path.join(dst_dir, f"frame_{i:02d}.jpg")
+        proc = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-ss", f"{ts:.2f}",      # seek before -i = fast seek
+                "-i", src,
+                "-vframes", "1",
+                "-vf", f"scale='min({max_w},iw)':-2",
+                "-q:v", "5",
+                "-loglevel", "error",
+                out,
+            ],
+            capture_output=True, text=True, timeout=20,
+        )
+        if proc.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 0:
+            paths.append(out)
+        # Soft-fail any single frame — partial coverage is still useful.
+    return paths
+
+
+def _file_to_base64(path):
+    """Read a small binary file and return its base64 content. Used
+    to inline frames into the JSON response since Render's filesystem
+    is ephemeral and we have no upload destination."""
+    import base64
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode("ascii")
 
 
 def _ffmpeg_to_mp3(src, dst, max_bytes=WHISPER_MAX_BYTES):
@@ -261,7 +341,11 @@ def transcribe():
             "title": info["title"],
         }), 413
 
-    # 2. Download → ffmpeg → Whisper
+    # 2. Download → ffmpeg → Whisper → frames
+    transcript = ""
+    transcribe_err = None
+    frames_b64 = []  # video: extracted via ffmpeg, base64 inline
+    image_urls = info.get("image_urls") or []  # photo carousel: pass-through CDN URLs
     with tempfile.TemporaryDirectory() as tmpdir:
         src_path = os.path.join(tmpdir, "src.bin")
         mp3_path = os.path.join(tmpdir, "audio.mp3")
@@ -269,26 +353,49 @@ def transcribe():
             _download_to_temp(info["media_url"], src_path)
         except Exception as e:
             return jsonify({"error": f"download failed: {e}"}), 502
+
+        # Audio path — soft-fail if no speech, we still want vision data.
         try:
             _ffmpeg_to_mp3(src_path, mp3_path)
-        except Exception as e:
-            return jsonify({"error": f"audio extraction failed: {e}"}), 502
-        try:
             transcript = _whisper_transcribe(mp3_path)
         except Exception as e:
-            return jsonify({"error": f"transcribe failed: {e}"}), 502
+            transcribe_err = str(e)
+            print(f"[transcribe] audio path failed (continuing): {e}", flush=True)
+
+        # Vision path — extract frames ONLY for videos. Photo carousels
+        # already have image_urls populated from TikWM.
+        if info.get("is_video") and not image_urls:
+            try:
+                frame_paths = _ffmpeg_extract_frames(src_path, tmpdir, n_frames=5)
+                frames_b64 = [
+                    {"media_type": "image/jpeg", "data": _file_to_base64(p)}
+                    for p in frame_paths
+                ]
+                print(f"[transcribe] extracted {len(frames_b64)} frames", flush=True)
+            except Exception as e:
+                print(f"[transcribe] frame extraction failed: {e}", flush=True)
+                # Soft-fail — we still have the transcript.
+
+    # If both audio AND vision failed completely, the post is unreadable.
+    if transcribe_err and not frames_b64 and not image_urls:
+        return jsonify({
+            "error": f"could not extract anything usable: {transcribe_err}",
+        }), 502
 
     elapsed = round(time.time() - t0, 2)
     return jsonify({
         "transcript": transcript or "",
+        "transcribe_error": transcribe_err,  # null on success
+        "frames": frames_b64,                # video: base64 frames
+        "image_urls": image_urls,            # photo carousel: TikTok CDN URLs
         "duration_s": info["duration"],
         "title": info["title"],
         "uploader": info["uploader"],
         # yt-dlp/tikwm "description" — usually same as title on TikTok.
-        # We send `title` (which IS the caption on TikTok) as both.
         "description": info["title"],
         "thumbnail": info["thumbnail"],
-        "source": source,  # "tikwm" or "yt-dlp" — handy for debugging
+        "is_video": info.get("is_video", True),
+        "source": source,
         "elapsed_s": elapsed,
     })
 
