@@ -130,20 +130,19 @@ async function handleExtractFromSocial(request, env) {
     }
   }
 
-  // Phase 2: kick off the transcribe service whenever we don't have a
-  // TikTok POI tag. yt-dlp + Whisper turns the audio into text we can
-  // hand to Claude.
+  // Phase 2: always call the transcribe service when it's configured.
   //
-  // Why aggressive (transcribe even when there's a caption):
-  //   - Captions on TikTok are overwhelmingly hashtag soup or short
-  //     teaser phrases ("the BEST omakase 😱"). The creator usually
-  //     names the place in the voiceover, not the caption.
-  //   - Whisper costs $0.006/video. At our 100-finds/mo target that's
-  //     $0.60/mo. The accuracy gain pays for itself instantly.
-  //   - Only skip when there's a POI tag — that's TikTok-confirmed
-  //     truth (the creator manually tagged the location), so the audio
-  //     can only confirm what we already know.
-  const shouldTranscribe = !signals.poi;
+  // The previous "skip if POI tag present" shortcut backfired —
+  // TikTok's page state contains multiple poi blocks (related videos,
+  // ads), and our regex picked the wrong one for a "Top 5 NYC" video
+  // that had no real tagged location. Cost of always transcribing
+  // (~$0.03 with vision) is small enough that skipping isn't worth
+  // the false-negative risk.
+  //
+  // The transcribe service handles BOTH videos and photo carousels
+  // (returning frames vs image_urls accordingly), so this single call
+  // covers every content type.
+  const shouldTranscribe = true;
 
   let transcript = null;
   let transcribeError = null;
@@ -290,22 +289,32 @@ async function extractTikTokSignals(url) {
     ? JSON.parse(`"${captionMatch[1]}"`)  // decode unicode escapes
     : null;
 
-  // POI (tagged location) — name + full address + city
+  // POI (tagged location) — name + full address + city.
+  //
+  // TikTok page state has multiple `"poi":{...}` blocks (related
+  // videos, ads, suggestions). A real creator-tagged POI for the
+  // current post has BOTH a non-empty address AND a non-empty city —
+  // recommendations and false-positive matches usually don't. So we
+  // scan ALL poi blocks and keep only one that passes that bar.
   let poi = null;
-  const poiMatch = html.match(/"poi":\{([^{}]|\{[^{}]*\})*\}/);
-  if (poiMatch) {
-    const block = poiMatch[0];
+  const poiBlocks = [...html.matchAll(/"poi":\{([^{}]|\{[^{}]*\})*\}/g)];
+  for (const m of poiBlocks) {
+    const block = m[0];
     const name = block.match(/"name":"((?:[^"\\]|\\.)+)"/)?.[1];
     const address = block.match(/"address":"((?:[^"\\]|\\.)+)"/)?.[1];
     const city = block.match(/"city":"((?:[^"\\]|\\.)+)"/)?.[1];
     const category = block.match(/"category":"((?:[^"\\]|\\.)+)"/)?.[1];
-    if (name && name !== "" && name !== "null") {
+    // Strict: must have name AND address AND city, all non-empty.
+    // This rejects the related-video / recommendation noise that
+    // ships with just a name field (or empty strings).
+    if (name && name !== "null" && address && city) {
       poi = {
         name: name.replace(/\\u002F/g, "/"),
-        address: address ? address.replace(/\\u002F/g, "/") : null,
-        city: city ? city.replace(/\\u002F/g, "/") : null,
+        address: address.replace(/\\u002F/g, "/"),
+        city: city.replace(/\\u002F/g, "/"),
         category: category || null,
       };
+      break;  // first strict match wins (closest to top of page state)
     }
   }
 
