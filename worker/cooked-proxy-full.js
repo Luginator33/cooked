@@ -149,10 +149,22 @@ async function handleCrawl(request) {
 
 // ── Supabase helper ──────────────────────────────────────
 async function supabaseQuery(env, method, table, params = {}) {
+  // CRITICAL: use SERVICE_ROLE_KEY, not ANON_KEY.
+  // This helper is used for server-side writes (auto-research crawl,
+  // saving chatbot_research / research_new_places / patching
+  // research_sources). The anon key gets blocked by RLS on those
+  // tables — service_role bypasses RLS, which is what we want for a
+  // trusted server-side worker.
+  //
+  // This was the cause of the silent April 23 → May 12 auto-research
+  // outage: every write failed with an RLS error, but the worker
+  // swallowed the error in per-source try/catch blocks and the cron
+  // reported "Success" because the scheduled handler had already
+  // returned (via waitUntil).
   const url = new URL(`${env.SUPABASE_URL}/rest/v1/${table}`);
   const headers = {
-    "apikey": env.SUPABASE_ANON_KEY,
-    "Authorization": `Bearer ${env.SUPABASE_ANON_KEY}`,
+    "apikey": env.SUPABASE_SERVICE_ROLE_KEY,
+    "Authorization": `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
     "Content-Type": "application/json",
     "Prefer": method === "POST" ? "return=representation" : undefined,
   };
