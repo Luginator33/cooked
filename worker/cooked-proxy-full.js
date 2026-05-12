@@ -82,6 +82,191 @@ async function fetchUrl(url) {
   return { html, text: extractText(html), url: res.url };
 }
 
+// ── Route: POST /extract-from-social ──────────────────────
+//
+// Pulls structured place data out of a TikTok or Instagram URL. iOS
+// calls this from the "+ Add a find" sheet on the user's Profile.
+// Response shape:
+//   {
+//     platform: 'tiktok' | 'instagram',
+//     caption: string,                  // original creator caption
+//     author: string|null,              // @handle if available
+//     thumbnail: string|null,           // post thumbnail URL
+//     poi: { name, address, city } | null,  // TikTok-only tagged location
+//     identifiedPlaces: [
+//       { name, city, neighborhood, type, confidence }
+//     ]
+//   }
+// iOS then:
+//   - For each identifiedPlace, search local restaurants for a match.
+//   - If match → write a row to restaurant_community_blurbs (enrichment
+//     only; not a "find").
+//   - If no match → Google Places lookup + insert restaurant with
+//     submitted_by + source_url + submission_opinions, is_pending_review
+//     = true. Lands in Admin → Review.
+
+async function handleExtractFromSocial(request, env) {
+  const { url } = await request.json();
+  if (!url || typeof url !== "string") {
+    return jsonResponse({ error: "url required" }, 400);
+  }
+  const lower = url.toLowerCase();
+  const isTikTok = lower.includes("tiktok.com");
+  const isInstagram = lower.includes("instagram.com");
+  if (!isTikTok && !isInstagram) {
+    return jsonResponse({ error: "Only TikTok and Instagram URLs are supported." }, 400);
+  }
+  if (isInstagram) {
+    // Instagram needs the yt-dlp service we'll build next session.
+    return jsonResponse({
+      error: "Instagram support is coming soon. For now, paste a TikTok link."
+    }, 400);
+  }
+
+  // TikTok path
+  let signals;
+  try {
+    signals = await extractTikTokSignals(url);
+  } catch (err) {
+    return jsonResponse({ error: `Could not read the TikTok page: ${err.message}` }, 502);
+  }
+
+  // Ask Claude to identify places from caption + POI + hashtags
+  let identifiedPlaces;
+  try {
+    identifiedPlaces = await identifyPlacesFromSignals(env, signals);
+  } catch (err) {
+    console.log("[extract-from-social] Claude error:", err.message);
+    identifiedPlaces = [];
+  }
+
+  return jsonResponse({
+    platform: "tiktok",
+    caption: signals.caption || "",
+    author: signals.author || null,
+    thumbnail: signals.thumbnail || null,
+    poi: signals.poi || null,
+    identifiedPlaces,
+  });
+}
+
+// Resolve short URLs + fetch the canonical /video/{id} page and pull out
+// every signal we care about. TikTok page state has surprising amounts
+// of useful data embedded as JSON — POI tags include full address.
+async function extractTikTokSignals(url) {
+  // Follow short-link redirects to canonical URL first
+  const headRes = await fetch(url, {
+    method: "HEAD",
+    redirect: "follow",
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    },
+  });
+  const finalUrl = headRes.url || url;
+
+  // Fetch the full HTML
+  const res = await fetch(finalUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+    redirect: "follow",
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const html = await res.text();
+
+  // Caption — the most reliable signal, in "desc" field
+  const captionMatch = html.match(/"desc":"((?:[^"\\]|\\.){10,2000})"/);
+  const caption = captionMatch
+    ? JSON.parse(`"${captionMatch[1]}"`)  // decode unicode escapes
+    : null;
+
+  // POI (tagged location) — name + full address + city
+  let poi = null;
+  const poiMatch = html.match(/"poi":\{([^{}]|\{[^{}]*\})*\}/);
+  if (poiMatch) {
+    const block = poiMatch[0];
+    const name = block.match(/"name":"((?:[^"\\]|\\.)+)"/)?.[1];
+    const address = block.match(/"address":"((?:[^"\\]|\\.)+)"/)?.[1];
+    const city = block.match(/"city":"((?:[^"\\]|\\.)+)"/)?.[1];
+    const category = block.match(/"category":"((?:[^"\\]|\\.)+)"/)?.[1];
+    if (name && name !== "" && name !== "null") {
+      poi = {
+        name: name.replace(/\\u002F/g, "/"),
+        address: address ? address.replace(/\\u002F/g, "/") : null,
+        city: city ? city.replace(/\\u002F/g, "/") : null,
+        category: category || null,
+      };
+    }
+  }
+
+  // Author handle
+  const author = html.match(/"author":\{[^}]*"uniqueId":"([^"]+)"/)?.[1] || null;
+
+  // Thumbnail (cover image URL)
+  const thumbnail = html.match(/"cover":"(https?:[^"]+)"/)?.[1]?.replace(/\\u002F/g, "/") || null;
+
+  return { caption, poi, author, thumbnail, finalUrl };
+}
+
+// Send caption + POI + hashtags to Claude and ask it to return a clean
+// list of restaurant/bar/hotel candidates. Heavy prompt engineering here
+// because creators tag a LOT of irrelevant hashtags (#foodie, #fyp) and
+// we don't want Claude inventing places.
+async function identifyPlacesFromSignals(env, signals) {
+  const parts = [];
+  parts.push(`Caption: ${signals.caption || "(no caption)"}`);
+  if (signals.poi) {
+    parts.push(`Tagged location: ${signals.poi.name}${signals.poi.address ? " — " + signals.poi.address : ""}`);
+  }
+  if (signals.author) parts.push(`Posted by: @${signals.author}`);
+
+  const prompt = `You are extracting restaurant/bar/hotel mentions from a TikTok food post.
+
+${parts.join("\n")}
+
+Return ONLY a JSON array of places explicitly mentioned. Each entry:
+{ "name": "...", "city": "...", "neighborhood": "...", "type": "restaurant|bar|hotel|cafe", "confidence": "high|medium|low" }
+
+Rules:
+- If a "Tagged location" is present, that's the primary place with confidence "high". Use its city/address.
+- Decode hashtags: #folkspizzeria → "Folks Pizzeria", #grandcentralmarket → "Grand Central Market".
+- City hashtags help: #losangelesfood / #culvercity / #nycfood → use the city.
+- Skip generic hashtags: #foodie, #fyp, #viral, #dinnerideas, #pizza, #foodtiktok, #datenight, #yum.
+- Skip dish names: "carbonara", "ramen" are not places.
+- If the caption mentions a place by name like "Margot at The Platform", extract "Margot".
+- If unsure whether a hashtag is a place, set confidence "low".
+- Return [] if nothing is clearly a place.
+- Do NOT invent places not directly mentioned.`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 500,
+      system: "Return ONLY valid JSON. No markdown fences, no preamble.",
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Claude HTTP ${res.status}`);
+  const data = await res.json();
+  let text = data.content?.[0]?.text || "[]";
+  // Strip any accidental markdown fences
+  text = text.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "").trim();
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 // ── Route: POST /fetch-url ────────────────────────────────
 async function handleFetchUrl(request) {
   try {
@@ -856,6 +1041,12 @@ export default {
 
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // Social import — extract places from a TikTok or Instagram URL
+    if (request.method === "POST" && path === "/extract-from-social") {
+      try { return await handleExtractFromSocial(request, env); }
+      catch (err) { console.log("[extract-from-social] error:", err.message); return jsonResponse({ error: err.message || "Internal error" }, 500); }
+    }
 
     // Research routes
     if (request.method === "POST" && path === "/fetch-url") {
