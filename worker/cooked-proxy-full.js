@@ -152,9 +152,18 @@ async function handleExtractFromSocial(request, env) {
   let frames = [];
   let imageUrls = [];
   let isVideo = true;
+  // Debug fields — surfaced in the response so we can see what the
+  // worker decided to do without needing Cloudflare logs.
+  let dbgShouldTranscribe = shouldTranscribe;
+  let dbgTranscribeConfigured = !!(env.TRANSCRIBE_SERVICE_URL && env.TRANSCRIBE_SHARED_SECRET);
+  let dbgTranscribeAttempted = false;
+  let dbgTranscribeMs = null;
   if (shouldTranscribe && env.TRANSCRIBE_SERVICE_URL && env.TRANSCRIBE_SHARED_SECRET) {
+    dbgTranscribeAttempted = true;
+    const tStart = Date.now();
     try {
       const t = await transcribeVideo(env, url);
+      dbgTranscribeMs = Date.now() - tStart;
       transcript = t.transcript || null;
       frames = Array.isArray(t.frames) ? t.frames : [];
       imageUrls = Array.isArray(t.image_urls) ? t.image_urls : [];
@@ -167,6 +176,7 @@ async function handleExtractFromSocial(request, env) {
       if (!signals.thumbnail && t.thumbnail) signals.thumbnail = t.thumbnail;
       console.log(`[extract-from-social] transcribed ${transcript?.length || 0} chars, ${frames.length} frames, ${imageUrls.length} carousel imgs, ${t.elapsed_s}s`);
     } catch (err) {
+      dbgTranscribeMs = Date.now() - tStart;
       transcribeError = err.message;
       console.log("[extract-from-social] transcribe failed:", err.message);
     }
@@ -203,6 +213,16 @@ async function handleExtractFromSocial(request, env) {
     framesCount: frames.length,
     imageUrlsCount: imageUrls.length,
     identifiedPlaces,
+    // Debug envelope — readable by iOS for in-app diagnostics + test
+    // scripts. Tells us exactly what the worker decided.
+    debug: {
+      shouldTranscribe: dbgShouldTranscribe,
+      transcribeServiceConfigured: dbgTranscribeConfigured,
+      transcribeAttempted: dbgTranscribeAttempted,
+      transcribeMs: dbgTranscribeMs,
+      hadPoi: !!signals.poi,
+      captionLength: (signals.caption || "").length,
+    },
   });
 }
 
