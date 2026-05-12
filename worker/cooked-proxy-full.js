@@ -849,7 +849,7 @@ async function handlePushBroadcast(request, env) {
 
 // ── Main handler ──────────────────────────────────────────
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: CORS });
     }
