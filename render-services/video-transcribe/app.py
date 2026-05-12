@@ -411,6 +411,66 @@ def health():
     })
 
 
+@app.route("/debug-pipeline", methods=["POST"])
+def debug_pipeline():
+    """End-to-end pipeline trace, SKIPPING Whisper (to keep it free).
+    Returns timing + intermediate state for each step so we can see
+    where a /transcribe call drops data on the floor. Unauthed —
+    safe because we don't actually call OpenAI."""
+    body = request.get_json(silent=True) or {}
+    url = (body.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "url required"}), 400
+
+    steps = []
+    def step(name, **kw):
+        steps.append({"step": name, "t": round(time.time() - t0, 3), **kw})
+
+    t0 = time.time()
+    try:
+        info, source = _resolve_post(url)
+        step("resolve",
+             source=source,
+             is_video=info["is_video"],
+             duration=info["duration"],
+             title=info["title"][:120],
+             has_media_url=bool(info["media_url"]),
+             media_host=urlparse(info["media_url"]).netloc if info["media_url"] else None,
+             image_urls_count=len(info.get("image_urls") or []))
+    except Exception as e:
+        step("resolve_error", err=str(e))
+        return jsonify({"steps": steps})
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src_path = os.path.join(tmpdir, "src.bin")
+        try:
+            _download_to_temp(info["media_url"], src_path)
+            sz = os.path.getsize(src_path)
+            step("download", bytes=sz)
+        except Exception as e:
+            step("download_error", err=str(e))
+            return jsonify({"steps": steps})
+
+        # Audio path (ffmpeg only, skip Whisper)
+        mp3_path = os.path.join(tmpdir, "audio.mp3")
+        try:
+            _ffmpeg_to_mp3(src_path, mp3_path)
+            step("ffmpeg_audio", bytes=os.path.getsize(mp3_path))
+        except Exception as e:
+            step("ffmpeg_audio_error", err=str(e))
+
+        # Frame extraction (videos only)
+        if info.get("is_video") and not info.get("image_urls"):
+            try:
+                paths = _ffmpeg_extract_frames(src_path, tmpdir, n_frames=5)
+                step("ffmpeg_frames", count=len(paths),
+                     sizes=[os.path.getsize(p) for p in paths])
+            except Exception as e:
+                step("ffmpeg_frames_error", err=str(e))
+    step("done")
+    return jsonify({"steps": steps, "total_s": round(time.time() - t0, 2)})
+
+
 @app.route("/debug-probe", methods=["POST"])
 def debug_probe():
     """Read-only diagnostic. Tries to resolve a URL via TikWM (and
