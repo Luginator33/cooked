@@ -46,10 +46,19 @@ app = Flask(__name__)
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
 SHARED_SECRET = os.environ.get("SHARED_SECRET", "").strip()
+# RapidAPI key for the Instagram Scraper Stable API. Unset on the
+# original deploy — the _instagram_resolve path simply errors back to
+# the caller when missing, which is fine: caller will see a clean
+# "Instagram not configured" message.
+RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY", "").strip()
 
 WHISPER_MAX_BYTES = 25 * 1024 * 1024
 MAX_DURATION_SECONDS = 360
 TIKWM_API = "https://www.tikwm.com/api/"
+# Host header required by RapidAPI's gateway — pinned to the specific
+# API subscription. If we swap providers we change this string here.
+RAPIDAPI_IG_HOST = "instagram-scraper-stable-api.p.rapidapi.com"
+RAPIDAPI_IG_ENDPOINT = f"https://{RAPIDAPI_IG_HOST}/get_media_data_v2.php"
 
 
 # Belt-and-suspenders: any uncaught exception (subprocess crash, OOM
@@ -129,6 +138,136 @@ def _tikwm_resolve(url):
     }
 
 
+def _ig_shortcode(url):
+    """Extract the Instagram shortcode from a post/reel URL.
+      instagram.com/p/DXtxcM5lQbE/      → DXtxcM5lQbE
+      instagram.com/reel/DXKftlxj5mv/   → DXKftlxj5mv
+      instagram.com/reels/DXKftlxj5mv/  → DXKftlxj5mv (some variants)
+    Returns None if the URL doesn't look like a post or reel."""
+    m = re.search(r"instagram\.com/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)", url)
+    return m.group(1) if m else None
+
+
+def _instagram_resolve(url):
+    """Hit RapidAPI's Instagram Scraper Stable endpoint. Returns the
+    same dict shape as _tikwm_resolve so the caller doesn't care which
+    platform a URL came from.
+
+    Returns:
+      {
+        "media_url":    string — direct CDN URL for the playable media
+                        (video_url for reels/video posts, display_url
+                        for single-image posts; first image otherwise),
+        "is_video":     bool,
+        "duration":     int (seconds; 0 for non-video),
+        "title":        string (caption text, hashtags included),
+        "uploader":     string (owner.username),
+        "thumbnail":    string (thumbnail_src or display_url),
+        "image_urls":   list (carousel image URLs in display order;
+                        empty for single posts and videos),
+      }
+    """
+    if not RAPIDAPI_KEY:
+        raise RuntimeError("RAPIDAPI_KEY env var not set on server")
+    code = _ig_shortcode(url)
+    if not code:
+        raise RuntimeError(f"could not parse Instagram shortcode from URL: {url}")
+
+    try:
+        r = requests.get(
+            RAPIDAPI_IG_ENDPOINT,
+            params={"media_code": code},
+            headers={
+                "x-rapidapi-host": RAPIDAPI_IG_HOST,
+                "x-rapidapi-key": RAPIDAPI_KEY,
+                "Content-Type": "application/json",
+            },
+            timeout=25,
+        )
+    except requests.RequestException as e:
+        raise RuntimeError(f"rapidapi request failed: {e}")
+    if r.status_code == 429:
+        raise RuntimeError("rapidapi quota exhausted (HTTP 429) — upgrade plan or wait")
+    if not r.ok:
+        raise RuntimeError(f"rapidapi HTTP {r.status_code}: {r.text[:200]}")
+    try:
+        d = r.json()
+    except ValueError as e:
+        raise RuntimeError(f"rapidapi returned non-JSON: {e}")
+    if not isinstance(d, dict):
+        raise RuntimeError(f"rapidapi unexpected payload type: {type(d).__name__}")
+
+    # Caption lives under edge_media_to_caption.edges[0].node.text.
+    # Empty for posts where the creator didn't write anything (common).
+    caption = ""
+    try:
+        edges = (d.get("edge_media_to_caption") or {}).get("edges") or []
+        if edges:
+            caption = (edges[0].get("node") or {}).get("text") or ""
+    except Exception:
+        caption = ""
+
+    is_video = bool(d.get("is_video"))
+    duration = int(round(d.get("video_duration") or 0))
+
+    # Pick the best playable media URL.
+    # - Reels / videos:        video_url   (mp4)
+    # - Single-image posts:    display_url (jpg/png)
+    # - Carousel posts:        first carousel child's url (handled below)
+    media_url = ""
+    if is_video and d.get("video_url"):
+        media_url = d["video_url"]
+    elif d.get("display_url"):
+        media_url = d["display_url"]
+
+    # Carousel images. Different IG scraper APIs name this field
+    # inconsistently; we check the common variants. Each child node
+    # typically has its own `display_url` (for images) or `video_url`
+    # (if the carousel slide is a video).
+    image_urls = []
+    carousel_sources = (
+        (d.get("edge_sidecar_to_children") or {}).get("edges")
+        or (d.get("sidecar_children") or [])
+        or d.get("carousel_media")
+        or []
+    )
+    for entry in carousel_sources:
+        node = entry.get("node") if isinstance(entry, dict) and "node" in entry else entry
+        if not isinstance(node, dict):
+            continue
+        # Prefer the highest-resolution image — Claude vision benefits
+        # from the extra detail when reading overlay text.
+        resources = node.get("display_resources") or []
+        if resources:
+            # Last entry is usually largest. Use src field.
+            largest = resources[-1] if isinstance(resources[-1], dict) else None
+            if largest and largest.get("src"):
+                image_urls.append(largest["src"])
+                continue
+        if node.get("display_url"):
+            image_urls.append(node["display_url"])
+
+    # If this is a carousel-of-images and we somehow didn't get a
+    # primary media_url, fall back to the first image so the downstream
+    # download step still has something to chew on.
+    if not media_url and image_urls:
+        media_url = image_urls[0]
+
+    if not media_url and not image_urls:
+        raise RuntimeError("no playable media on this IG post (private? deleted?)")
+
+    owner = d.get("owner") or {}
+    return {
+        "media_url": media_url,
+        "is_video": is_video,
+        "duration": duration,
+        "title": caption,
+        "uploader": owner.get("username") or owner.get("full_name") or "",
+        "thumbnail": d.get("thumbnail_src") or d.get("display_url") or "",
+        "image_urls": image_urls,
+    }
+
+
 def _ytdlp_resolve(url):
     """Fallback for non-TikTok URLs (Instagram, etc.). Yes, this hits
     the same IP-blocking wall on TikTok, but for IG it works."""
@@ -153,10 +292,19 @@ def _ytdlp_resolve(url):
 
 
 def _resolve_post(url):
-    """Pick the best resolver for this URL. TikTok → TikWM. Anything
-    else → yt-dlp. If TikWM fails on a TikTok URL, fall back to yt-dlp
-    (which will probably also fail, but the error message is useful)."""
-    is_tiktok = "tiktok.com" in url.lower()
+    """Pick the best resolver for this URL:
+       TikTok    → TikWM (free, proxy-backed)
+       Instagram → RapidAPI Instagram Scraper Stable
+       anything else → yt-dlp (works for YouTube Shorts, Vimeo, etc.)
+
+    On TikTok / IG, if the primary resolver fails (rate limit, deleted
+    post), fall back to yt-dlp — usually doesn't help on either
+    platform because of cloud-IP blocks, but the resulting error
+    message is more actionable than a bare 500."""
+    lower = url.lower()
+    is_tiktok = "tiktok.com" in lower
+    is_instagram = "instagram.com" in lower
+
     if is_tiktok:
         try:
             return _tikwm_resolve(url), "tikwm"
@@ -165,10 +313,19 @@ def _resolve_post(url):
             try:
                 return _ytdlp_resolve(url), "yt-dlp"
             except Exception as e2:
-                # Re-raise the TikWM error since it ran first.
                 raise RuntimeError(f"tikwm: {e} | yt-dlp: {e2}")
-    else:
-        return _ytdlp_resolve(url), "yt-dlp"
+
+    if is_instagram:
+        try:
+            return _instagram_resolve(url), "rapidapi-ig"
+        except RuntimeError as e:
+            print(f"[resolve] rapidapi-ig fail, falling back to yt-dlp: {e}", flush=True)
+            try:
+                return _ytdlp_resolve(url), "yt-dlp"
+            except Exception as e2:
+                raise RuntimeError(f"rapidapi-ig: {e} | yt-dlp: {e2}")
+
+    return _ytdlp_resolve(url), "yt-dlp"
 
 
 # ── Audio pipeline ──────────────────────────────────────────
@@ -408,6 +565,7 @@ def health():
         "service": "cooked-video-transcribe",
         "openai_configured": bool(OPENAI_API_KEY),
         "secret_configured": bool(SHARED_SECRET),
+        "rapidapi_configured": bool(RAPIDAPI_KEY),
     })
 
 
