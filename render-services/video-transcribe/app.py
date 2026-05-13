@@ -498,45 +498,60 @@ def transcribe():
             "title": info["title"],
         }), 413
 
-    # 2. Download → ffmpeg → Whisper → frames
+    # 2. Pipeline — choose path based on what kind of post this is.
     transcript = ""
     transcribe_err = None
-    frames_b64 = []  # video: extracted via ffmpeg, base64 inline
-    image_urls = info.get("image_urls") or []  # photo carousel: pass-through CDN URLs
-    with tempfile.TemporaryDirectory() as tmpdir:
-        src_path = os.path.join(tmpdir, "src.bin")
-        mp3_path = os.path.join(tmpdir, "audio.mp3")
-        try:
-            _download_to_temp(info["media_url"], src_path)
-        except Exception as e:
-            return jsonify({"error": f"download failed: {e}"}), 502
+    frames_b64 = []                              # base64 video frames
+    image_urls = info.get("image_urls") or []    # carousel CDN URLs
+    is_video = info.get("is_video", False)
 
-        # Audio path — soft-fail if no speech, we still want vision data.
-        try:
-            _ffmpeg_to_mp3(src_path, mp3_path)
-            transcript = _whisper_transcribe(mp3_path)
-        except Exception as e:
-            transcribe_err = str(e)
-            print(f"[transcribe] audio path failed (continuing): {e}", flush=True)
+    # Single-image posts: nothing to download, nothing to transcribe.
+    # Make sure image_urls contains the display_url so Claude has
+    # something to vision-OCR. Carousels already populated it.
+    if not is_video and not image_urls and info.get("media_url"):
+        image_urls = [info["media_url"]]
 
-        # Vision path — extract frames ONLY for videos. Photo carousels
-        # already have image_urls populated from TikWM.
-        if info.get("is_video") and not image_urls:
+    if is_video:
+        # Video / reel path — download MP4, extract audio + frames.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src_path = os.path.join(tmpdir, "src.bin")
+            mp3_path = os.path.join(tmpdir, "audio.mp3")
             try:
-                frame_paths = _ffmpeg_extract_frames(src_path, tmpdir, n_frames=5)
-                frames_b64 = [
-                    {"media_type": "image/jpeg", "data": _file_to_base64(p)}
-                    for p in frame_paths
-                ]
-                print(f"[transcribe] extracted {len(frames_b64)} frames", flush=True)
+                _download_to_temp(info["media_url"], src_path)
             except Exception as e:
-                print(f"[transcribe] frame extraction failed: {e}", flush=True)
-                # Soft-fail — we still have the transcript.
+                # Even on download fail we may still have image_urls
+                # (rare but possible). Soft-fail and keep going.
+                transcribe_err = f"download failed: {e}"
+                print(f"[transcribe] download failed (continuing): {e}", flush=True)
+            else:
+                # Audio: soft-fail if no speech (silent clips, music only).
+                try:
+                    _ffmpeg_to_mp3(src_path, mp3_path)
+                    transcript = _whisper_transcribe(mp3_path)
+                except Exception as e:
+                    transcribe_err = str(e)
+                    print(f"[transcribe] audio path failed (continuing): {e}", flush=True)
 
-    # If both audio AND vision failed completely, the post is unreadable.
-    if transcribe_err and not frames_b64 and not image_urls:
+                # Frames: extract sampled JPGs for vision OCR.
+                try:
+                    frame_paths = _ffmpeg_extract_frames(src_path, tmpdir, n_frames=5)
+                    frames_b64 = [
+                        {"media_type": "image/jpeg", "data": _file_to_base64(p)}
+                        for p in frame_paths
+                    ]
+                    print(f"[transcribe] extracted {len(frames_b64)} frames", flush=True)
+                except Exception as e:
+                    print(f"[transcribe] frame extraction failed: {e}", flush=True)
+    else:
+        # Photo / carousel path — image_urls is everything Claude needs.
+        # No download, no ffmpeg, no Whisper. Saves a lot of time AND
+        # avoids the ffmpeg-on-jpg failure that was 502'ing carousels.
+        print(f"[transcribe] photo-only post: {len(image_urls)} images, skipping download", flush=True)
+
+    # If we ended up with literally nothing usable, 502.
+    if not transcript and not frames_b64 and not image_urls:
         return jsonify({
-            "error": f"could not extract anything usable: {transcribe_err}",
+            "error": f"could not extract anything usable: {transcribe_err or 'no media'}",
         }), 502
 
     elapsed = round(time.time() - t0, 2)
