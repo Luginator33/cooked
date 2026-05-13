@@ -543,10 +543,44 @@ def transcribe():
                 except Exception as e:
                     print(f"[transcribe] frame extraction failed: {e}", flush=True)
     else:
-        # Photo / carousel path — image_urls is everything Claude needs.
-        # No download, no ffmpeg, no Whisper. Saves a lot of time AND
-        # avoids the ffmpeg-on-jpg failure that was 502'ing carousels.
-        print(f"[transcribe] photo-only post: {len(image_urls)} images, skipping download", flush=True)
+        # Photo / carousel path. We pass these to Claude as the vision
+        # signal. Two options:
+        #   (a) leave image_urls intact and let Claude fetch them
+        #   (b) download here, base64-encode, return as `frames`
+        #
+        # Started with (a) but IG carousel URLs are signed/expiring;
+        # Anthropic's fetcher gets blocked while curl from a normal
+        # IP works fine. (b) is more bandwidth (~1-2MB per image) but
+        # is the only reliable path — same approach we use for video
+        # frames. Cap at 8 to bound the JSON response size.
+        print(f"[transcribe] photo post: downloading {min(len(image_urls), 8)} of {len(image_urls)} images", flush=True)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for i, img_url in enumerate(image_urls[:8]):
+                img_path = os.path.join(tmpdir, f"carousel_{i:02d}.bin")
+                try:
+                    _download_to_temp(img_url, img_path)
+                except Exception as e:
+                    print(f"[transcribe] carousel img {i} download failed: {e}", flush=True)
+                    continue
+                # Re-encode to a small JPEG so we don't ship 5MB raw
+                # files over the JSON response. ffmpeg handles JPGs
+                # and PNGs interchangeably; quality 5 + 720px wide
+                # gives ~50-100KB.
+                jpg_path = os.path.join(tmpdir, f"carousel_{i:02d}.jpg")
+                proc = subprocess.run(
+                    ["ffmpeg", "-y", "-i", img_path,
+                     "-vf", "scale='min(720,iw)':-2",
+                     "-q:v", "5", "-loglevel", "error", jpg_path],
+                    capture_output=True, text=True, timeout=20,
+                )
+                if proc.returncode == 0 and os.path.exists(jpg_path):
+                    frames_b64.append({
+                        "media_type": "image/jpeg",
+                        "data": _file_to_base64(jpg_path),
+                    })
+        print(f"[transcribe] carousel: {len(frames_b64)} images inlined", flush=True)
+        # Clear image_urls so the worker doesn't send duplicates.
+        image_urls = []
 
     # If we ended up with literally nothing usable, 502.
     if not transcript and not frames_b64 and not image_urls:
