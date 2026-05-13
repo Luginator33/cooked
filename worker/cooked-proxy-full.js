@@ -1103,7 +1103,9 @@ function formatNotifCopy(type, actorName, restaurantName) {
     case "friend_loved_your_watchlist":
       return { title: "Watchlist love", body: `${actorName} loved ${rest}` };
     case "friend_new_find":
-      return { title: "New find", body: `${actorName} added ${restaurantName ? rest : "a new find"}` };
+      return { title: "New find", body: `${actorName} added ${rest} as a new find` };
+    case "friend_watchlisted":
+      return { title: "Added to list", body: `${actorName} added ${rest} to their list` };
     case "friend_visited_city":
       return { title: "Friend in your city", body: `${actorName} checked out ${rest}` };
     case "restaurant_trending":
