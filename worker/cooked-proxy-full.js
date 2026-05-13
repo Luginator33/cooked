@@ -237,12 +237,30 @@ async function transcribeVideo(env, url) {
     },
     body: JSON.stringify({ url }),
   });
+  // Read the body once as text so we never lose it. Then attempt to
+  // parse as JSON to extract the {error: ...} field. Earlier code
+  // called res.json() inside a try/catch which sometimes consumed
+  // the body before our error path could read it — leaving the
+  // user with a bare "HTTP 502" and no clue why.
+  const bodyText = await res.text();
   if (!res.ok) {
     let detail = "";
-    try { detail = (await res.json()).error || ""; } catch {}
+    try { detail = JSON.parse(bodyText)?.error || ""; } catch {}
+    // If JSON parse failed, surface a snippet of the raw body so we
+    // at least see the upstream error (e.g. RapidAPI quota messages,
+    // Cloudflare error pages).
+    if (!detail) detail = bodyText.slice(0, 200).replace(/\s+/g, " ").trim();
+    // Map common RapidAPI/quota errors to friendlier copy.
+    if (detail.includes("quota") || detail.includes("429")) {
+      throw new Error("Instagram API quota reached for this month. We're working on it — try again in a few days or paste a TikTok link.");
+    }
     throw new Error(`HTTP ${res.status}${detail ? `: ${detail}` : ""}`);
   }
-  return await res.json();
+  try {
+    return JSON.parse(bodyText);
+  } catch (err) {
+    throw new Error(`transcribe service returned non-JSON: ${bodyText.slice(0, 200)}`);
+  }
 }
 
 // Resolve short URLs + fetch the canonical /video/{id} page and pull out
