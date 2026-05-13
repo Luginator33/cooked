@@ -117,6 +117,29 @@ async function handleExtractFromSocial(request, env) {
     return jsonResponse({ error: "Only TikTok and Instagram URLs are supported." }, 400);
   }
 
+  // ── Cache check ─────────────────────────────────────────
+  // Same URL submitted twice within 30 days returns the cached
+  // identifiedPlaces immediately. Skips: TikTok HTML scrape,
+  // Render transcribe (RapidAPI quota, Whisper $$$), Claude vision.
+  //
+  // Cached responses carry a `cacheHit: true` flag in the debug envelope
+  // so we can see hit/miss patterns in the iOS logs.
+  const cacheK = socialImportCacheKey(url);
+  if (cacheK && env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const hit = await socialImportCacheGet(env, cacheK);
+      if (hit) {
+        console.log(`[extract-from-social] cache HIT for ${cacheK}`);
+        return jsonResponse({
+          ...hit,
+          debug: { ...(hit.debug || {}), cacheHit: true, cacheKey: cacheK },
+        });
+      }
+    } catch (err) {
+      console.log(`[extract-from-social] cache read err (continuing): ${err.message}`);
+    }
+  }
+
   // Pull cheap metadata signals first (caption / POI / hashtags via OG
   // fallback). For TikTok this is fast and often enough. Instagram has
   // no public OG path so we'll go straight to the transcribe service.
@@ -200,7 +223,7 @@ async function handleExtractFromSocial(request, env) {
     identifiedPlaces = [];
   }
 
-  return jsonResponse({
+  const responsePayload = {
     platform: isTikTok ? "tiktok" : "instagram",
     caption: signals.caption || "",
     author: signals.author || null,
@@ -222,7 +245,95 @@ async function handleExtractFromSocial(request, env) {
       hadPoi: !!signals.poi,
       captionLength: (signals.caption || "").length,
     },
+  };
+
+  // ── Cache write ─────────────────────────────────────────
+  // Only cache when we got SOMETHING worth caching — at least an
+  // identified place, OR a caption + transcript that Claude saw.
+  // If transcribe failed and Claude returned [], the next attempt
+  // might succeed (transient RapidAPI rate limit, network blip), so
+  // don't poison the cache with the empty result.
+  const worthCaching = identifiedPlaces.length > 0
+    || (signals.caption && transcript)
+    || (frames.length > 0 && identifiedPlaces.length === 0); // vision saw something even if Claude found nothing
+  if (worthCaching && cacheK && env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      await socialImportCacheSet(env, cacheK, responsePayload);
+      console.log(`[extract-from-social] cached ${identifiedPlaces.length} places under ${cacheK}`);
+    } catch (err) {
+      console.log(`[extract-from-social] cache write err: ${err.message}`);
+    }
+  }
+
+  return jsonResponse(responsePayload);
+}
+
+// ── Social-import cache helpers ─────────────────────────────
+//
+// Lightweight Supabase-backed cache for /extract-from-social responses.
+// Key = hostname + path (sans query string + trailing slash). 30-day TTL.
+
+function socialImportCacheKey(url) {
+  if (!url || typeof url !== "string") return null;
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    const path = u.pathname.replace(/\/+$/, "");
+    return `${host}${path}`;
+  } catch {
+    return null;
+  }
+}
+
+const SOCIAL_IMPORT_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+async function socialImportCacheGet(env, key) {
+  const params = new URLSearchParams();
+  params.set("url_key", `eq.${key}`);
+  params.set("select", "payload,cached_at");
+  params.set("limit", "1");
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/social_import_cache?${params}`,
+    {
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    }
+  );
+  if (!res.ok) return null;
+  const rows = await res.json();
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const row = rows[0];
+  // TTL check happens client-side here (rather than in SQL) so we can
+  // keep the row around for analytics — `cached_at DESC` is a useful
+  // "most-requested posts" index — but only USE it if recent enough.
+  const ageMs = Date.now() - new Date(row.cached_at).getTime();
+  if (ageMs > SOCIAL_IMPORT_CACHE_TTL_MS) return null;
+  return row.payload || null;
+}
+
+async function socialImportCacheSet(env, key, payload) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/social_import_cache`, {
+    method: "POST",
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      // Upsert on conflict so re-fetches refresh the cached_at and
+      // overwrite any stale payload. Cleaner than DELETE + INSERT.
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify({
+      url_key: key,
+      payload,
+      cached_at: new Date().toISOString(),
+    }),
   });
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`supabase upsert: HTTP ${res.status}: ${errBody.slice(0, 200)}`);
+  }
 }
 
 // Call the cooked-video-transcribe Render service. Returns the
