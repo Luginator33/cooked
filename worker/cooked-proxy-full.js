@@ -223,6 +223,11 @@ async function handleExtractFromSocial(request, env) {
     identifiedPlaces = [];
   }
 
+  // Track whether the cache write succeeded so the response can
+  // expose it for diagnostics on a miss-then-write call.
+  let dbgCacheWrote = false;
+  let dbgCacheWriteErr = null;
+
   const responsePayload = {
     platform: isTikTok ? "tiktok" : "instagram",
     caption: signals.caption || "",
@@ -244,6 +249,8 @@ async function handleExtractFromSocial(request, env) {
       transcribeMs: dbgTranscribeMs,
       hadPoi: !!signals.poi,
       captionLength: (signals.caption || "").length,
+      cacheHit: false,
+      cacheKey: cacheK,
     },
   };
 
@@ -259,11 +266,21 @@ async function handleExtractFromSocial(request, env) {
   if (worthCaching && cacheK && env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
       await socialImportCacheSet(env, cacheK, responsePayload);
+      dbgCacheWrote = true;
       console.log(`[extract-from-social] cached ${identifiedPlaces.length} places under ${cacheK}`);
     } catch (err) {
+      dbgCacheWriteErr = err.message;
       console.log(`[extract-from-social] cache write err: ${err.message}`);
     }
   }
+
+  // Surface write status in the debug envelope so we can see hit /
+  // miss / write-fail patterns in iOS logs without raw Cloudflare logs.
+  responsePayload.debug.cacheWrote = dbgCacheWrote;
+  responsePayload.debug.cacheWriteErr = dbgCacheWriteErr;
+  responsePayload.debug.cacheable = !!worthCaching;
+  responsePayload.debug.supabaseConfigured =
+    !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
 
   return jsonResponse(responsePayload);
 }
