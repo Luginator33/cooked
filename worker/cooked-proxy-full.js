@@ -1127,7 +1127,13 @@ async function sendOne(env, jwt, token, platform, title, body, payload) {
   delete safeCallerPayload.aps; // hard-block aps override
   const apsPayload = {
     ...safeCallerPayload,
-    aps: { alert: { title, body }, sound: "default", badge: 1 },
+    // No `badge` key here. iOS auto-increments the app icon badge by
+    // exactly +1 per delivered notification when badge is omitted —
+    // which is the behavior we want. Hard-coding badge:1 caused the
+    // "stuck red dot" bug: every push pinned the badge to 1, so even
+    // after the app cleared it on foreground, the next push restored
+    // it to 1 forever. Bug 2026-05-13.
+    aps: { alert: { title, body }, sound: "default" },
   };
   const res = await fetch(`https://${host}/3/device/${token}`, {
     method: "POST",
