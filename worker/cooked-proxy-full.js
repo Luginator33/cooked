@@ -395,9 +395,16 @@ async function transcribeVideo(env, url) {
 // every signal we care about. TikTok page state has surprising amounts
 // of useful data embedded as JSON — POI tags include full address.
 async function extractTikTokSignals(url) {
-  // Follow short-link redirects to canonical URL first
+  // Resolve short-link redirects to the canonical /@user/video/<id> URL.
+  // We used to do this with HEAD, but TikTok's `vm.tiktok.com` / `t/`
+  // shortlinks (the kind you get from the Share sheet) sometimes 405 on
+  // HEAD or return a JS-redirect page instead of an HTTP redirect, so
+  // the HEAD response stays on the shortlink URL and the scrape below
+  // grabs nothing. GET is slower but always lands on the canonical URL.
+  // (Bug 2026-05-13: "i put in this tiktok t/ link and it says it
+  // couldn't find" — affected every shareable TikTok URL.)
   const headRes = await fetch(url, {
-    method: "HEAD",
+    method: "GET",
     redirect: "follow",
     headers: {
       "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
