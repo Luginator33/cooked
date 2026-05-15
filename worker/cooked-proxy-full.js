@@ -828,20 +828,58 @@ function parseClaudeResponse(summary, sourceUrl) {
 }
 
 // ── Auto-research: crawl sources and save results ────────
+/// Persist a one-row summary of an auto-research run to the scrape_log
+/// table so the admin can see when the cron last ran AND what it did
+/// (or didn't do). Best-effort — if the write fails we swallow the
+/// error so it doesn't mask the actual run result.
+async function writeScrapeLog(env, { startedAt, success, log, knowledge, places, error }) {
+  try {
+    await supabaseQuery(env, "POST", "scrape_log", {
+      body: {
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        success,
+        knowledge_count: knowledge ?? 0,
+        places_count: places ?? 0,
+        error: error || null,
+        log: (log || []).join("\n"),
+      },
+    });
+  } catch (e) {
+    console.log(`[scrape_log] write failed (non-fatal): ${e.message}`);
+  }
+}
+
 async function runAutoResearch(env) {
   const log = [];
+  const startedAt = new Date().toISOString();
+  // 2026-05-15 rewrite: process at most this many sources per cron
+  // run, and always pick the ones with the OLDEST (or null) last_crawled
+  // so we cycle fairly across all 37 sources. Previously the cron
+  // iterated every active source in arbitrary order and hit Cloudflare's
+  // CPU limit partway through, leaving most sources never crawled and
+  // every run looking like it succeeded.
+  const MAX_SOURCES_PER_RUN = 3;
   try {
-    // 1. Get active sources from Supabase
+    // Oldest first so the cron eventually visits every source.
+    // PostgREST: `order=last_crawled.asc.nullsfirst&limit=3` → priority
+    // queue of "least-recently-crawled" sources.
     const sources = await supabaseQuery(env, "GET", "research_sources", {
-      query: { "active": "eq.true", "select": "*" },
+      query: {
+        "active": "eq.true",
+        "select": "*",
+        "order": "last_crawled.asc.nullsfirst",
+        "limit": String(MAX_SOURCES_PER_RUN),
+      },
     });
 
     if (!sources.length) {
       log.push("No active sources configured");
+      await writeScrapeLog(env, { startedAt, success: true, log, knowledge: 0, places: 0 });
       return { success: true, log };
     }
 
-    log.push(`Found ${sources.length} sources to crawl`);
+    log.push(`Picked ${sources.length} sources (oldest last_crawled first)`);
 
     let totalKnowledge = 0;
     let totalPlaces = 0;
@@ -926,12 +964,18 @@ async function runAutoResearch(env) {
           totalPlaces += sourcePlaces.length;
         }
 
-        // Update last_crawled timestamp
-        await supabaseQuery(env, "PATCH", `research_sources?id=eq.${source.id}`, {
-          body: { last_crawled: new Date().toISOString() },
-        });
-
-        log.push(`  Saved ${sourceKnowledge.length} knowledge entries, ${sourcePlaces.length} new places`);
+        // Only bump last_crawled when something was actually written.
+        // Otherwise a zero-result run would silently "succeed" and the
+        // source would get pushed to the back of the queue, even though
+        // it really should be retried on the next cron tick. (2026-05-15.)
+        if (sourceKnowledge.length > 0 || sourcePlaces.length > 0) {
+          await supabaseQuery(env, "PATCH", `research_sources?id=eq.${source.id}`, {
+            body: { last_crawled: new Date().toISOString() },
+          });
+          log.push(`  Saved ${sourceKnowledge.length} knowledge entries, ${sourcePlaces.length} new places (last_crawled updated)`);
+        } else {
+          log.push(`  Zero results — leaving last_crawled untouched so this source retries next run`);
+        }
 
       } catch (err) {
         log.push(`  Error crawling ${source.url}: ${err.message}`);
@@ -939,10 +983,18 @@ async function runAutoResearch(env) {
     }
 
     log.push(`Done! ${totalKnowledge} knowledge entries, ${totalPlaces} new places total`);
+    await writeScrapeLog(env, {
+      startedAt,
+      success: true,
+      log,
+      knowledge: totalKnowledge,
+      places: totalPlaces,
+    });
     return { success: true, totalKnowledge, totalPlaces, log };
 
   } catch (err) {
     log.push(`Fatal error: ${err.message}`);
+    await writeScrapeLog(env, { startedAt, success: false, log, knowledge: 0, places: 0, error: err.message });
     return { success: false, error: err.message, log };
   }
 }
