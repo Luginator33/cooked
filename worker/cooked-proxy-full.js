@@ -994,17 +994,20 @@ async function runAutoResearch(env) {
           totalPlaces += sourcePlaces.length;
         }
 
-        // Only bump last_crawled when something was actually written.
-        // Otherwise a zero-result run would silently "succeed" and the
-        // source would get pushed to the back of the queue, even though
-        // it really should be retried on the next cron tick. (2026-05-15.)
+        // ALWAYS bump last_crawled on a successful fetch (even if
+        // Claude found nothing on the linked pages). Otherwise we'd
+        // pick the same source forever every run and never cycle to
+        // the next-oldest. Zero-result sources just go to the back
+        // of the queue and get retried on their normal turn.
+        // (Fix on top of 2026-05-15 fix that intended to retry but
+        // turned into a stuck-on-source loop.)
+        await supabaseQuery(env, "PATCH", `research_sources?id=eq.${source.id}`, {
+          body: { last_crawled: new Date().toISOString() },
+        });
         if (sourceKnowledge.length > 0 || sourcePlaces.length > 0) {
-          await supabaseQuery(env, "PATCH", `research_sources?id=eq.${source.id}`, {
-            body: { last_crawled: new Date().toISOString() },
-          });
-          log.push(`  Saved ${sourceKnowledge.length} knowledge entries, ${sourcePlaces.length} new places (last_crawled updated)`);
+          log.push(`  Saved ${sourceKnowledge.length} knowledge entries, ${sourcePlaces.length} new places (last_crawled bumped)`);
         } else {
-          log.push(`  Zero results — leaving last_crawled untouched so this source retries next run`);
+          log.push(`  Zero results from Claude on this source's pages (last_crawled bumped — will rotate to next source on next run)`);
         }
 
       } catch (err) {
