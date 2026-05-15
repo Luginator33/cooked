@@ -828,15 +828,38 @@ function parseClaudeResponse(summary, sourceUrl) {
 }
 
 // ── Auto-research: crawl sources and save results ────────
-/// Persist a one-row summary of an auto-research run to the scrape_log
-/// table so the admin can see when the cron last ran AND what it did
-/// (or didn't do). Best-effort — if the write fails we swallow the
-/// error so it doesn't mask the actual run result.
-async function writeScrapeLog(env, { startedAt, success, log, knowledge, places, error }) {
+/// Insert a scrape_log row at the START of a run with success=false.
+/// Returns the inserted id so the caller can UPDATE the row at the
+/// end with final stats. This gives us a paper trail even when the
+/// worker times out mid-run (Cloudflare's CPU/wall-clock limit kills
+/// the script before it reaches the final write).
+async function startScrapeLog(env, startedAt) {
   try {
-    await supabaseQuery(env, "POST", "scrape_log", {
+    const rows = await supabaseQuery(env, "POST", "scrape_log", {
       body: {
         started_at: startedAt,
+        finished_at: startedAt,
+        success: false,
+        knowledge_count: 0,
+        places_count: 0,
+        error: "RUN_IN_PROGRESS",
+        log: "(started)",
+      },
+    });
+    return rows?.[0]?.id || null;
+  } catch (e) {
+    console.log(`[scrape_log] start-write failed: ${e.message}`);
+    return null;
+  }
+}
+
+/// UPDATE the row created by startScrapeLog with final stats. If the
+/// id is null (insert failed), we silently skip — best-effort logging.
+async function finishScrapeLog(env, id, { success, log, knowledge, places, error }) {
+  if (!id) return;
+  try {
+    await supabaseQuery(env, "PATCH", `scrape_log?id=eq.${id}`, {
+      body: {
         finished_at: new Date().toISOString(),
         success,
         knowledge_count: knowledge ?? 0,
@@ -846,20 +869,24 @@ async function writeScrapeLog(env, { startedAt, success, log, knowledge, places,
       },
     });
   } catch (e) {
-    console.log(`[scrape_log] write failed (non-fatal): ${e.message}`);
+    console.log(`[scrape_log] finish-write failed: ${e.message}`);
   }
 }
 
 async function runAutoResearch(env) {
   const log = [];
   const startedAt = new Date().toISOString();
-  // 2026-05-15 rewrite: process at most this many sources per cron
-  // run, and always pick the ones with the OLDEST (or null) last_crawled
-  // so we cycle fairly across all 37 sources. Previously the cron
-  // iterated every active source in arbitrary order and hit Cloudflare's
-  // CPU limit partway through, leaving most sources never crawled and
-  // every run looking like it succeeded.
-  const MAX_SOURCES_PER_RUN = 3;
+  // 2026-05-15 rewrite: process ONE source per cron run. Each source
+  // has up to N pages crawled, each page = 1 Claude call (~3-10s).
+  // Cloudflare workers cap wall-clock at 30s (paid plan, less on free)
+  // so trying to do 3 sources × 10 pages would silently time out
+  // mid-run and the worker would die before reaching writeScrapeLog.
+  // ONE source × 5 pages keeps us comfortably under the budget.
+  const MAX_SOURCES_PER_RUN = 1;
+  const MAX_PAGES_PER_SOURCE = 5;
+  // Write a "started" row up front so even a timeout leaves evidence.
+  // We UPDATE this row at the end (finishScrapeLog).
+  const logRowId = await startScrapeLog(env, startedAt);
   try {
     // Oldest first so the cron eventually visits every source.
     // PostgREST: `order=last_crawled.asc.nullsfirst&limit=3` → priority
@@ -875,7 +902,7 @@ async function runAutoResearch(env) {
 
     if (!sources.length) {
       log.push("No active sources configured");
-      await writeScrapeLog(env, { startedAt, success: true, log, knowledge: 0, places: 0 });
+      await finishScrapeLog(env, logRowId, { success: true, log, knowledge: 0, places: 0 });
       return { success: true, log };
     }
 
@@ -892,7 +919,10 @@ async function runAutoResearch(env) {
         const mainPage = await fetchUrl(source.url);
         const links = extractLinks(mainPage.html);
 
-        const maxPages = source.max_pages || 10;
+        // Cap pages-per-source to MAX_PAGES_PER_SOURCE regardless of
+        // whatever the DB row says — keeps total Claude calls bounded
+        // so the worker doesn't time out.
+        const maxPages = Math.min(source.max_pages || 10, MAX_PAGES_PER_SOURCE);
         const targetLinks = links.filter(l => {
           try {
             const path = new URL(l).pathname;
@@ -983,8 +1013,7 @@ async function runAutoResearch(env) {
     }
 
     log.push(`Done! ${totalKnowledge} knowledge entries, ${totalPlaces} new places total`);
-    await writeScrapeLog(env, {
-      startedAt,
+    await finishScrapeLog(env, logRowId, {
       success: true,
       log,
       knowledge: totalKnowledge,
@@ -994,7 +1023,7 @@ async function runAutoResearch(env) {
 
   } catch (err) {
     log.push(`Fatal error: ${err.message}`);
-    await writeScrapeLog(env, { startedAt, success: false, log, knowledge: 0, places: 0, error: err.message });
+    await finishScrapeLog(env, logRowId, { success: false, log, knowledge: 0, places: 0, error: err.message });
     return { success: false, error: err.message, log };
   }
 }
