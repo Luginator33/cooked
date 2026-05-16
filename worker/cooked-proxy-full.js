@@ -771,7 +771,18 @@ async function supabaseQuery(env, method, table, params = {}) {
     const err = await res.text();
     throw new Error(`Supabase ${method} ${table}: ${err}`);
   }
-  return res.json();
+  // Handle 204 No Content + empty bodies gracefully. Without the
+  // Prefer:return=representation header, PostgREST returns an empty
+  // 204 for PATCH/DELETE. Calling res.json() on that throws
+  // "Unexpected end of JSON input" which crashed the cron when no
+  // POST preceded the PATCH (zero-result runs). 2026-05-15.
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    return null;
+  }
 }
 
 // ── Claude API helper ────────────────────────────────────
