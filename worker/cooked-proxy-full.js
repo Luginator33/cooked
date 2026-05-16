@@ -898,6 +898,20 @@ async function finishScrapeLog(env, id, { success, log, knowledge, places, error
   }
 }
 
+/// Mid-run progress write. If the worker dies after this (Cloudflare
+/// wall-clock kill, etc.) we at least know how far it got. Cheap
+/// PATCH that overwrites the log field with current contents.
+async function progressScrapeLog(env, id, log) {
+  if (!id) return;
+  try {
+    await supabaseQuery(env, "PATCH", `scrape_log?id=eq.${id}`, {
+      body: { log: (log || []).join("\n") },
+    });
+  } catch (e) {
+    // Silent — best-effort breadcrumb.
+  }
+}
+
 async function runAutoResearch(env) {
   const log = [];
   const startedAt = new Date().toISOString();
@@ -908,7 +922,11 @@ async function runAutoResearch(env) {
   // mid-run and the worker would die before reaching writeScrapeLog.
   // ONE source × 5 pages keeps us comfortably under the budget.
   const MAX_SOURCES_PER_RUN = 1;
-  const MAX_PAGES_PER_SOURCE = 5;
+  // Bumped down 5→2 (2026-05-16). Some sources (Michelin, 50 Best)
+  // serve huge HTML and slow Claude responses, blowing Cloudflare's
+  // ~30s wall-clock budget for waitUntil. 2 pages × 15s Claude max
+  // = 30s + a few seconds for fetches. Fits comfortably.
+  const MAX_PAGES_PER_SOURCE = 2;
   // Write a "started" row up front so even a timeout leaves evidence.
   // We UPDATE this row at the end (finishScrapeLog).
   const logRowId = await startScrapeLog(env, startedAt);
@@ -932,6 +950,7 @@ async function runAutoResearch(env) {
     }
 
     log.push(`Picked ${sources.length} sources (oldest last_crawled first)`);
+    await progressScrapeLog(env, logRowId, log);
 
     let totalKnowledge = 0;
     let totalPlaces = 0;
@@ -939,6 +958,7 @@ async function runAutoResearch(env) {
     for (const source of sources) {
       try {
         log.push(`Crawling: ${source.url}`);
+        await progressScrapeLog(env, logRowId, log);
 
         // Crawl the source
         const mainPage = await fetchUrl(source.url);
@@ -972,6 +992,7 @@ async function runAutoResearch(env) {
           .map(p => p.value);
 
         log.push(`  Fetched ${pages.length} pages from ${source.url}`);
+        await progressScrapeLog(env, logRowId, log);
 
         // Process each page through Claude
         let sourceKnowledge = [];
