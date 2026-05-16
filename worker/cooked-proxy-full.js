@@ -69,6 +69,13 @@ function extractLinks(html) {
 
 // ── Fetch a single URL ────────────────────────────────────
 async function fetchUrl(url) {
+  // 10s hard cap on the page fetch. Without it, a slow/hanging
+  // upstream (cough michelin.com cough) would keep the await open
+  // until Cloudflare's wall-clock limit kills the worker — no
+  // catch handler runs, no finishScrapeLog row gets written, and
+  // the cron looks like a black box. AbortSignal.timeout throws an
+  // AbortError after 10s, which the outer source loop catches and
+  // logs. 2026-05-16.
   const res = await fetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -76,6 +83,7 @@ async function fetchUrl(url) {
       "Accept-Language": "en-US,en;q=0.9",
     },
     redirect: "follow",
+    signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const html = await res.text();
@@ -787,6 +795,11 @@ async function supabaseQuery(env, method, table, params = {}) {
 
 // ── Claude API helper ────────────────────────────────────
 async function askClaude(env, text) {
+  // 15s ceiling on Claude per page. Same reason as fetchUrl above —
+  // a stalled Anthropic response would burn the worker's wall-clock
+  // and abort finishScrapeLog. The inner per-page try/catch around
+  // askClaude already handles thrown errors gracefully so the loop
+  // can continue to the next page.
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -794,6 +807,7 @@ async function askClaude(env, text) {
       "x-api-key": env.ANTHROPIC_API_KEY,
       "anthropic-version": "2023-06-01",
     },
+    signal: AbortSignal.timeout(15000),
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1500,
