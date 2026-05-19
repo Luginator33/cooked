@@ -226,6 +226,9 @@ async function handleExtractFromSocial(request, env) {
   // (c) emitted text we failed to parse as JSON.
   let imageBlocksSent = 0;
   let claudeReply = null;
+  let claudeReplyLength = 0;
+  let claudeStopReason = null;
+  let claudeParseError = null;
   try {
     const r = await identifyPlacesFromSignals(env, {
       ...signals,
@@ -236,6 +239,9 @@ async function handleExtractFromSocial(request, env) {
     identifiedPlaces = r.places;
     imageBlocksSent = r.imageBlocksSent;
     claudeReply = r.claudeReply;
+    claudeReplyLength = r.claudeReplyLength;
+    claudeStopReason = r.claudeStopReason;
+    claudeParseError = r.parseError;
   } catch (err) {
     console.log("[extract-from-social] Claude error:", err.message);
     identifiedPlaces = [];
@@ -277,7 +283,15 @@ async function handleExtractFromSocial(request, env) {
       // were identified, so a debugger can see whether Claude said
       // "no specific names visible" vs emitted invalid JSON.
       imageBlocksSent,
+      // claudeReply (first 800 chars), length, and stop_reason are
+      // surfaced ONLY when identifiedPlaces ended up empty — happy
+      // path responses stay tight. If stop_reason is "max_tokens"
+      // we now know Claude's reply was truncated and our fallback
+      // {...}-extractor will have already recovered partial entries.
       claudeReply: identifiedPlaces.length === 0 ? claudeReply : null,
+      claudeReplyLength: identifiedPlaces.length === 0 ? claudeReplyLength : null,
+      claudeStopReason: identifiedPlaces.length === 0 ? claudeStopReason : null,
+      claudeParseError: identifiedPlaces.length === 0 ? claudeParseError : null,
     },
   };
 
@@ -687,7 +701,14 @@ Rules:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 1500,  // bigger ceiling — a "Top 10" list could need it
+      // 4000 tokens — a luxury concierge carousel with 8 slides can
+      // list 20-30 places. The previous 1500 ceiling was getting hit
+      // by mattconcierge / "Top 30 St Tropez spots" style posts,
+      // truncating the JSON mid-entry and making JSON.parse fail,
+      // which dropped ALL identified places to []. Bug diagnosis
+      // 2026-05-18: ~5 entries visible in the first 500 chars
+      // suggested Claude was producing a long list when truncated.
+      max_tokens: 4000,
       system: "Return ONLY valid JSON. No markdown fences, no preamble.",
       messages: [{ role: "user", content: userContent }],
     }),
@@ -697,21 +718,39 @@ Rules:
     throw new Error(`Claude HTTP ${res.status}: ${errText.slice(0, 200)}`);
   }
   const data = await res.json();
+  const stopReason = data.stop_reason || null;
   let text = data.content?.[0]?.text || "[]";
   // Strip any accidental markdown fences
   text = text.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "").trim();
   let parsed = [];
+  let parseError = null;
   try {
     const j = JSON.parse(text);
     if (Array.isArray(j)) parsed = j;
-  } catch {}
-  // Return an object so the caller can stitch diagnostic info into
-  // the response on no-match cases. Callers that only want the
-  // places array can read .places.
+  } catch (err) {
+    parseError = err.message;
+    // Fallback: extract individual {...} objects from a truncated /
+    // malformed array. Common cause: max_tokens cut Claude off mid-
+    // entry, leaving a dangling object + no closing bracket. We
+    // greedy-match every complete `{ ... }` block in the text and
+    // parse each one. Anything that fails to parse gets skipped.
+    // Bug 2026-05-18: 1500-token ceiling truncated mattconcierge's
+    // St Tropez carousel — 5+ named bars got dropped.
+    const objects = text.match(/\{[^{}]*\}/g) || [];
+    for (const obj of objects) {
+      try {
+        const o = JSON.parse(obj);
+        if (o && typeof o === "object" && o.name) parsed.push(o);
+      } catch {}
+    }
+  }
   return {
     places: parsed,
     imageBlocksSent: imageBlocks.length,
-    claudeReply: text.slice(0, 500),
+    claudeReply: text.slice(0, 800),
+    claudeReplyLength: text.length,
+    claudeStopReason: stopReason,
+    parseError,
   };
 }
 
