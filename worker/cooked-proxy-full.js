@@ -219,13 +219,23 @@ async function handleExtractFromSocial(request, env) {
   // tells it to read text from images (sign names, "Top 5" lists,
   // overlay captions).
   let identifiedPlaces;
+  // Diagnostic: how many image blocks Claude actually received (after
+  // dropping any frame entries with no data field) + Claude's raw
+  // first 500 chars on a 0-places case. Lets us see whether Claude
+  // (a) saw zero images, (b) saw images but identified nothing, or
+  // (c) emitted text we failed to parse as JSON.
+  let imageBlocksSent = 0;
+  let claudeReply = null;
   try {
-    identifiedPlaces = await identifyPlacesFromSignals(env, {
+    const r = await identifyPlacesFromSignals(env, {
       ...signals,
       transcript,
       frames,
       imageUrls,
     });
+    identifiedPlaces = r.places;
+    imageBlocksSent = r.imageBlocksSent;
+    claudeReply = r.claudeReply;
   } catch (err) {
     console.log("[extract-from-social] Claude error:", err.message);
     identifiedPlaces = [];
@@ -259,6 +269,15 @@ async function handleExtractFromSocial(request, env) {
       captionLength: (signals.caption || "").length,
       cacheHit: false,
       cacheKey: cacheK,
+      // Vision-pipeline diagnostics. imageBlocksSent is the count
+      // AFTER filtering out frame objects with no data field — a
+      // discrepancy with framesCount means the transcribe service
+      // returned empty frame stubs. claudeReply is the first 500
+      // chars of Claude's raw text — surfaced ONLY when zero places
+      // were identified, so a debugger can see whether Claude said
+      // "no specific names visible" vs emitted invalid JSON.
+      imageBlocksSent,
+      claudeReply: identifiedPlaces.length === 0 ? claudeReply : null,
     },
   };
 
@@ -561,6 +580,17 @@ function decodeHtmlEntities(s) {
 // list of restaurant/bar/hotel candidates. Heavy prompt engineering here
 // because creators tag a LOT of irrelevant hashtags (#foodie, #fyp) and
 // we don't want Claude inventing places.
+// Returned alongside the parsed places so callers can see:
+//   - how many image blocks Claude actually got (vs framesCount which
+//     counts before the empty-data filter)
+//   - the raw text Claude returned, when no places were extracted
+//     (so a "no match" case can be diagnosed without Cloudflare logs).
+//
+// The worker's response stitches these into debug.{imageBlocksSent,
+// claudeReply} only on the "0 places" path so successful runs stay
+// tight. (Bug diagnosis 2026-05-18: mattconcierge IG post that
+// the user said had "pages listed on the carousel" but returned
+// identifiedPlaces=[].)
 async function identifyPlacesFromSignals(env, signals) {
   const parts = [];
   parts.push(`Caption: ${signals.caption || "(no caption)"}`);
@@ -670,12 +700,19 @@ Rules:
   let text = data.content?.[0]?.text || "[]";
   // Strip any accidental markdown fences
   text = text.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "").trim();
+  let parsed = [];
   try {
-    const parsed = JSON.parse(text);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+    const j = JSON.parse(text);
+    if (Array.isArray(j)) parsed = j;
+  } catch {}
+  // Return an object so the caller can stitch diagnostic info into
+  // the response on no-match cases. Callers that only want the
+  // places array can read .places.
+  return {
+    places: parsed,
+    imageBlocksSent: imageBlocks.length,
+    claudeReply: text.slice(0, 500),
+  };
 }
 
 // ── Route: POST /fetch-url ────────────────────────────────
