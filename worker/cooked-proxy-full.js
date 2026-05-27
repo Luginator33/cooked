@@ -5,6 +5,7 @@
  *   POST /           — Claude API proxy (existing)
  *   POST /fetch-url  — Fetch a single URL, return extracted text
  *   POST /crawl      — Fetch a page, follow all links, fetch those too
+ *   POST /neo4j/query — Authenticated Neo4j proxy (Clerk JWT required)
  *   GET  /auto-research/status — Check last auto-research run
  *   POST /auto-research/run   — Manually trigger auto-research
  *
@@ -324,6 +325,301 @@ async function handleExtractFromSocial(request, env) {
     !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
 
   return jsonResponse(responsePayload);
+}
+
+// ── Route: POST /extract-from-article ────────────────────────
+//
+// Pulls restaurant mentions out of a generic article URL (Eater maps,
+// Infatuation guides, NY Times restaurant lists, blog posts, etc.).
+// iOS routes here when the pasted URL isn't TikTok or Instagram.
+//
+// Response shape mirrors /extract-from-social so iOS reuses the same
+// `SocialExtractResponse` decoder + downstream enrich/find flow:
+//   { platform: 'article', caption, author, thumbnail, poi: null,
+//     identifiedPlaces: [...], debug: {...} }
+//
+// Uses the same Supabase cache as social imports (different key prefix).
+async function handleExtractFromArticle(request, env) {
+  const { url } = await request.json();
+  if (!url || typeof url !== "string") {
+    return jsonResponse({ error: "url required" }, 400);
+  }
+  // Profile URLs ARE allowed here — a restaurant's IG or TikTok profile
+  // is just an HTML page with name + bio + location. The article
+  // pipeline (fetch HTML → Claude → places) handles it cleanly. Only
+  // reject TT/IG POST URLs (those still need the video-transcribe path
+  // on /extract-from-social).
+  const lower = url.toLowerCase();
+  const isSocialPost = (lower.includes("tiktok.com") || lower.includes("instagram.com"))
+    && /\/(p|reel|reels|tv|video)\//.test(lower);
+  if (isSocialPost) {
+    return jsonResponse({
+      error: "TikTok/Instagram POST URLs should hit /extract-from-social"
+    }, 400);
+  }
+  const isSocialProfile = (lower.includes("tiktok.com") || lower.includes("instagram.com"))
+    && !isSocialPost;
+
+  // Cache check — articles get shared more than TikToks so cache hits
+  // are common. Same Supabase table, different key prefix.
+  const cacheK = articleCacheKey(url);
+  if (cacheK && env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const hit = await socialImportCacheGet(env, cacheK);
+      if (hit) {
+        console.log(`[extract-from-article] cache HIT for ${cacheK}`);
+        return jsonResponse({
+          ...hit,
+          debug: { ...(hit.debug || {}), cacheHit: true, cacheKey: cacheK },
+        });
+      }
+    } catch (err) {
+      console.log(`[extract-from-article] cache read err (continuing): ${err.message}`);
+    }
+  }
+
+  // Fetch the article HTML + extract readable text.
+  let fetched;
+  try {
+    fetched = await fetchUrl(url);
+  } catch (err) {
+    return jsonResponse({ error: `Couldn't fetch article: ${err.message}` }, 502);
+  }
+
+  const articleText = (fetched.text || "").trim();
+  if (articleText.length < 200) {
+    return jsonResponse({
+      error: "Article body was too short to extract from (paywall / JS-rendered / wrong URL?)"
+    }, 422);
+  }
+
+  // Pull OG metadata for the article's title + image + author. Lets the
+  // iOS results sheet show a hero thumbnail + headline matching what
+  // the user saw on the source page.
+  const meta = extractArticleMeta(fetched.html, fetched.url);
+
+  // Cap the body we send to Claude. Eater maps cap around ~30KB; long
+  // listicles can hit 80KB+. ~60KB ≈ 15k tokens — plenty of headroom
+  // under Sonnet's input limit, predictable cost (~$0.05).
+  const MAX_CHARS = 60000;
+  const truncated = articleText.length > MAX_CHARS;
+  const body = truncated ? articleText.slice(0, MAX_CHARS) : articleText;
+
+  let identifiedPlaces = [];
+  let claudeReply = null;
+  let claudeReplyLength = 0;
+  let claudeStopReason = null;
+  let claudeParseError = null;
+  try {
+    const r = await identifyPlacesFromArticle(env, {
+      url: fetched.url,
+      title: meta.title,
+      author: meta.author,
+      bodyText: body,
+      // Profile pages need a different prompt — they're about
+      // exactly ONE place (the restaurant's own account), not a
+      // listicle of many.
+      isProfile: isSocialProfile,
+    });
+    identifiedPlaces = r.places;
+    claudeReply = r.claudeReply;
+    claudeReplyLength = r.claudeReplyLength;
+    claudeStopReason = r.claudeStopReason;
+    claudeParseError = r.parseError;
+  } catch (err) {
+    console.log("[extract-from-article] Claude error:", err.message);
+  }
+
+  let dbgCacheWrote = false;
+  let dbgCacheWriteErr = null;
+
+  const responsePayload = {
+    platform: "article",
+    caption: meta.title || "",
+    author: meta.author || null,
+    thumbnail: meta.image || null,
+    poi: null,
+    transcript: null,
+    transcribeError: null,
+    isVideo: false,
+    framesCount: 0,
+    imageUrlsCount: 0,
+    identifiedPlaces,
+    debug: {
+      cacheHit: false,
+      cacheKey: cacheK,
+      articleLength: articleText.length,
+      truncated,
+      claudeReply: identifiedPlaces.length === 0 ? claudeReply : null,
+      claudeReplyLength: identifiedPlaces.length === 0 ? claudeReplyLength : null,
+      claudeStopReason: identifiedPlaces.length === 0 ? claudeStopReason : null,
+      claudeParseError: identifiedPlaces.length === 0 ? claudeParseError : null,
+    },
+  };
+
+  // Only cache when we got something usable — empty results may be a
+  // transient Claude blip and re-fetching can recover.
+  if (identifiedPlaces.length > 0 && cacheK && env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      await socialImportCacheSet(env, cacheK, responsePayload);
+      dbgCacheWrote = true;
+      console.log(`[extract-from-article] cached ${identifiedPlaces.length} places under ${cacheK}`);
+    } catch (err) {
+      dbgCacheWriteErr = err.message;
+      console.log(`[extract-from-article] cache write err: ${err.message}`);
+    }
+  }
+  responsePayload.debug.cacheWrote = dbgCacheWrote;
+  responsePayload.debug.cacheWriteErr = dbgCacheWriteErr;
+
+  return jsonResponse(responsePayload);
+}
+
+// Article cache key — same shape as social to share the table, but
+// prefixed with 'article:' so the two don't collide on equivalent URLs.
+function articleCacheKey(url) {
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/\/$/, "");
+    return `article:${u.hostname}${path}`;
+  } catch {
+    return null;
+  }
+}
+
+// Best-effort OG/Twitter card extraction — title, author byline, hero
+// image. Falls back to <title> tag when og:title is missing.
+function extractArticleMeta(html, finalUrl) {
+  const m = (re) => {
+    const x = html.match(re);
+    return x ? x[1].trim() : null;
+  };
+  // Common meta tag patterns — try OG first, then Twitter, then bare.
+  const title =
+    m(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+    m(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i) ||
+    m(/<title[^>]*>([^<]+)<\/title>/i) ||
+    null;
+  const image =
+    m(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+    m(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) ||
+    null;
+  const author =
+    m(/<meta[^>]+name=["']author["'][^>]+content=["']([^"']+)["']/i) ||
+    m(/<meta[^>]+property=["']article:author["'][^>]+content=["']([^"']+)["']/i) ||
+    null;
+  // Heuristic: if og:image is a relative URL, resolve against the final
+  // article URL (after redirects).
+  let resolvedImage = image;
+  if (image && !/^https?:\/\//i.test(image)) {
+    try { resolvedImage = new URL(image, finalUrl).toString(); } catch {}
+  }
+  return { title, image: resolvedImage, author };
+}
+
+// Ask Claude to pull every restaurant/bar/cafe mentioned in the
+// article body. Tailored prompt: article writers list places with full
+// names + neighborhoods + sometimes addresses, so the extraction is
+// usually higher-precision than the TikTok pipeline.
+//
+// When isProfile=true, the URL is a social profile page (IG @handle
+// or TikTok @user) — the prompt narrows to extracting THE SINGLE place
+// the profile represents, NOT a list.
+async function identifyPlacesFromArticle(env, { url, title, author, bodyText, isProfile = false }) {
+  const profilePrompt = `You are extracting the restaurant that owns this social profile page.
+
+Profile URL: ${url}
+Page title: ${title || "(no title)"}
+Page author/handle: ${author || "(unknown)"}
+
+Page text (may include bio, recent post captions, location, contact info):
+"""
+${bodyText}
+"""
+
+Return ONLY a JSON array with AT MOST ONE entry — the single restaurant/bar/cafe/hotel this account represents:
+{ "name": "...", "city": "...", "neighborhood": "...", "type": "restaurant|bar|hotel|cafe", "confidence": "high|medium|low" }
+
+Rules:
+- Use the account's display name, NOT the @handle, when the display name is the real restaurant name.
+- City + neighborhood are usually in the bio ("Italian in Silver Lake, LA") or address area.
+- If the page is clearly a food influencer/critic and NOT a single restaurant's account, return [].
+- If the page lists multiple locations (e.g. a chain), return only the parent/brand entry.
+- Confidence "high" only when name AND city are both clear from the bio.
+- Return [] if you can't identify the place with reasonable confidence.`;
+
+  const articlePrompt = `You are extracting restaurant/bar/cafe/hotel mentions from a food article.
+
+Article URL: ${url}
+Article title: ${title || "(no title)"}
+Article author: ${author || "(unknown)"}
+
+Article body (may be truncated):
+"""
+${bodyText}
+"""
+
+Return ONLY a JSON array of every distinct place RECOMMENDED in the article. Each entry:
+{ "name": "...", "city": "...", "neighborhood": "...", "type": "restaurant|bar|hotel|cafe", "confidence": "high|medium|low" }
+
+Rules:
+- Eater maps, Infatuation guides, NYT lists, etc. usually have one numbered place per section. Extract them all (up to 60).
+- The article's TITLE often names the city ("Best California Burritos in San Diego") — use that city for every entry when no other city is given.
+- Skip places mentioned in passing as a comparison (e.g. "if you've been to Carbone in NY, you'll recognize the vibe"). Only include the article's actual recommendations.
+- Skip non-restaurant venues (museums, parks, hotels — unless the article is specifically about hotel bars/restaurants).
+- Skip dish names. "California burrito" is a dish; "Lolita's Taco Shop" is a place.
+- If a neighborhood is mentioned in the section (often as a tag like "BARRIO LOGAN"), include it.
+- Confidence "high" when the place has a clear name + address/neighborhood in the article. "medium" when name only. "low" when ambiguous.
+- Don't invent. If the truncated body cuts off mid-list, only return what you saw.
+- Return [] if nothing is clearly a recommended place.`;
+
+  const prompt = isProfile ? profilePrompt : articlePrompt;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 6000, // articles can carry 30-50 places easily
+      system: "Return ONLY valid JSON. No markdown fences, no preamble.",
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Claude HTTP ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const stopReason = data.stop_reason || null;
+  let text = data.content?.[0]?.text || "[]";
+  const fullText = text;
+  text = text.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "").trim();
+  let parsed = [];
+  let parseError = null;
+  try {
+    const j = JSON.parse(text);
+    if (Array.isArray(j)) parsed = j;
+  } catch (err) {
+    parseError = err.message;
+    // Same fallback as the social handler — pull complete {...} blocks
+    // out of a truncated/malformed response so we don't lose everything
+    // to a single dangling entry.
+    const objMatches = text.match(/\{[^{}]*\}/g) || [];
+    for (const o of objMatches) {
+      try { parsed.push(JSON.parse(o)); } catch {}
+    }
+  }
+  return {
+    places: parsed,
+    claudeReply: fullText.slice(0, 800),
+    claudeReplyLength: fullText.length,
+    claudeStopReason: stopReason,
+    parseError,
+  };
 }
 
 // ── Social-import cache helpers ─────────────────────────────
@@ -1657,6 +1953,2298 @@ async function handlePushBroadcast(request, env) {
   return jsonResponse({ sent, failed, tried: tokens.length });
 }
 
+// ─── Neo4j proxy ─────────────────────────────────────────────────────────────
+//
+// iOS used to embed the Neo4j Aura username + password directly in the binary —
+// anyone who downloaded the IPA could `strings` them out in 30 seconds and gain
+// read+write to the entire social graph (wipe loves, inject fake follows,
+// manipulate flame scores). This route moves credentials server-side: the iOS
+// app sends its Clerk session JWT in `Authorization: Bearer …`, the worker
+// verifies the JWT against Clerk's JWKS, and only then forwards the Cypher
+// statement to Aura with HTTP Basic auth from env secrets.
+//
+// Env vars required in Cloudflare:
+//   NEO4J_USER     — Aura database id used as the basic-auth username
+//   NEO4J_PASSWORD — Aura database password
+//
+// Endpoint:
+//   POST /neo4j/query   body: { statement: "MATCH ...", parameters: {...} }
+//
+// Auth:
+//   Authorization: Bearer <Clerk session JWT>
+//   Verified against the Clerk frontend API's JWKS endpoint. JWKS is cached for
+//   1 hour in worker memory to keep latency tight. Rejects unsigned tokens,
+//   expired tokens, and tokens from any other issuer.
+
+// Hard-coded — iOS Neo4jService had this same string baked in; if Aura ever
+// rotates the host we promote it to a secret. Single source of truth lives
+// here now so iOS can stay credential-free.
+const NEO4J_AURA_URL = "https://854f6d17.databases.neo4j.io/db/854f6d17/query/v2";
+
+// Clerk frontend API host. Derived from the publishable key shipped in iOS
+// (`pk_test_c2F2aW5nLWFsaWVuLTE0LmNsZXJrLmFjY291bnRzLmRldiQ` → base64-decodes
+// to `saving-alien-14.clerk.accounts.dev$`). If we ever move to production
+// Clerk the issuer flips and these two constants must update in lockstep.
+const CLERK_ISSUER = "https://saving-alien-14.clerk.accounts.dev";
+const CLERK_JWKS_URL = `${CLERK_ISSUER}/.well-known/jwks.json`;
+
+// Module-level cache for the JWKS keyset. Clerk rotates signing keys
+// infrequently; a 1-hour TTL is the same window Clerk's own docs recommend.
+const CLERK_JWKS_CACHE = { keys: null, expiresAt: 0 };
+
+async function fetchClerkJwks() {
+  const now = Date.now();
+  if (CLERK_JWKS_CACHE.keys && CLERK_JWKS_CACHE.expiresAt > now) {
+    return CLERK_JWKS_CACHE.keys;
+  }
+  const res = await fetch(CLERK_JWKS_URL, { signal: AbortSignal.timeout(5000) });
+  if (!res.ok) throw new Error(`JWKS fetch failed: ${res.status}`);
+  const json = await res.json();
+  const keys = Array.isArray(json.keys) ? json.keys : [];
+  CLERK_JWKS_CACHE.keys = keys;
+  CLERK_JWKS_CACHE.expiresAt = now + 60 * 60 * 1000; // 1 hour
+  return keys;
+}
+
+// base64url → Uint8Array (RFC 7515). Web Crypto's `crypto.subtle.verify`
+// wants raw bytes, but JWTs ship base64url-encoded with padding stripped, so
+// we re-pad and atob() into a Uint8Array.
+function base64UrlDecode(str) {
+  const padded = str.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(str.length / 4) * 4, "=");
+  const bin = atob(padded);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+// Import a JWK (the JSON shape Clerk publishes at /.well-known/jwks.json) as
+// a CryptoKey suitable for `crypto.subtle.verify`. Clerk currently signs with
+// RS256 (RSA-SHA256); if that ever flips to ES256 we'll add a branch here.
+async function importJwk(jwk) {
+  return crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"]
+  );
+}
+
+/**
+ * Verify a Clerk session JWT.
+ *   1. Parse header + payload (rejects malformed tokens)
+ *   2. Require alg == "RS256" — blocks the "alg: none" downgrade attack
+ *   3. Look up the signing key by `kid` from Clerk's cached JWKS
+ *   4. Verify the RSA-SHA256 signature using Web Crypto
+ *   5. Check `iss` matches the expected Clerk issuer
+ *   6. Check `exp` / `nbf` / `iat` against the current clock (60s skew)
+ *
+ * Returns the decoded payload on success (caller pulls `sub` for the Clerk
+ * user id). Throws on any failure — caller maps to 401.
+ */
+async function verifyClerkJwt(token) {
+  if (typeof token !== "string") throw new Error("Token must be a string");
+  const parts = token.split(".");
+  if (parts.length !== 3) throw new Error("Malformed JWT");
+
+  const [headerB64, payloadB64, signatureB64] = parts;
+  let header, payload;
+  try {
+    header = JSON.parse(new TextDecoder().decode(base64UrlDecode(headerB64)));
+    payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(payloadB64)));
+  } catch {
+    throw new Error("Invalid JWT encoding");
+  }
+
+  if (header.alg !== "RS256") throw new Error(`Unsupported JWT alg: ${header.alg}`);
+  if (!header.kid) throw new Error("JWT missing kid header");
+
+  const keys = await fetchClerkJwks();
+  const jwk = keys.find(k => k.kid === header.kid);
+  if (!jwk) throw new Error("Signing key not found in JWKS");
+
+  const cryptoKey = await importJwk(jwk);
+  const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
+  const signature = base64UrlDecode(signatureB64);
+  const valid = await crypto.subtle.verify(
+    { name: "RSASSA-PKCS1-v1_5" },
+    cryptoKey,
+    signature,
+    data
+  );
+  if (!valid) throw new Error("Signature verification failed");
+
+  if (payload.iss !== CLERK_ISSUER) throw new Error(`Bad issuer: ${payload.iss}`);
+
+  const now = Math.floor(Date.now() / 1000);
+  const SKEW = 60;
+  if (typeof payload.exp === "number" && payload.exp + SKEW < now) {
+    throw new Error("Token expired");
+  }
+  if (typeof payload.nbf === "number" && payload.nbf - SKEW > now) {
+    throw new Error("Token not yet valid");
+  }
+  if (typeof payload.iat === "number" && payload.iat - SKEW > now) {
+    throw new Error("Token issued in the future");
+  }
+
+  return payload;
+}
+
+async function handleNeo4jQuery(request, env) {
+  // 1. Extract + verify the Clerk JWT.
+  const authHeader = request.headers.get("Authorization") || "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    return jsonResponse({ error: "Missing Bearer token" }, 401);
+  }
+  const token = match[1].trim();
+  let claims;
+  try {
+    claims = await verifyClerkJwt(token);
+  } catch (err) {
+    console.log("[neo4j/query] JWT verification failed:", err.message);
+    return jsonResponse({ error: "Invalid token" }, 401);
+  }
+  // claims.sub = Clerk user id. Not currently used for authz — today's
+  // model is "anyone with a valid Clerk session can hit Neo4j" (same
+  // access the iOS app had before, just no longer wide open to anyone
+  // with the IPA). Future: per-user rate limit / write gating.
+  void claims;
+
+  // 2. Parse the request body.
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "Invalid JSON" }, 400);
+  }
+  const { statement, parameters } = body || {};
+  if (typeof statement !== "string" || !statement.trim()) {
+    return jsonResponse({ error: "statement (string) required" }, 400);
+  }
+  const params = (parameters && typeof parameters === "object" && !Array.isArray(parameters))
+    ? parameters
+    : {};
+
+  // 3. Check credentials are configured.
+  if (!env.NEO4J_USER || !env.NEO4J_PASSWORD) {
+    console.log("[neo4j/query] NEO4J_USER / NEO4J_PASSWORD not set");
+    return jsonResponse({ error: "Neo4j credentials not configured" }, 500);
+  }
+
+  // 4. Forward to Aura with Basic auth + 15s timeout.
+  const basic = btoa(`${env.NEO4J_USER}:${env.NEO4J_PASSWORD}`);
+  let upstream;
+  try {
+    upstream = await fetch(NEO4J_AURA_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${basic}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ statement, parameters: params }),
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (err) {
+    console.log("[neo4j/query] Aura fetch failed:", err.message);
+    return jsonResponse({ error: "Upstream unavailable" }, 502);
+  }
+
+  // 5. Pass the Aura response body through unchanged — iOS callers
+  // expect the exact `{ data: { fields, values } }` shape.
+  const responseText = await upstream.text();
+  return new Response(responseText, {
+    status: upstream.status,
+    headers: { ...CORS, "Content-Type": "application/json" },
+  });
+}
+
+// ── Phase 1B — card_events → Neo4j sync ──────────────────────
+//
+// Reads new card_events rows from Supabase every 15 minutes and
+// upserts them into Neo4j as IMPRESSED / TAPPED / PASSED / SKIPPED
+// relationships. Impressions aggregate by (user, restaurant, week)
+// so the graph stays small at scale; passes/skips/taps are per-event
+// because their timestamps matter (e.g. for the 30-day blacklist).
+//
+// Idempotent — uses card_events_sync_state to track last_event_id.
+// Re-running the same window writes the same MERGE statements,
+// which Neo4j handles safely.
+//
+// Triggered by Cloudflare cron `*/15 * * * *` (configure in dashboard).
+//
+async function syncCardEventsToNeo4j(env) {
+  const t0 = Date.now();
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY || !env.NEO4J_USER || !env.NEO4J_PASSWORD) {
+    console.log("[event-sync] missing env — skipping");
+    return;
+  }
+
+  // 1. Read the sync watermark.
+  const stateRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/card_events_sync_state?id=eq.1&select=last_event_id`,
+    { headers: supabaseHeaders(env) }
+  );
+  if (!stateRes.ok) {
+    console.log("[event-sync] couldn't read sync_state:", stateRes.status);
+    return;
+  }
+  const stateRows = await stateRes.json();
+  const lastId = (stateRows?.[0]?.last_event_id ?? 0);
+  console.log(`[event-sync] starting from event id=${lastId}`);
+
+  // 2. Pull new events. Cap at 5000/run to keep one tick bounded.
+  const BATCH_CAP = 5000;
+  const eventsRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/card_events?id=gt.${lastId}&order=id.asc&limit=${BATCH_CAP}&select=id,user_id,restaurant_id,kind,at`,
+    { headers: supabaseHeaders(env) }
+  );
+  if (!eventsRes.ok) {
+    console.log("[event-sync] events query failed:", eventsRes.status);
+    return;
+  }
+  const events = await eventsRes.json();
+  if (!Array.isArray(events) || events.length === 0) {
+    console.log("[event-sync] nothing to sync");
+    return;
+  }
+  console.log(`[event-sync] pulled ${events.length} events`);
+
+  // 3. Aggregate impressions by (user, restaurant, week). Other event
+  //    kinds stay per-event because their timestamps matter (passes
+  //    drive the 30-day blacklist, taps the engagement score, etc.).
+  const impressionAgg = new Map(); // key: "user|rid|YYYY-WW" → {userId, restaurantId, weekStart, count, lastAt}
+  const perEvent = []; // [{userId, restaurantId, kind, at}]
+
+  for (const e of events) {
+    if (!e.user_id || !e.restaurant_id) continue;
+    if (e.kind === "impression") {
+      const week = isoWeek(e.at);
+      const key = `${e.user_id}|${e.restaurant_id}|${week}`;
+      const slot = impressionAgg.get(key);
+      if (slot) {
+        slot.count++;
+        if (e.at > slot.lastAt) slot.lastAt = e.at;
+      } else {
+        impressionAgg.set(key, {
+          userId: e.user_id,
+          restaurantId: e.restaurant_id,
+          weekStart: weekStartIso(e.at),
+          count: 1,
+          lastAt: e.at,
+        });
+      }
+    } else {
+      perEvent.push({
+        userId: e.user_id,
+        restaurantId: e.restaurant_id,
+        kind: e.kind,
+        at: e.at,
+      });
+    }
+  }
+
+  // 4. Write to Neo4j. Aggregated impressions: one MERGE per agg
+  //    bucket that adds to the count. Per-event: MERGE with the
+  //    individual timestamp. Each MERGE is a separate Aura call,
+  //    so cap parallelism to avoid hammering.
+  const neoBasic = "Basic " + btoa(`${env.NEO4J_USER}:${env.NEO4J_PASSWORD}`);
+  let wrote = 0, failed = 0;
+
+  // 4a. Impressions
+  for (const agg of impressionAgg.values()) {
+    const cypher = `
+      MERGE (u:User {id: $userId})
+      MERGE (r:Restaurant {id: toString($restaurantId)})
+      MERGE (u)-[rel:IMPRESSED {weekStart: $weekStart}]->(r)
+      ON CREATE SET rel.count = $count, rel.lastAt = datetime($lastAt)
+      ON MATCH SET rel.count = rel.count + $count,
+                   rel.lastAt = CASE WHEN datetime($lastAt) > rel.lastAt
+                                     THEN datetime($lastAt) ELSE rel.lastAt END
+    `;
+    const params = {
+      userId: agg.userId,
+      restaurantId: agg.restaurantId,
+      weekStart: agg.weekStart,
+      count: agg.count,
+      lastAt: agg.lastAt,
+    };
+    try {
+      const r = await neoExec(env, neoBasic, cypher, params);
+      if (r.ok) wrote++; else failed++;
+    } catch { failed++; }
+  }
+
+  // 4b. Per-event: TAPPED / PASSED / SKIPPED / LOVE / LOVE_TAP /
+  //     BOOKMARK_TAP / SHARE_TAP. Map to Neo4j relationship kinds.
+  //     LOVED already exists in the graph (via InteractionLogger) —
+  //     a Heat-game love is the same signal. We skip duplicating it
+  //     here; existing path writes it via the love toggle.
+  for (const ev of perEvent) {
+    const rel = relForEventKind(ev.kind);
+    if (!rel) continue;  // unknown / skipped kind
+    const cypher = `
+      MERGE (u:User {id: $userId})
+      MERGE (r:Restaurant {id: toString($restaurantId)})
+      MERGE (u)-[edge:${rel} {at: datetime($at)}]->(r)
+    `;
+    try {
+      const res = await neoExec(env, neoBasic, cypher, {
+        userId: ev.userId,
+        restaurantId: ev.restaurantId,
+        at: ev.at,
+      });
+      if (res.ok) wrote++; else failed++;
+    } catch { failed++; }
+  }
+
+  // 5. Advance the watermark.
+  const newLast = events[events.length - 1].id;
+  const updRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/card_events_sync_state?id=eq.1`,
+    {
+      method: "PATCH",
+      headers: { ...supabaseHeaders(env), "Content-Type": "application/json", "Prefer": "return=minimal" },
+      body: JSON.stringify({ last_event_id: newLast, last_run_at: new Date().toISOString() }),
+    }
+  );
+  if (!updRes.ok) {
+    console.log("[event-sync] couldn't update sync_state:", updRes.status);
+  }
+
+  const elapsed = Date.now() - t0;
+  console.log(`[event-sync] done — ${wrote} writes, ${failed} failures, ${elapsed}ms, new last_id=${newLast}`);
+}
+
+// Map a card_events.kind to a Neo4j relationship name.
+function relForEventKind(kind) {
+  switch (kind) {
+    case "tap":          return "TAPPED";
+    case "pass":         return "PASSED";
+    case "skip":         return "SKIPPED";
+    case "love_tap":     return "LOVED_FROM_CARD";  // distinct from full LOVE
+    case "bookmark_tap": return "WATCHLISTED_FROM_CARD";
+    case "share_tap":    return "SHARED_FROM_CARD";
+    case "love":         return null; // existing path writes LOVED — don't duplicate
+    default:             return null;
+  }
+}
+
+// Single Aura request — pulled into its own helper because we make
+// dozens per sync run.
+async function neoExec(env, basicAuth, statement, parameters) {
+  return await fetch(NEO4J_AURA_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": basicAuth,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ statement, parameters }),
+    signal: AbortSignal.timeout(8000),
+  });
+}
+
+function supabaseHeaders(env) {
+  return {
+    "apikey": env.SUPABASE_SERVICE_ROLE_KEY,
+    "Authorization": `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+  };
+}
+
+// ISO 8601 week-of-year string used to bucket impressions.
+// "2026-W21" — standardised, sortable, language-agnostic.
+function isoWeek(isoTs) {
+  const d = new Date(isoTs);
+  // Get Thursday in current week (ISO week-numbering rule).
+  const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  target.setUTCDate(target.getUTCDate() + 3 - ((target.getUTCDay() + 6) % 7));
+  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
+  const weekNum = 1 + Math.round(((target - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+  return `${target.getUTCFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+}
+
+// Monday of the week as ISO timestamp (used as the canonical "weekStart"
+// stored on IMPRESSED edges).
+function weekStartIso(isoTs) {
+  const d = new Date(isoTs);
+  const day = (d.getUTCDay() + 6) % 7; // 0=Mon ... 6=Sun
+  const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day));
+  return monday.toISOString();
+}
+
+// One-time reconcile: bring Neo4j LOVED / WATCHLISTED / FOLLOWS into
+// sync with the Supabase source of truth. Going forward,
+// InteractionLogger.unlove/unwatchlist already cascade properly to
+// Neo4j — but anything that happened BEFORE those paths shipped left
+// orphan edges in the graph. This route deletes them.
+//
+// Triggered via POST /admin/reconcile-neo4j-state. Reports per-user
+// counts of deleted edges + final per-edge totals.
+async function reconcileNeo4jToSupabase(env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY || !env.NEO4J_USER || !env.NEO4J_PASSWORD) {
+    return { error: "missing env" };
+  }
+  const usersRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/user_data?select=clerk_user_id,loved,watchlist`,
+    { headers: supabaseHeaders(env) }
+  );
+  if (!usersRes.ok) return { error: `users fetch ${usersRes.status}` };
+  const users = await usersRes.json();
+  const followsRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/follows?select=follower_id,following_id`,
+    { headers: supabaseHeaders(env) }
+  );
+  const allFollows = followsRes.ok ? await followsRes.json() : [];
+  const followsByUser = {};
+  for (const row of allFollows) {
+    (followsByUser[row.follower_id] ||= []).push(row.following_id);
+  }
+
+  const neoBasic = "Basic " + btoa(`${env.NEO4J_USER}:${env.NEO4J_PASSWORD}`);
+  let lovedDeleted = 0, watchlistDeleted = 0, followsDeleted = 0;
+
+  for (const u of users ?? []) {
+    const userId = u.clerk_user_id;
+    const currentLoved = (u.loved ?? []).map(Number).filter(Number.isFinite);
+    const currentWatchlist = (u.watchlist ?? []).map(Number).filter(Number.isFinite);
+    const currentFollows = followsByUser[userId] ?? [];
+
+    // LOVED reconcile — delete edges to Restaurants no longer in
+    // current loved[]. rest.id is stored as STRING in Neo4j, so we
+    // compare against the current list as strings too (no int
+    // coercion needed). Parens around the NOT (x IN y) matter —
+    // bare `NOT x IN y` parses as `(NOT x) IN y` in Cypher.
+    const currentLovedStr = currentLoved.map(String);
+    try {
+      const cypher = currentLovedStr.length === 0
+        ? `MATCH (u:User {id: $userId})-[r:LOVED]->()
+           WITH r, count(r) AS n DELETE r RETURN n`
+        : `MATCH (u:User {id: $userId})-[r:LOVED]->(rest:Restaurant)
+           WHERE NOT (toString(rest.id) IN $current)
+           WITH r, count(r) AS n DELETE r RETURN n`;
+      const res = await neoExec(env, neoBasic, cypher, { userId, current: currentLovedStr });
+      if (res.ok) {
+        const d = await res.json();
+        lovedDeleted += (d?.data?.values?.[0]?.[0] ?? 0);
+      }
+    } catch {}
+
+    // WATCHLISTED reconcile
+    const currentWatchlistStr = currentWatchlist.map(String);
+    try {
+      const cypher = currentWatchlistStr.length === 0
+        ? `MATCH (u:User {id: $userId})-[r:WATCHLISTED]->()
+           WITH r, count(r) AS n DELETE r RETURN n`
+        : `MATCH (u:User {id: $userId})-[r:WATCHLISTED]->(rest:Restaurant)
+           WHERE NOT (toString(rest.id) IN $current)
+           WITH r, count(r) AS n DELETE r RETURN n`;
+      const res = await neoExec(env, neoBasic, cypher, { userId, current: currentWatchlistStr });
+      if (res.ok) {
+        const d = await res.json();
+        watchlistDeleted += (d?.data?.values?.[0]?.[0] ?? 0);
+      }
+    } catch {}
+
+    // FOLLOWS reconcile — only edges to OTHER User nodes (the
+    // FOLLOWS-to-:City legacy edges get cleaned separately below).
+    // User.id is already STRING — compare directly.
+    try {
+      const cypher = currentFollows.length === 0
+        ? `MATCH (u:User {id: $userId})-[r:FOLLOWS]->(other:User)
+           WITH r, count(r) AS n DELETE r RETURN n`
+        : `MATCH (u:User {id: $userId})-[r:FOLLOWS]->(other:User)
+           WHERE NOT (other.id IN $current)
+           WITH r, count(r) AS n DELETE r RETURN n`;
+      const res = await neoExec(env, neoBasic, cypher, { userId, current: currentFollows });
+      if (res.ok) {
+        const d = await res.json();
+        followsDeleted += (d?.data?.values?.[0]?.[0] ?? 0);
+      }
+    } catch {}
+  }
+
+  // Legacy FOLLOWS-to-City → FOLLOWS_CITY conversion. Those 22 stale
+  // edges we saw earlier were created before the FOLLOWS_CITY
+  // relationship type existed. Convert + delete.
+  let legacyFollowsCityConverted = 0;
+  try {
+    const cypher = `
+      MATCH (u:User)-[r:FOLLOWS]->(c:City)
+      MERGE (u)-[:FOLLOWS_CITY]->(c)
+      DELETE r
+      RETURN count(r) AS n
+    `;
+    const res = await neoExec(env, neoBasic, cypher, {});
+    if (res.ok) {
+      const d = await res.json();
+      legacyFollowsCityConverted = (d?.data?.values?.[0]?.[0] ?? 0);
+    }
+  } catch {}
+
+  return {
+    users: users?.length ?? 0,
+    lovedDeleted,
+    watchlistDeleted,
+    followsDeleted,
+    legacyFollowsCityConverted,
+  };
+}
+
+// One-time backfill: import existing user_data.noped + .skipped
+// arrays into Neo4j as PASSED / SKIPPED edges with at=NOW (we have
+// no historical timestamps). Call once after Phase 1B ships.
+//
+// Triggered via POST /admin/backfill-card-events (admin-only check
+// would happen in the route handler; for now it's just present).
+async function backfillNopedSkippedToNeo4j(env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY || !env.NEO4J_USER || !env.NEO4J_PASSWORD) {
+    return { error: "missing env" };
+  }
+  const usersRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/user_data?select=clerk_user_id,noped,skipped`,
+    { headers: supabaseHeaders(env) }
+  );
+  if (!usersRes.ok) return { error: `users fetch ${usersRes.status}` };
+  const users = await usersRes.json();
+  const neoBasic = "Basic " + btoa(`${env.NEO4J_USER}:${env.NEO4J_PASSWORD}`);
+  let passed = 0, skipped = 0;
+  const now = new Date().toISOString();
+  for (const u of users ?? []) {
+    for (const rid of (u.noped ?? [])) {
+      try {
+        const r = await neoExec(env, neoBasic,
+          `MERGE (us:User {id: $userId}) MERGE (rs:Restaurant {id: toString($restaurantId)})
+           MERGE (us)-[:PASSED {at: datetime($at)}]->(rs)`,
+          { userId: u.clerk_user_id, restaurantId: Number(rid), at: now });
+        if (r.ok) passed++;
+      } catch {}
+    }
+    for (const rid of (u.skipped ?? [])) {
+      try {
+        const r = await neoExec(env, neoBasic,
+          `MERGE (us:User {id: $userId}) MERGE (rs:Restaurant {id: toString($restaurantId)})
+           MERGE (us)-[:SKIPPED {at: datetime($at)}]->(rs)`,
+          { userId: u.clerk_user_id, restaurantId: Number(rid), at: now });
+        if (r.ok) skipped++;
+      } catch {}
+    }
+  }
+  return { passed, skipped, users: users?.length ?? 0 };
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// /api/home-feed — Server-side feed assembly (Build 64+)
+// ════════════════════════════════════════════════════════════════════════════
+// Inlined from worker/feed-scoring.js + worker/home-feed-cypher.js +
+// worker/home-feed-handler.js. Standalone files preserved in the repo for
+// reference / future maintenance — all three are inlined here so the
+// Cloudflare dashboard paste-deploy continues to work with a single source
+// file.
+//
+// Why: iOS used to fire 30+ separate network round-trips per home load.
+// This endpoint collapses them into ONE response by running everything
+// server-side where Neo4j Aura + Supabase are inside Cloudflare's network.
+
+// ─── feed-scoring.js ──────────────────────────────────────────────────────────
+//
+// Server-side port of iOS `FeedScoringService` (see
+// `cooked-ios/cooked/Services/FlameScoreService.swift` — search "Phase 2: Feed
+// Scoring"). Pure (stateless) per-(viewer, restaurant) score. Each component
+// returns 0..1; weights are applied in the aggregate.
+//
+// Missing inputs degrade gracefully: each component that lacks data
+// contributes 0. Cold-start (zero loves) reduces to base quality only,
+// matching Discover's behavior.
+//
+// FORMULA (locked Phase 2):
+//
+//   total = baseQuality · w1
+//         + tasteMatch  · w2
+//         + socialProof · w3
+//         + freshness   · w4
+//         + contextFit  · w5
+//         − negative    · w6
+//
+// Cold-start (`viewer.lovedIds.size === 0`): every component except
+// `baseQuality` returns 0, so the score reduces to flame + photos + bio.
+//
+// SHAPE EXPECTATIONS:
+//
+//   restaurant: {
+//     id: number,
+//     tags: string[]|null,
+//     cuisine: string|null,
+//     neighborhood: string|null,
+//     city: string|null,
+//     photoUrl: string|null,
+//     description: string|null,
+//     googleReviews: number|null
+//   }
+//
+//   flameScore: number (0..5)
+//
+//   viewer: {
+//     lovedIds: Set<number>,
+//     watchlistIds: Set<number>,
+//     nopedIds: Set<number>,
+//     negativeReviewIds: Set<number>,
+//     lovedTags: Set<string>,
+//     lovedCuisines: Set<string>,
+//     lovedNeighborhoods: Set<string>,
+//     vibes: Set<string>,
+//     followedCities: Set<string>,
+//     friendLoveCountByRestaurant: Map<number, number>,
+//     tastemakerRestaurants: Set<number>,
+//     friendReviewedWithPhotos: Set<number>,
+//     friendFoundRestaurants: Set<number>,
+//     friendsNegativeReviewCountByRestaurant: Map<number, number>
+//   }
+//
+//   engagement: { impressions: number, taps: number, lastImpressionAt: Date|null } | null
+//
+//   context: { now: Date }
+//
+
+// ── Weights ─────────────────────────────────────────────────────────────────
+//
+// All weights in one place so tuning is one-stop. Started conservative per
+// discussion 2026-05-25:
+// - Negative weight = 2.5 (the doc said 3.0; we softened it because our
+//   5-user dataset means noisy engagement → crank up at ~100 users).
+// - taste_match remains the biggest positive (2.5).
+const FEED_SCORING_WEIGHTS = {
+  baseQuality:     1.0,
+  tasteMatch:      2.5,
+  socialProof:     2.0,
+  freshness:       1.5,
+  contextFit:      1.0,
+  // Subtracted from the total. Smaller than the doc's 3.0 because engagement
+  // signals are noisy at our scale.
+  negativeSignals: 2.5,
+};
+
+// ── Math helpers ────────────────────────────────────────────────────────────
+
+/// Standard sigmoid. `sigmoid(0) = 0.5`. We typically call with
+/// `sigmoid(x/N - 1)` so x = N maps to 0.5 — a "halfway threshold."
+function sigmoid(x) {
+  return 1.0 / (1.0 + Math.exp(-x));
+}
+
+/// Jaccard similarity |A ∩ B| / |A ∪ B|. Returns 0 for either-empty to
+/// avoid the false-positive "no-tag restaurant perfectly matches a no-tag
+/// viewer" case.
+function jaccard(a, b) {
+  if (!a || !b) return 0;
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  // Iterate the smaller set for the intersection count.
+  const [smaller, larger] = a.size <= b.size ? [a, b] : [b, a];
+  for (const v of smaller) {
+    if (larger.has(v)) intersection += 1;
+  }
+  // |A ∪ B| = |A| + |B| − |A ∩ B|
+  const union = a.size + b.size - intersection;
+  return union > 0 ? intersection / union : 0;
+}
+
+// ── Components (each returns 0..1) ──────────────────────────────────────────
+
+/// 0.6 · normalized flame
+/// + 0.2 · sigmoid(googleReviews / 500 − 1)  (500 reviews ≈ 0.5)
+/// + 0.1 · has photo
+/// + 0.1 · has bio
+function baseQuality(restaurant, flameScore) {
+  const clampedFlame = Math.max(0, Math.min(5, Number(flameScore) || 0));
+  const flame = clampedFlame / 5.0;
+  const reviews = Number(restaurant.googleReviews ?? 0);
+  const reviewsTerm = sigmoid(reviews / 500.0 - 1.0);
+  const hasPhoto = restaurant.photoUrl ? 1.0 : 0.0;
+  const hasBio = restaurant.description && restaurant.description.length > 0 ? 1.0 : 0.0;
+  return 0.6 * flame + 0.2 * reviewsTerm + 0.1 * hasPhoto + 0.1 * hasBio;
+}
+
+/// 0.4 · jaccard(restaurant.tags, viewer.lovedTags)
+/// + 0.3 · cuisine in viewer.lovedCuisines
+/// + 0.2 · jaccard(restaurant.tags, viewer.vibes)
+/// + 0.1 · neighborhood in viewer.lovedNeighborhoods
+function tasteMatch(restaurant, viewer) {
+  const tags = new Set(Array.isArray(restaurant.tags) ? restaurant.tags : []);
+  const tagOverlap = jaccard(tags, viewer.lovedTags);
+
+  const cuisineMatch = restaurant.cuisine && viewer.lovedCuisines.has(restaurant.cuisine) ? 1.0 : 0.0;
+
+  const vibeOverlap = jaccard(tags, viewer.vibes);
+
+  const neighborhoodMatch = restaurant.neighborhood && viewer.lovedNeighborhoods.has(restaurant.neighborhood)
+    ? 1.0
+    : 0.0;
+
+  return 0.4 * tagOverlap + 0.3 * cuisineMatch + 0.2 * vibeOverlap + 0.1 * neighborhoodMatch;
+}
+
+/// 0.4 · sigmoid(friendLoveCount/3 − 1)  (3 friends → 0.5)
+/// + 0.2 · tastemaker friend loved
+/// + 0.2 · friend posted review with photos
+/// + 0.2 · friend FOUND this via Find import (added 2026-05-25)
+function socialProof(restaurant, viewer) {
+  const rid = restaurant.id;
+  const friendCount = Number(viewer.friendLoveCountByRestaurant.get(rid) ?? 0);
+  const loveTerm = sigmoid(friendCount / 3.0 - 1.0);
+
+  const tastemaker = viewer.tastemakerRestaurants.has(rid) ? 1.0 : 0.0;
+  const withPhotos = viewer.friendReviewedWithPhotos.has(rid) ? 1.0 : 0.0;
+  const friendFound = viewer.friendFoundRestaurants.has(rid) ? 1.0 : 0.0;
+
+  return 0.4 * loveTerm + 0.2 * tastemaker + 0.2 * withPhotos + 0.2 * friendFound;
+}
+
+/// 0.7 · exp(−daysSinceShown / 7)         (never-shown = 1.0)
+/// + 0.3 · friend FOUND this recently (per product call 2026-05-25)
+function freshness(restaurant, viewer, engagement, context) {
+  let daysSinceShown;
+  if (!engagement || !engagement.lastImpressionAt) {
+    daysSinceShown = Infinity;
+  } else {
+    // context.now and engagement.lastImpressionAt are Date instances.
+    // Swift uses `timeIntervalSince(last)` which is seconds; divide by 86400.
+    const seconds = (context.now.getTime() - engagement.lastImpressionAt.getTime()) / 1000.0;
+    daysSinceShown = seconds / 86_400.0;
+  }
+  // exp(-Infinity / 7) = 0; matches Swift's exp(-Infinity) = 0.
+  const decayTerm = Math.exp(-Math.max(0, daysSinceShown) / 7.0);
+
+  const friendFound = viewer.friendFoundRestaurants.has(restaurant.id) ? 1.0 : 0.0;
+
+  return 0.7 * decayTerm + 0.3 * friendFound;
+}
+
+/// 0.5 · city in viewer.followedCities
+/// + 0.5 · neighborhood in viewer.lovedNeighborhoods
+/// (Time-of-day flavor cut per product call — overlaps Mood Pills UX.)
+function contextFit(restaurant, viewer) {
+  const cityMatch = restaurant.city && viewer.followedCities.has(restaurant.city) ? 1.0 : 0.0;
+  const hoodFollow = restaurant.neighborhood && viewer.lovedNeighborhoods.has(restaurant.neighborhood)
+    ? 1.0
+    : 0.0;
+  return 0.5 * cityMatch + 0.5 * hoodFollow;
+}
+
+/// 0.35 · (passed AND <3 friends loved) — defensive net; Phase 0 already
+///         filters these at candidate stage, so this is rarely > 0
+/// + 0.25 · sigmoid(impressionsWithoutTap / 5 − 1)  (5 dry shows ≈ 0.5)
+/// + 0.25 · viewer reviewed this ≤2★
+/// + 0.15 · friend-propagation: count of friends who rated it ≤2★
+///          (added Build 60 — locked decision #7)
+/// Disliked-cuisines term: deferred (no signal source yet).
+function negativeSignals(restaurant, viewer, engagement) {
+  const rid = restaurant.id;
+  const friendCount = Number(viewer.friendLoveCountByRestaurant.get(rid) ?? 0);
+
+  const passedTerm = viewer.nopedIds.has(rid) && friendCount < 3 ? 1.0 : 0.0;
+
+  const impressions = engagement?.impressions ?? 0;
+  const taps = engagement?.taps ?? 0;
+  const dryImpressions = Math.max(0, impressions - taps);
+  const dryTerm = sigmoid(dryImpressions / 5.0 - 1.0);
+
+  const lowReviewTerm = viewer.negativeReviewIds.has(rid) ? 1.0 : 0.0;
+
+  // Friend-propagation: only fires when ≥1 friend panned the place. Sigmoid
+  // centered at 2 friends so two panners ≈ 0.5, five panners ≈ 0.82. The
+  // explicit `=== 0 ? 0` avoids the sigmoid floor (~0.27) penalizing places
+  // no friend rated low.
+  const friendNegCount = Number(viewer.friendsNegativeReviewCountByRestaurant.get(rid) ?? 0);
+  const friendNegTerm = friendNegCount === 0 ? 0 : sigmoid(friendNegCount / 2.0 - 1.0);
+
+  return 0.35 * passedTerm + 0.25 * dryTerm + 0.25 * lowReviewTerm + 0.15 * friendNegTerm;
+}
+
+// ── Main entry point ────────────────────────────────────────────────────────
+
+/// Pure scoring engine. Computes a per-(viewer, restaurant) score from the
+/// locked Phase 2 formula. Stateless — call with whatever inputs you have.
+/// Each component returns 0..1; weights are applied in the aggregate.
+///
+/// Returns: { total, baseQuality, tasteMatch, socialProof, freshness,
+///            contextFit, negative }
+function scoreRestaurant(restaurant, flameScore, viewer, engagement, context) {
+  // Cold-start: zero loves means we have no taste signal. Rank by base
+  // quality only — matches Discover today, smooth UX for brand-new users
+  // who haven't built a profile yet.
+  const isColdStart = viewer.lovedIds.size === 0;
+
+  const baseQ  = baseQuality(restaurant, flameScore);
+  const tasteM = isColdStart ? 0 : tasteMatch(restaurant, viewer);
+  const social = isColdStart ? 0 : socialProof(restaurant, viewer);
+  const fresh  = isColdStart ? 0 : freshness(restaurant, viewer, engagement, context);
+  const ctx    = isColdStart ? 0 : contextFit(restaurant, viewer);
+  const neg    = isColdStart ? 0 : negativeSignals(restaurant, viewer, engagement);
+
+  const total = baseQ  * FEED_SCORING_WEIGHTS.baseQuality
+              + tasteM * FEED_SCORING_WEIGHTS.tasteMatch
+              + social * FEED_SCORING_WEIGHTS.socialProof
+              + fresh  * FEED_SCORING_WEIGHTS.freshness
+              + ctx    * FEED_SCORING_WEIGHTS.contextFit
+              - neg    * FEED_SCORING_WEIGHTS.negativeSignals;
+
+  return {
+    total,
+    baseQuality: baseQ,
+    tasteMatch: tasteM,
+    socialProof: social,
+    freshness: fresh,
+    contextFit: ctx,
+    negative: neg,
+  };
+}
+
+// ─── home-feed-cypher.js ──────────────────────────────────────────────────────
+//
+// Server-side port of the 17 iOS Neo4j "home feed" rails. Each entry exports
+// the EXACT Cypher string from `cooked-ios/cooked/Services/Neo4jService.swift`
+// plus a `parseRow` function that decodes one Aura Query API v2 row into a
+// `RecommendedRestaurant`-shaped object.
+//
+// AURA RESPONSE SHAPE (verified against `handleNeo4jQuery` in
+// `cooked-proxy-full.js` — the worker passes the upstream body through
+// unchanged, and iOS reads `json.data.values` as `[[Any]]`):
+//
+//   {
+//     "data": {
+//       "fields": ["id", "name", "city", ...],
+//       "values": [
+//         [<col0>, <col1>, <col2>, ...],   // row 0
+//         [<col0>, <col1>, <col2>, ...],   // row 1
+//         ...
+//       ]
+//     }
+//   }
+//
+// Each `parseRow` takes ONE row's values array (e.g. `[<col0>, <col1>, ...]`)
+// and returns `{ id, name, city, cuisine, neighborhood, rating, loveCount,
+// reason }`. Caller iterates over `data.values` and applies parseRow per row,
+// dropping null returns (matching Swift's `compactMap`).
+//
+// PARAMETER SHAPES are documented on each rail. Required keys map 1:1 to the
+// Cypher `$placeholders`. Defaults match the Swift defaults.
+//
+// All rails return shape: { id: number, name: string, city: string|null,
+// cuisine: string|null, neighborhood: string|null, rating: number|null,
+// loveCount: number|null, reason: string|null }.
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/// Restaurant IDs in Neo4j may have been stored as Int (iOS bootstrap) or
+/// String (legacy web seeding). Mirrors `Neo4jService.coerceInt` in Swift.
+function coerceInt(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value === "string") {
+    const n = parseInt(value, 10);
+    return Number.isFinite(n) ? n : null;
+  }
+  // Neo4j integer driver objects (Aura v2 sometimes returns {low, high})
+  if (typeof value === "object" && "low" in value && typeof value.low === "number") {
+    return value.low;
+  }
+  return null;
+}
+
+/// Coerces Aura's loose number representations to a JS number. Used for
+/// `rating` (double) and counts that we want as Number rather than Int.
+function coerceNumber(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (typeof value === "object" && "low" in value && typeof value.low === "number") {
+    return value.low;
+  }
+  return null;
+}
+
+function coerceString(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return value;
+  return String(value);
+}
+
+function coerceStringArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v) => typeof v === "string");
+}
+
+// ── Rails ───────────────────────────────────────────────────────────────────
+
+const HOME_FEED_CYPHER = {
+
+  // ── 1. getRisingRestaurants ────────────────────────────────────────────────
+  // Most-buzz restaurants in the last 30 days. Weighted multi-signal score:
+  //   share = 5pts, reservation = 4pts, dm = 3.5pts, love = 3pts, watchlist = 1pt.
+  // Params: { userId: string|null, limit: number = 5 }
+  rising: {
+    statement: `MATCH (u:User)-[rel]->(r:Restaurant)
+WHERE type(rel) IN ['LOVED', 'WATCHLISTED', 'SHARED', 'RESERVED', 'DMD']
+  AND rel.timestamp > datetime() - duration('P30D')
+  AND ($userId IS NULL OR NOT EXISTS {
+      MATCH (me:User {id: $userId})-[:LOVED]->(r)
+  })
+WITH r,
+     count(DISTINCT CASE type(rel) WHEN 'LOVED' THEN u END) AS loveCount,
+     count(DISTINCT CASE type(rel) WHEN 'WATCHLISTED' THEN u END) AS watchCount,
+     count(CASE type(rel) WHEN 'SHARED' THEN rel END) AS shareCount,
+     count(CASE type(rel) WHEN 'RESERVED' THEN rel END) AS reserveCount,
+     count(CASE type(rel) WHEN 'DMD' THEN rel END) AS dmCount
+WITH r, loveCount, watchCount, shareCount, reserveCount, dmCount,
+     (loveCount * 3.0) + (watchCount * 1.0) + (shareCount * 5.0)
+      + (reserveCount * 4.0) + (dmCount * 3.5) AS buzzScore
+WHERE buzzScore > 0
+ORDER BY buzzScore DESC, coalesce(r.rating, 0) DESC
+LIMIT $limit
+RETURN r.id AS id, r.name AS name, r.city AS city, r.cuisine AS cuisine,
+       r.neighborhood AS neighborhood, r.rating AS rating,
+       loveCount, watchCount, shareCount, reserveCount, dmCount, buzzScore`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      const loves = coerceInt(values[6]) ?? 0;
+      const watches = coerceInt(values[7]) ?? 0;
+      const shares = coerceInt(values[8]) ?? 0;
+      // Most descriptive reason: largest single signal wins.
+      let reason;
+      if (shares > 0) reason = `${shares} friend${shares === 1 ? "" : "s"} sharing it`;
+      else if (loves > 0) reason = `${loves} recent love${loves === 1 ? "" : "s"}`;
+      else if (watches > 0) reason = `${watches} saving it`;
+      else reason = "Trending";
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: loves,
+        reason,
+      };
+    },
+  },
+
+  // ── 2. getHiddenGems ───────────────────────────────────────────────────────
+  // High-rated restaurants that almost no one has loved yet.
+  // Threshold: loveCount <= 2 (works at 5-user scale; revisit at ~50 users).
+  // Params: { userId: string|null, limit: number = 5 }
+  hiddenGems: {
+    statement: `MATCH (r:Restaurant)
+WHERE r.rating >= 4.0 AND r.rating <= 5.0
+  AND ($userId IS NULL OR NOT EXISTS {
+      MATCH (me:User {id: $userId})-[:LOVED]->(r)
+  })
+OPTIONAL MATCH (u:User)-[:LOVED]->(r)
+WITH r, count(u) AS loveCount
+WHERE loveCount <= 2
+ORDER BY r.rating DESC, loveCount ASC
+LIMIT $limit
+RETURN r.id AS id, r.name AS name, r.city AS city, r.cuisine AS cuisine,
+       r.neighborhood AS neighborhood, r.rating AS rating, loveCount`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      const count = coerceInt(values[6]) ?? 0;
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: count,
+        reason: count === 0 ? "Undiscovered" : `Only ${count} people know`,
+      };
+    },
+  },
+
+  // ── 3. getYoudLoveThis ─────────────────────────────────────────────────────
+  // Collaborative filter: places loved by users who love what you love.
+  // scopeToMyCities (default true) restricts results to the viewer's cities.
+  // Params: { userId: string, limit: number = 6, scopeCities: boolean = true }
+  youdLoveThis: {
+    statement: `MATCH (me:User {id: $userId})-[:LOVED]->(myR:Restaurant)
+WITH me, collect(DISTINCT myR.city) AS myCities, collect(DISTINCT myR) AS myLoves
+UNWIND myLoves AS r
+MATCH (r)<-[:LOVED]-(similar:User)
+WHERE similar.id <> $userId
+MATCH (similar)-[:LOVED]->(rec:Restaurant)
+WHERE NOT (me)-[:LOVED]->(rec) AND rec.id <> r.id
+  AND ($scopeCities = false OR rec.city IN myCities)
+WITH rec, count(DISTINCT similar) AS matchCount
+ORDER BY matchCount DESC, coalesce(rec.rating, 0) DESC
+LIMIT $limit
+RETURN rec.id AS id, rec.name AS name, rec.city AS city, rec.cuisine AS cuisine,
+       rec.neighborhood AS neighborhood, rec.rating AS rating, matchCount`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      const matches = coerceInt(values[6]) ?? 0;
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: matches,
+        reason: `${matches} taste matches`,
+      };
+    },
+  },
+
+  // ── 4. getFriendsRecentLoves ───────────────────────────────────────────────
+  // Restaurants loved by friends (FOLLOWS) within the last 30 days, ordered
+  // by love timestamp DESC. Returns `friend.name` so HomeView can render
+  // "Loved by <name>".
+  // Params: { userId: string, limit: number = 10 }
+  friendsRecentLoves: {
+    statement: `MATCH (me:User {id: $userId})-[:FOLLOWS]->(friend:User)-[l:LOVED]->(r:Restaurant)
+WHERE l.timestamp > datetime() - duration('P30D')
+RETURN r.id AS id, r.name AS name, r.city AS city, r.cuisine AS cuisine,
+       r.neighborhood AS neighborhood, r.rating AS rating,
+       friend.name AS friendName
+ORDER BY l.timestamp DESC
+LIMIT $limit`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: null,
+        reason: `Loved by ${coerceString(values[6]) ?? "a friend"}`,
+      };
+    },
+  },
+
+  // ── 5. getInnerCircle ──────────────────────────────────────────────────────
+  // Restaurants where >= 3 followed users LOVED. friendCount returned in
+  // `loveCount` so HomeView can choose between warm phrasing and the numeric
+  // "8 friends love it" past 3.
+  // Params: { userId: string, limit: number = 25 }
+  innerCircle: {
+    statement: `MATCH (me:User {id: $userId})-[:FOLLOWS]->(friend:User)-[:LOVED]->(r:Restaurant)
+WHERE NOT EXISTS { MATCH (me)-[:LOVED]->(r) }
+WITH r, count(DISTINCT friend) AS friendCount
+WHERE friendCount >= 3
+ORDER BY friendCount DESC, coalesce(r.rating, 0) DESC
+LIMIT $limit
+RETURN r.id AS id, r.name AS name, r.city AS city, r.cuisine AS cuisine,
+       r.neighborhood AS neighborhood, r.rating AS rating, friendCount`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      const count = coerceInt(values[6]) ?? 3;
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: count,
+        reason: `${count} friends love it`,
+      };
+    },
+  },
+
+  // ── 6. getBothSaving ───────────────────────────────────────────────────────
+  // Both viewer AND a followed friend WATCHLISTED the same restaurant.
+  // Returns friend's display name in `reason` so HomeView can render
+  // "You + <name> saved this". Picks first friend deterministically via
+  // ORDER BY friend.id when multiple friends saved the same place.
+  // Params: { userId: string, limit: number = 25 }
+  bothSaving: {
+    statement: `MATCH (me:User {id: $userId})-[:WATCHLISTED]->(r:Restaurant)
+MATCH (me)-[:FOLLOWS]->(friend:User)-[:WATCHLISTED]->(r)
+WHERE NOT EXISTS { MATCH (me)-[:LOVED]->(r) }
+WITH r, friend
+ORDER BY friend.id
+WITH r, head(collect(friend)) AS f
+RETURN r.id AS id, r.name AS name, r.city AS city, r.cuisine AS cuisine,
+       r.neighborhood AS neighborhood, r.rating AS rating,
+       f.name AS friendName
+ORDER BY coalesce(r.rating, 0) DESC
+LIMIT $limit`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      const friendName = coerceString(values[6]) ?? "a friend";
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: null,
+        reason: friendName,
+      };
+    },
+  },
+
+  // ── 7. getCirclesTopByCity ─────────────────────────────────────────────────
+  // For each city the viewer FOLLOWS_CITY, the #1 restaurant among friend
+  // graph (by friend love count). One row per city. Returns city name in
+  // `reason` so HomeView can render "Your circle's #1 in <city>".
+  // Params: { userId: string, limit: number = 25 }
+  circlesTopByCity: {
+    statement: `MATCH (me:User {id: $userId})-[:FOLLOWS_CITY]->(c:City)
+WITH me, collect(c.name) AS cities
+MATCH (me)-[:FOLLOWS]->(friend:User)-[:LOVED]->(r:Restaurant)
+WHERE r.city IN cities AND NOT EXISTS { MATCH (me)-[:LOVED]->(r) }
+WITH r, r.city AS city, count(DISTINCT friend) AS friendCount
+ORDER BY friendCount DESC, coalesce(r.rating, 0) DESC
+WITH city, head(collect({r: r, c: friendCount})) AS top
+RETURN top.r.id AS id, top.r.name AS name, top.r.city AS city,
+       top.r.cuisine AS cuisine, top.r.neighborhood AS neighborhood,
+       top.r.rating AS rating, top.c AS friendCount, city AS cityName
+LIMIT $limit`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      const cityName = coerceString(values[7]) ?? coerceString(values[2]) ?? "";
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: coerceInt(values[6]),
+        reason: cityName,
+      };
+    },
+  },
+
+  // ── 8. getTastemakerApproved ───────────────────────────────────────────────
+  // Restaurants loved by users with >= 3 followers. Surfaces signal beyond
+  // viewer's direct social graph. Returns tastemaker's display name in
+  // `reason` so HomeView can render "<name> co-signs this".
+  // Params: { userId: string, limit: number = 25 }
+  tastemakerApproved: {
+    statement: `MATCH (tm:User)
+WITH tm, size([(u:User)-[:FOLLOWS]->(tm) | u]) AS followers
+WHERE followers >= 3
+MATCH (tm)-[:LOVED]->(r:Restaurant)
+WHERE NOT EXISTS { MATCH (me:User {id: $userId})-[:LOVED]->(r) }
+WITH r, collect(DISTINCT tm.name)[0] AS tastemakerName, count(DISTINCT tm) AS tasteCount
+ORDER BY tasteCount DESC, coalesce(r.rating, 0) DESC
+LIMIT $limit
+RETURN r.id AS id, r.name AS name, r.city AS city, r.cuisine AS cuisine,
+       r.neighborhood AS neighborhood, r.rating AS rating,
+       tastemakerName, tasteCount`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      const name = coerceString(values[6]) ?? "A tastemaker";
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: coerceInt(values[7]),
+        reason: name,
+      };
+    },
+  },
+
+  // ── 9. getCookedTopByCity ──────────────────────────────────────────────────
+  // For each city viewer follows, the restaurant with the highest community
+  // LOVED count. Different from circlesTopByCity (friend-graph scoped) —
+  // this is the broader community's top pick. Returns city name in `reason`
+  // so HomeView can render "Cooked's #1 in <city>".
+  // Params: { userId: string, limit: number = 25 }
+  cookedTopByCity: {
+    statement: `MATCH (me:User {id: $userId})-[:FOLLOWS_CITY]->(c:City)
+WITH me, collect(c.name) AS cities
+MATCH (r:Restaurant)
+WHERE r.city IN cities AND NOT EXISTS { MATCH (me)-[:LOVED]->(r) }
+OPTIONAL MATCH (:User)-[:LOVED]->(r)
+WITH r, count(*) AS loveCount
+WHERE loveCount > 0
+WITH r.city AS city, r, loveCount
+ORDER BY loveCount DESC, coalesce(r.rating, 0) DESC
+WITH city, head(collect({r: r, c: loveCount})) AS top
+RETURN top.r.id AS id, top.r.name AS name, top.r.city AS city,
+       top.r.cuisine AS cuisine, top.r.neighborhood AS neighborhood,
+       top.r.rating AS rating, top.c AS loveCount, city AS cityName
+LIMIT $limit`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      const cityName = coerceString(values[7]) ?? coerceString(values[2]) ?? "";
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: coerceInt(values[6]),
+        reason: cityName,
+      };
+    },
+  },
+
+  // ── 10. getLevelUp ─────────────────────────────────────────────────────────
+  // A higher-rated restaurant sharing 3+ tags with a place the viewer
+  // already loved. Returns basis restaurant's name in `reason` so HomeView
+  // can render "Level up: <basis>". Ordered by the rating delta so the
+  // strongest upgrades surface first.
+  // Params: { userId: string, limit: number = 25 }
+  levelUp: {
+    statement: `MATCH (me:User {id: $userId})-[:LOVED]->(loved:Restaurant)-[:HAS_TAG]->(t:Tag)
+WITH me, loved, collect(t.name) AS tags
+MATCH (cand:Restaurant)-[:HAS_TAG]->(ct:Tag)
+WHERE ct.name IN tags AND cand.id <> loved.id
+  AND NOT EXISTS { MATCH (me)-[:LOVED]->(cand) }
+WITH me, loved, cand, count(DISTINCT ct.name) AS sharedTags
+WHERE sharedTags >= 3
+  AND coalesce(cand.rating, 0) > coalesce(loved.rating, 0)
+ORDER BY (coalesce(cand.rating, 0) - coalesce(loved.rating, 0)) DESC, sharedTags DESC
+LIMIT $limit
+RETURN cand.id AS id, cand.name AS name, cand.city AS city, cand.cuisine AS cuisine,
+       cand.neighborhood AS neighborhood, cand.rating AS rating,
+       loved.name AS basis, sharedTags`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      const basis = coerceString(values[6]) ?? "";
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: coerceInt(values[7]),
+        reason: basis,
+      };
+    },
+  },
+
+  // ── 11. getBullseye ────────────────────────────────────────────────────────
+  // Restaurants matching the viewer's top-3 most-frequent tags. Rare hit
+  // (requires 3 tag matches) — when it lands, it's a strong personalization
+  // signal.
+  // Params: { userId: string, limit: number = 25 }
+  bullseye: {
+    statement: `MATCH (me:User {id: $userId})-[:LOVED]->(:Restaurant)-[:HAS_TAG]->(t:Tag)
+WITH me, t.name AS tag, count(*) AS freq
+ORDER BY freq DESC LIMIT 3
+WITH me, collect(tag) AS topTags
+MATCH (cand:Restaurant)-[:HAS_TAG]->(ct:Tag)
+WHERE ct.name IN topTags AND NOT EXISTS { MATCH (me)-[:LOVED]->(cand) }
+WITH cand, count(DISTINCT ct.name) AS matched
+WHERE matched >= 3
+ORDER BY matched DESC, coalesce(cand.rating, 0) DESC
+LIMIT $limit
+RETURN cand.id AS id, cand.name AS name, cand.city AS city, cand.cuisine AS cuisine,
+       cand.neighborhood AS neighborhood, cand.rating AS rating, matched`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: coerceInt(values[6]),
+        reason: "Bullseye",
+      };
+    },
+  },
+
+  // ── 12. getNearbyPick ──────────────────────────────────────────────────────
+  // Proximity-based recommendation anchored on a place the viewer loved
+  // (within 800m). Tag-derived category context ("Drinks near" / "Brunch
+  // near" / "Dessert near" / "Walk from") is computed in JS after Cypher
+  // returns — Cypher returns the raw tag list and JS does the English match.
+  //
+  // Encoded in `reason` as "<context>||<anchor>" so HomeView can split both
+  // pieces back out. The `||` separator is unique enough that no restaurant
+  // or context phrase will collide with it.
+  // Params: { userId: string, limit: number = 25 }
+  nearbyPick: {
+    statement: `MATCH (me:User {id: $userId})-[:LOVED]->(anchor:Restaurant)
+WHERE anchor.lat IS NOT NULL AND anchor.lng IS NOT NULL
+WITH me, anchor, point({latitude: anchor.lat, longitude: anchor.lng}) AS aPoint
+MATCH (cand:Restaurant)
+WHERE cand.id <> anchor.id
+  AND cand.lat IS NOT NULL AND cand.lng IS NOT NULL
+  AND NOT EXISTS { MATCH (me)-[:LOVED]->(cand) }
+WITH me, anchor, cand,
+     point.distance(aPoint, point({latitude: cand.lat, longitude: cand.lng})) AS meters
+WHERE meters < 800
+OPTIONAL MATCH (cand)-[:HAS_TAG]->(tag:Tag)
+WITH anchor, cand, meters, collect(tag.name) AS candTags
+ORDER BY meters ASC, coalesce(cand.rating, 0) DESC
+LIMIT $limit
+RETURN cand.id AS id, cand.name AS name, cand.city AS city, cand.cuisine AS cuisine,
+       cand.neighborhood AS neighborhood, cand.rating AS rating,
+       anchor.name AS anchorName, candTags, meters`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      const anchorName = coerceString(values[6]) ?? "a place you love";
+      const tags = coerceStringArray(values[7]);
+      // Category-aware context. Tag lookup is case-insensitive so a
+      // mixed-case "Cocktail Bar" tag still matches. Ordered: drinks beat
+      // coffee beats dessert beats walk-from default. (A bar that also tags
+      // "Café" reads as "Drinks near" — the more unusual / interesting
+      // outing wins.)
+      const lowered = new Set(tags.map((t) => t.toLowerCase()));
+      const drinks = new Set(["cocktail bar", "bar", "wine bar", "speakeasy"]);
+      const brunch = new Set(["brunch", "coffee", "café", "cafe", "bakery"]);
+      const dessert = new Set(["dessert", "ice cream", "patisserie"]);
+      const intersects = (a, b) => {
+        for (const v of a) if (b.has(v)) return true;
+        return false;
+      };
+      let context;
+      if (intersects(lowered, drinks)) context = "Drinks near";
+      else if (intersects(lowered, brunch)) context = "Brunch near";
+      else if (intersects(lowered, dessert)) context = "Dessert near";
+      else context = "Walk from";
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: null,
+        reason: `${context}||${anchorName}`,
+      };
+    },
+  },
+
+  // ── 13. getUpAndComing ─────────────────────────────────────────────────────
+  // Neighborhoods seeing an interaction surge in the last 30 days vs the
+  // prior 90. Returns restaurants in those neighborhoods with the rising
+  // neighborhood name in `reason` so HomeView can render
+  // "Up-and-coming: <neighborhood>".
+  //
+  // Threshold: >= 5 recent interactions AND recent > prior * 1.6. Picks the
+  // top 5 surging neighborhoods, then returns restaurants from those
+  // neighborhoods ordered by rating.
+  // Params: { userId: string, limit: number = 25 }
+  upAndComing: {
+    statement: `MATCH (u:User)-[rel]->(r:Restaurant)
+WHERE r.neighborhood IS NOT NULL
+  AND type(rel) IN ['LOVED','WATCHLISTED','SHARED','RESERVED','DMD']
+WITH r.neighborhood AS hood, r.city AS city, rel.timestamp AS ts
+WITH hood, city,
+     sum(CASE WHEN ts > datetime() - duration('P30D') THEN 1 ELSE 0 END) AS recent,
+     sum(CASE WHEN ts > datetime() - duration('P120D')
+               AND ts < datetime() - duration('P30D') THEN 1 ELSE 0 END) AS prior
+WHERE recent >= 5 AND recent > prior * 1.6
+WITH hood, city, recent - prior AS lift
+ORDER BY lift DESC
+LIMIT 5
+MATCH (cand:Restaurant {neighborhood: hood, city: city})
+WHERE NOT EXISTS { MATCH (me:User {id: $userId})-[:LOVED]->(cand) }
+RETURN cand.id AS id, cand.name AS name, cand.city AS city, cand.cuisine AS cuisine,
+       cand.neighborhood AS neighborhood, cand.rating AS rating, hood AS surgingHood
+ORDER BY coalesce(cand.rating, 0) DESC
+LIMIT $limit`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      const hood = coerceString(values[6]) ?? coerceString(values[4]) ?? "this neighborhood";
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: null,
+        reason: hood,
+      };
+    },
+  },
+
+  // ── 14. getHotOffGrill ─────────────────────────────────────────────────────
+  // Recently-created restaurants with >= 3 loves.
+  // SCHEMA NOTE: Restaurant nodes don't have a `createdAt` property in the
+  // current schema. We use love-timestamp-based "fresh interactions" as the
+  // proxy: a restaurant accumulating loves over the last 30 days but with
+  // zero loves before that reads as "new on the scene." Requires
+  // priorLoves * 2 < recentLoves (recent activity is 2x prior).
+  // Params: { userId: string, limit: number = 25 }
+  hotOffGrill: {
+    statement: `MATCH (r:Restaurant)
+WHERE NOT EXISTS { MATCH (me:User {id: $userId})-[:LOVED]->(r) }
+OPTIONAL MATCH (:User)-[recentLove:LOVED]->(r)
+  WHERE recentLove.timestamp > datetime() - duration('P30D')
+WITH r, count(recentLove) AS recentLoves
+WHERE recentLoves >= 3
+OPTIONAL MATCH (:User)-[priorLove:LOVED]->(r)
+  WHERE priorLove.timestamp < datetime() - duration('P30D')
+WITH r, recentLoves, count(priorLove) AS priorLoves
+WHERE priorLoves * 2 < recentLoves
+ORDER BY recentLoves DESC
+LIMIT $limit
+RETURN r.id AS id, r.name AS name, r.city AS city, r.cuisine AS cuisine,
+       r.neighborhood AS neighborhood, r.rating AS rating, recentLoves`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: coerceInt(values[6]),
+        reason: "Hot off the grill",
+      };
+    },
+  },
+
+  // ── 15. getCrowdPleaser ────────────────────────────────────────────────────
+  // High SHARE + DMD count in the last 90 days. Surfaces places people keep
+  // sending to friends — a stronger "everyone loves this" signal than raw
+  // love counts, since sharing is an active export of recommendation.
+  // Threshold: socialScore >= 5.
+  // Params: { userId: string, limit: number = 25 }
+  crowdPleaser: {
+    statement: `MATCH (r:Restaurant)
+WHERE NOT EXISTS { MATCH (me:User {id: $userId})-[:LOVED]->(r) }
+OPTIONAL MATCH (:User)-[s:SHARED]->(r)
+  WHERE s.timestamp > datetime() - duration('P90D')
+WITH r, count(s) AS shareCount
+OPTIONAL MATCH (:User)-[d:DMD]->(r)
+  WHERE d.timestamp > datetime() - duration('P90D')
+WITH r, shareCount, count(d) AS dmCount
+WITH r, shareCount + dmCount AS socialScore
+WHERE socialScore >= 5
+ORDER BY socialScore DESC, coalesce(r.rating, 0) DESC
+LIMIT $limit
+RETURN r.id AS id, r.name AS name, r.city AS city, r.cuisine AS cuisine,
+       r.neighborhood AS neighborhood, r.rating AS rating, socialScore`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: coerceInt(values[6]),
+        reason: "Crowd pleaser",
+      };
+    },
+  },
+
+  // ── 16. getCrossCuisineRecs ────────────────────────────────────────────────
+  // Cross-cuisine fallback: "same city, different cuisine." Tag overlap
+  // would be ideal but with a tiny graph HAS_TAG edges may be missing —
+  // this fallback ensures the rail has signal at small scale.
+  // Params: { userId: string, limit: number = 6 }
+  crossCuisine: {
+    statement: `MATCH (me:User {id: $userId})-[:LOVED]->(r:Restaurant)
+WITH me, collect(DISTINCT r.city) AS myCities, collect(DISTINCT r.cuisine) AS myCuisines
+MATCH (rec:Restaurant)
+WHERE rec.city IN myCities
+      AND rec.cuisine IS NOT NULL
+      AND NOT rec.cuisine IN myCuisines
+      AND NOT (me)-[:LOVED]->(rec)
+WITH rec, coalesce(rec.rating, 0) AS score
+ORDER BY score DESC
+LIMIT $limit
+RETURN rec.id AS id, rec.name AS name, rec.city AS city, rec.cuisine AS cuisine,
+       rec.neighborhood AS neighborhood, rec.rating AS rating, score`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: null,
+        reason: "Same vibes, new cuisine",
+      };
+    },
+  },
+
+  // ── 17. getTrendingInFollowedCities ────────────────────────────────────────
+  // Trending restaurants in cities the user follows (last 30 days, multi-
+  // signal buzz like Rising). Same weighted score as Rising, scoped to the
+  // viewer's followed cities (excludes own activity via `u.id <> $userId`).
+  // Params: { userId: string, limit: number = 6 }
+  trendingInFollowedCities: {
+    statement: `MATCH (me:User {id: $userId})-[:FOLLOWS_CITY]->(c:City)
+WITH me, collect(c.name) AS cityNames
+MATCH (u:User)-[rel]->(r:Restaurant)
+WHERE r.city IN cityNames
+  AND type(rel) IN ['LOVED', 'WATCHLISTED', 'SHARED', 'RESERVED', 'DMD']
+  AND rel.timestamp > datetime() - duration('P30D')
+  AND u.id <> $userId
+  AND NOT EXISTS { MATCH (me)-[:LOVED]->(r) }
+WITH r,
+     count(DISTINCT CASE type(rel) WHEN 'LOVED' THEN u END) AS loveCount,
+     count(DISTINCT CASE type(rel) WHEN 'WATCHLISTED' THEN u END) AS watchCount,
+     count(CASE type(rel) WHEN 'SHARED' THEN rel END) AS shareCount,
+     count(CASE type(rel) WHEN 'RESERVED' THEN rel END) AS reserveCount,
+     count(CASE type(rel) WHEN 'DMD' THEN rel END) AS dmCount
+WITH r, loveCount,
+     (loveCount * 3.0) + (watchCount * 1.0) + (shareCount * 5.0)
+      + (reserveCount * 4.0) + (dmCount * 3.5) AS buzzScore
+WHERE buzzScore > 0
+ORDER BY buzzScore DESC, coalesce(r.rating, 0) DESC
+LIMIT $limit
+RETURN r.id AS id, r.name AS name, r.city AS city, r.cuisine AS cuisine,
+       r.neighborhood AS neighborhood, r.rating AS rating, loveCount`,
+    parseRow: (values) => {
+      const id = coerceInt(values[0]);
+      if (id === null) return null;
+      const cityName = coerceString(values[2]) ?? "";
+      return {
+        id,
+        name: coerceString(values[1]) ?? "Unknown",
+        city: coerceString(values[2]),
+        cuisine: coerceString(values[3]),
+        neighborhood: coerceString(values[4]),
+        rating: coerceNumber(values[5]),
+        loveCount: coerceInt(values[6]),
+        reason: cityName === "" ? "Trending" : `Trending in ${cityName}`,
+      };
+    },
+  },
+};
+
+// ─── home-feed-handler.js ─────────────────────────────────────────────────────
+//
+// The /api/home-feed orchestrator. Consumes HOME_FEED_CYPHER + scoreRestaurant
+// (from the two sibling files) plus the existing helpers in
+// cooked-proxy-full.js (supabaseHeaders, NEO4J_AURA_URL, verifyClerkJwt,
+// jsonResponse, CORS) to deliver a fully-assembled feed in ONE response.
+//
+// Replaces 30+ iOS network round-trips with ONE server-side fan-out
+// where Neo4j Aura + Supabase are both inside Cloudflare's network instead
+// of across cellular.
+//
+// REQUEST:
+//   POST /api/home-feed
+//   Authorization: Bearer <Clerk JWT>          (or ?userId=user_X for test mode)
+//   { "city": "Los Angeles", "limit": 50 }      (both optional)
+//
+// RESPONSE:
+//   {
+//     "cards": [
+//       {
+//         "restaurant": { ...same shape as Supabase restaurants row... },
+//         "photoUrl": "https://...",
+//         "flameScore": 4.5,
+//         "badge": { "kind": "innerCircle", "priority": 1, "payload": { "count": 5 } },
+//         "score": 4.23,
+//         "breakdown": { total, baseQuality, tasteMatch, ... }
+//       },
+//       ...
+//     ],
+//     "diagnostics": { totalMs, queryMs, candidateMs, scoringMs, candidateCount, ... }
+//   }
+
+// ── Single Neo4j rail runner ────────────────────────────────────────────────
+//
+// Hits Aura directly (not via the /neo4j/query worker route — we're already
+// the worker). 8s timeout per query so a stalled rail can't hang the whole
+// response. Returns [] on any failure so the orchestrator's Promise.all
+// never throws.
+async function runHomeFeedRail(neoBasic, name, def, params) {
+  try {
+    const upstream = await fetch(NEO4J_AURA_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": neoBasic,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ statement: def.statement, parameters: params }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!upstream.ok) {
+      console.log(`[home-feed] rail ${name} HTTP ${upstream.status}`);
+      return [];
+    }
+    const body = await upstream.json();
+    const rows = body?.data?.values || [];
+    return rows.map((r) => def.parseRow(r)).filter((x) => x !== null);
+  } catch (err) {
+    console.log(`[home-feed] rail ${name} threw:`, err?.message || err);
+    return [];
+  }
+}
+
+// ── Supabase helpers (each returns a "safe" value on error) ─────────────────
+
+async function fetchUserDataForFeed(env, userId) {
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/user_data?clerk_user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`,
+      { headers: supabaseHeaders(env) }
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return rows?.[0] || null;
+  } catch (err) {
+    console.log("[home-feed] user_data err:", err?.message || err);
+    return null;
+  }
+}
+
+async function fetchFollowedCitiesForFeed(env, userId) {
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/city_follows?clerk_user_id=eq.${encodeURIComponent(userId)}&select=city`,
+      { headers: supabaseHeaders(env) }
+    );
+    if (!res.ok) return [];
+    return (await res.json()).map((r) => r.city).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchMyLowRatedForFeed(env, userId) {
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/reviews?user_id=eq.${encodeURIComponent(userId)}&rating=lte.2&select=restaurant_id&limit=100`,
+      { headers: supabaseHeaders(env) }
+    );
+    if (!res.ok) return [];
+    return (await res.json()).map((r) => Number(r.restaurant_id)).filter(Number.isFinite);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchFriendsForFeed(env, userId) {
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/follows?follower_id=eq.${encodeURIComponent(userId)}&select=following_id`,
+      { headers: supabaseHeaders(env) }
+    );
+    if (!res.ok) return [];
+    return (await res.json()).map((r) => r.following_id).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchFriendsLowRatedForFeed(env, friendIds) {
+  if (!friendIds || friendIds.length === 0) return new Map();
+  try {
+    const idsParam = friendIds.map((id) => `"${id}"`).join(",");
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/reviews?user_id=in.(${idsParam})&rating=lte.2&select=restaurant_id,user_id&limit=1000`,
+      { headers: supabaseHeaders(env) }
+    );
+    if (!res.ok) return new Map();
+    const rows = await res.json();
+    // Count distinct friend reviewers per restaurant
+    const byRestaurant = new Map();
+    for (const r of rows) {
+      const rid = Number(r.restaurant_id);
+      if (!Number.isFinite(rid)) continue;
+      if (!byRestaurant.has(rid)) byRestaurant.set(rid, new Set());
+      byRestaurant.get(rid).add(r.user_id);
+    }
+    const out = new Map();
+    for (const [rid, users] of byRestaurant.entries()) {
+      out.set(rid, users.size);
+    }
+    return out;
+  } catch {
+    return new Map();
+  }
+}
+
+async function fetchEngagementForFeed(env, userId) {
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/rpc/get_engagement_signals`,
+      {
+        method: "POST",
+        headers: { ...supabaseHeaders(env), "Content-Type": "application/json" },
+        body: JSON.stringify({ p_user_id: userId }),
+      }
+    );
+    if (!res.ok) return new Map();
+    const rows = await res.json();
+    const map = new Map();
+    for (const r of rows) {
+      const rid = Number(r.restaurant_id);
+      if (!Number.isFinite(rid)) continue;
+      map.set(rid, {
+        impressions: r.impressions ?? 0,
+        taps: r.taps ?? 0,
+        lastImpressionAt: r.last_impression_at ? new Date(r.last_impression_at) : null,
+      });
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+async function fetchRestaurantsByIdsForFeed(env, ids) {
+  if (!ids || ids.length === 0) return [];
+  const out = [];
+  // Chunk URL to stay under PostgREST limits.
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    try {
+      const idsParam = chunk.join(",");
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/restaurants?id=in.(${idsParam})&select=*&is_closed=eq.false`,
+        { headers: supabaseHeaders(env) }
+      );
+      if (res.ok) {
+        const rows = await res.json();
+        out.push(...rows);
+      }
+    } catch (err) {
+      console.log("[home-feed] restaurants chunk err:", err?.message || err);
+    }
+  }
+  return out;
+}
+
+async function fetchFlameScoresByIdsForFeed(env, ids) {
+  if (!ids || ids.length === 0) return new Map();
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    try {
+      const idsParam = chunk.join(",");
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/restaurant_flame_scores?restaurant_id=in.(${idsParam})&select=restaurant_id,flame_score`,
+        { headers: supabaseHeaders(env) }
+      );
+      if (res.ok) {
+        const rows = await res.json();
+        for (const r of rows) {
+          const rid = Number(r.restaurant_id);
+          if (Number.isFinite(rid) && r.flame_score !== null) {
+            out.set(rid, r.flame_score);
+          }
+        }
+      }
+    } catch (err) {
+      console.log("[home-feed] flame chunk err:", err?.message || err);
+    }
+  }
+  return out;
+}
+
+async function fetchPhotosByIdsForFeed(env, ids) {
+  if (!ids || ids.length === 0) return new Map();
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    try {
+      const idsParam = chunk.join(",");
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/restaurant_photos?restaurant_id=in.(${idsParam})&select=restaurant_id,photo_url,updated_at&order=updated_at.desc`,
+        { headers: supabaseHeaders(env) }
+      );
+      if (res.ok) {
+        const rows = await res.json();
+        // First-wins (rows are sorted desc by updated_at, so newest first).
+        for (const r of rows) {
+          const rid = Number(r.restaurant_id);
+          if (Number.isFinite(rid) && !out.has(rid)) {
+            out.set(rid, r.photo_url);
+          }
+        }
+      }
+    } catch (err) {
+      console.log("[home-feed] photos chunk err:", err?.message || err);
+    }
+  }
+  return out;
+}
+
+async function fetchFriendFoundForFeed(env, friendIds) {
+  if (!friendIds || friendIds.length === 0) return new Map();
+  try {
+    const idsParam = friendIds.map((id) => `"${id}"`).join(",");
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/restaurants?submitted_by=in.(${idsParam})&select=id,submitted_by`,
+      { headers: supabaseHeaders(env) }
+    );
+    if (!res.ok) return new Map();
+    const rows = await res.json();
+    const out = new Map();
+    for (const r of rows) {
+      const rid = Number(r.id);
+      if (Number.isFinite(rid)) out.set(rid, r.submitted_by);
+    }
+    return out;
+  } catch {
+    return new Map();
+  }
+}
+
+// ── Coercion + signal-building helpers ──────────────────────────────────────
+
+// user_data.loved/watchlist/noped/skipped are stored as TEXT[] in Supabase.
+// Coerce each element to Int for use as Set keys.
+function arrayToIntSet(arr) {
+  if (!Array.isArray(arr)) return new Set();
+  const out = new Set();
+  for (const v of arr) {
+    const n = typeof v === "number" ? v : parseInt(v, 10);
+    if (Number.isFinite(n)) out.add(n);
+  }
+  return out;
+}
+
+// Build the ViewerSignals object that feed-scoring.js consumes.
+// Derives lovedTags / lovedCuisines / lovedNeighborhoods from the loved
+// restaurants' fields (Supabase row shape). Friend signals come from the
+// matching rails: innerCircle has friendCount in loveCount; tastemakerApproved
+// is just "this place was loved by a tastemaker friend".
+function buildViewerSignalsForFeed({
+  userData,
+  followedCities,
+  myLowRated,
+  friendsLowRatedMap,
+  railResults,
+  lovedRestaurants,
+  friendFoundMap,
+}) {
+  const lovedIds = arrayToIntSet(userData?.loved);
+  const watchlistIds = arrayToIntSet(userData?.watchlist);
+  const nopedIds = arrayToIntSet(userData?.noped);
+  const negativeReviewIds = new Set(myLowRated);
+
+  // Derive from the LOVED restaurants we hydrated.
+  const lovedTags = new Set();
+  const lovedCuisines = new Set();
+  const lovedNeighborhoods = new Set();
+  for (const r of lovedRestaurants) {
+    if (Array.isArray(r.tags)) {
+      for (const t of r.tags) if (typeof t === "string") lovedTags.add(t);
+    }
+    if (r.cuisine) lovedCuisines.add(r.cuisine);
+    if (r.neighborhood) lovedNeighborhoods.add(r.neighborhood);
+  }
+
+  // innerCircle rail returns loveCount = friendCount for that restaurant.
+  const friendLoveCountByRestaurant = new Map();
+  for (const r of railResults.innerCircle || []) {
+    if (r.loveCount != null) friendLoveCountByRestaurant.set(r.id, r.loveCount);
+  }
+
+  const tastemakerRestaurants = new Set();
+  for (const r of railResults.tastemakerApproved || []) {
+    tastemakerRestaurants.add(r.id);
+  }
+
+  // V1 simplification: skip friendReviewedWithPhotos (would need another
+  // join query). That component contributes 0 in scoring; minor loss.
+  const friendReviewedWithPhotos = new Set();
+
+  const friendFoundRestaurants = new Set(friendFoundMap.keys());
+
+  return {
+    lovedIds,
+    watchlistIds,
+    nopedIds,
+    negativeReviewIds,
+    lovedTags,
+    lovedCuisines,
+    lovedNeighborhoods,
+    vibes: lovedTags,           // iOS uses lovedTags as vibes until a vibe UI exists
+    followedCities: new Set(followedCities),
+    friendLoveCountByRestaurant,
+    tastemakerRestaurants,
+    friendReviewedWithPhotos,
+    friendFoundRestaurants,
+    friendsNegativeReviewCountByRestaurant: friendsLowRatedMap,
+  };
+}
+
+// Highest-priority badge wins per restaurant. Mirrors iOS BadgeKind.priority.
+// Priorities (LOWER = HIGHER priority):
+//   0 foundBy | 1 innerCircle | 3 friendLoved | 4 bothSaving |
+//   5 circlesTopInCity | 6 tastemakerApproved | 8 cookedForYou |
+//   9 cookedTopInCity | 10 bullseye | 11 levelUp | 12 upAndComing |
+//   13 rising | 14 hotOffGrill | 15 trendingInCity | 16 nearbyPick |
+//   17 newFlavor | 18 hiddenGem | 19 crowdPleaser | 20 youdLove
+function buildBadgeAssignmentsForFeed(railResults, friendFoundMap) {
+  const assigned = new Map();
+  function tryAssign(rid, kind, priority, payload) {
+    const existing = assigned.get(rid);
+    if (!existing || priority < existing.priority) {
+      assigned.set(rid, { kind, priority, payload: payload || {} });
+    }
+  }
+
+  for (const [rid, submitterId] of friendFoundMap.entries()) {
+    tryAssign(rid, "foundBy", 0, { actor: submitterId });
+  }
+  for (const r of railResults.innerCircle || []) {
+    tryAssign(r.id, "innerCircle", 1, { count: r.loveCount });
+  }
+  for (const r of railResults.friendsRecentLoves || []) {
+    const actor = (r.reason || "").replace("Loved by ", "").trim() || "A friend";
+    tryAssign(r.id, "friendLoved", 3, { actor });
+  }
+  for (const r of railResults.bothSaving || []) {
+    tryAssign(r.id, "bothSaving", 4, { actor: r.reason || "a friend" });
+  }
+  for (const r of railResults.circlesTopByCity || []) {
+    const city = r.reason || r.city || "your city";
+    tryAssign(r.id, "circlesTopInCity", 5, { city });
+  }
+  for (const r of railResults.tastemakerApproved || []) {
+    tryAssign(r.id, "tastemakerApproved", 6, { actor: r.reason || "A tastemaker" });
+  }
+  for (const r of railResults.cookedTopByCity || []) {
+    const city = r.reason || r.city || "your city";
+    tryAssign(r.id, "cookedTopInCity", 9, { city });
+  }
+  for (const r of railResults.bullseye || []) {
+    tryAssign(r.id, "bullseye", 10, {});
+  }
+  for (const r of railResults.levelUp || []) {
+    tryAssign(r.id, "levelUp", 11, { basis: r.reason || "a place you love" });
+  }
+  for (const r of railResults.upAndComing || []) {
+    tryAssign(r.id, "upAndComing", 12, { neighborhood: r.reason || r.neighborhood || "this neighborhood" });
+  }
+  for (const r of railResults.rising || []) {
+    tryAssign(r.id, "rising", 13, {});
+  }
+  for (const r of railResults.hotOffGrill || []) {
+    tryAssign(r.id, "hotOffGrill", 14, {});
+  }
+  for (const r of railResults.trendingInFollowedCities || []) {
+    const city = r.city || "your city";
+    tryAssign(r.id, "trendingInCity", 15, { city });
+  }
+  for (const r of railResults.nearbyPick || []) {
+    tryAssign(r.id, "nearbyPick", 16, { context: r.reason || "Walk from a place you love" });
+  }
+  for (const r of railResults.crossCuisine || []) {
+    tryAssign(r.id, "newFlavor", 17, {});
+  }
+  for (const r of railResults.hiddenGems || []) {
+    tryAssign(r.id, "hiddenGem", 18, {});
+  }
+  for (const r of railResults.crowdPleaser || []) {
+    tryAssign(r.id, "crowdPleaser", 19, {});
+  }
+  for (const r of railResults.youdLoveThis || []) {
+    tryAssign(r.id, "youdLove", 20, {});
+  }
+  return assigned;
+}
+
+// 3-per-cuisine cap in top 10 (locked decision #3), then 3-per-badge in
+// 15-card sliding window throughout the rest. Mirrors iOS applyCuisineCap +
+// applyBadgeCap.
+function applyDiversityCapsForFeed(scored) {
+  // First pass: cuisine cap on top 10
+  const top = [];
+  const overflow = [];
+  const perCuisine = {};
+  let i = 0;
+  while (top.length < 10 && i < scored.length) {
+    const item = scored[i];
+    const key = item.restaurant.cuisine || "__nil";
+    const c = perCuisine[key] || 0;
+    if (c >= 3) overflow.push(item);
+    else {
+      top.push(item);
+      perCuisine[key] = c + 1;
+    }
+    i++;
+  }
+  const tail = i < scored.length ? scored.slice(i) : [];
+  const cuisineCapped = top.concat(overflow).concat(tail);
+
+  // Second pass: 3-per-badge in 15-card window.
+  const output = [];
+  const pool = [...cuisineCapped];
+  while (pool.length > 0) {
+    const windowStart = Math.max(0, output.length - 14);
+    const windowItems = output.slice(windowStart);
+    const badgeCount = {};
+    for (const item of windowItems) {
+      const k = item.badge?.kind || "none";
+      badgeCount[k] = (badgeCount[k] || 0) + 1;
+    }
+    let pickedIdx = -1;
+    for (let j = 0; j < pool.length; j++) {
+      const k = pool[j].badge?.kind || "none";
+      if ((badgeCount[k] || 0) < 3) {
+        pickedIdx = j;
+        break;
+      }
+    }
+    if (pickedIdx >= 0) {
+      output.push(pool[pickedIdx]);
+      pool.splice(pickedIdx, 1);
+    } else {
+      // Cap saturated; relax for this slot so we don't deadlock.
+      output.push(pool.shift());
+    }
+  }
+  return output;
+}
+
+// ── Phase 0 negative-signal filter ──────────────────────────────────────────
+// Mirror of HomeView's "noped → blacklist UNLESS 3+ friends love → rescue
+// with giveItAnotherTry badge". Skipped restaurants go to tail.
+function applyPhase0NegativeFilter(cards, viewer, friendLoveCountByRestaurant) {
+  const kept = [];
+  const tail = [];
+  for (const card of cards) {
+    const rid = card.restaurant.id;
+    if (viewer.nopedIds.has(rid)) {
+      const friendCount = friendLoveCountByRestaurant.get(rid) || 0;
+      if (friendCount >= 3) {
+        // Rescue with giveItAnotherTry badge (priority 2 in iOS)
+        kept.push({
+          ...card,
+          badge: { kind: "giveItAnotherTry", priority: 2, payload: { friendCount } },
+        });
+      }
+      continue;
+    }
+    if (viewer.negativeReviewIds.has(rid)) {
+      tail.push(card);
+      continue;
+    }
+    kept.push(card);
+  }
+  return kept.concat(tail);
+}
+
+// ── Main orchestrator ───────────────────────────────────────────────────────
+
+async function handleHomeFeed(request, env) {
+  const t0 = Date.now();
+
+  // 1. Auth — Clerk JWT (prod) or ?userId=X query param (test mode only)
+  const authHeader = request.headers.get("Authorization") || "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  let clerkUserId = null;
+  if (match) {
+    try {
+      const claims = await verifyClerkJwt(match[1].trim());
+      clerkUserId = claims.sub;
+    } catch (err) {
+      console.log("[home-feed] JWT verification failed:", err.message);
+      return jsonResponse({ error: "Invalid token" }, 401);
+    }
+  }
+  // Test mode bypass — useful for curl-testing without a Clerk session.
+  // Production iOS always sends the Bearer, so this only fires for dev.
+  if (!clerkUserId) {
+    const testUserId = new URL(request.url).searchParams.get("userId");
+    if (testUserId) {
+      clerkUserId = testUserId;
+      console.log("[home-feed] test mode userId =", testUserId);
+    }
+  }
+  if (!clerkUserId) {
+    return jsonResponse({ error: "Missing Bearer token (or ?userId=X for test mode)" }, 401);
+  }
+
+  // 2. Parse body
+  let body = {};
+  try {
+    body = await request.json();
+  } catch {
+    // Body optional — defaults below kick in.
+  }
+  const city = (body && typeof body.city === "string") ? body.city : null;
+  const limit = (body && Number.isFinite(body.limit)) ? Math.min(body.limit, 100) : 50;
+
+  // 3. Pre-flight env check
+  if (!env.NEO4J_USER || !env.NEO4J_PASSWORD) {
+    return jsonResponse({ error: "Neo4j credentials not configured" }, 500);
+  }
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    return jsonResponse({ error: "Supabase credentials not configured" }, 500);
+  }
+
+  // 4. Fire ALL queries in parallel — this is the magic
+  const neoBasic = "Basic " + btoa(`${env.NEO4J_USER}:${env.NEO4J_PASSWORD}`);
+  const railEntries = Object.entries(HOME_FEED_CYPHER);
+  const railPromises = railEntries.map(([name, def]) => {
+    const params = { userId: clerkUserId, limit: 25 };
+    // youdLoveThis takes scopeCities param too
+    if (name === "youdLoveThis") params.scopeCities = true;
+    return runHomeFeedRail(neoBasic, name, def, params);
+  });
+
+  const [
+    railResultsArr,
+    userData,
+    followedCities,
+    myLowRated,
+    friendIds,
+    engagement,
+  ] = await Promise.all([
+    Promise.all(railPromises),
+    fetchUserDataForFeed(env, clerkUserId),
+    fetchFollowedCitiesForFeed(env, clerkUserId),
+    fetchMyLowRatedForFeed(env, clerkUserId),
+    fetchFriendsForFeed(env, clerkUserId),
+    fetchEngagementForFeed(env, clerkUserId),
+  ]);
+  const t1 = Date.now();
+
+  // 5. Friends-dependent queries (need friendIds)
+  const [friendsLowRatedMap, friendFoundMap] = await Promise.all([
+    fetchFriendsLowRatedForFeed(env, friendIds),
+    fetchFriendFoundForFeed(env, friendIds),
+  ]);
+
+  // Bundle rail results into a named object
+  const railResults = {};
+  for (let i = 0; i < railEntries.length; i++) {
+    railResults[railEntries[i][0]] = railResultsArr[i];
+  }
+
+  // 6. Collect candidate IDs — union of all rails' results + LOVED restaurants
+  // (loved set is hydrated only to derive lovedTags/lovedCuisines/lovedHoods;
+  // their cards are filtered out before scoring).
+  const candidateIds = new Set();
+  for (const results of Object.values(railResults)) {
+    for (const r of results) candidateIds.add(r.id);
+  }
+  const lovedIds = arrayToIntSet(userData?.loved);
+  for (const id of lovedIds) candidateIds.add(id);
+
+  // 7. Hydrate restaurant rows + flame scores + photos
+  const candidateIdsArr = [...candidateIds];
+  const [restaurants, flameScores, photoMap] = await Promise.all([
+    fetchRestaurantsByIdsForFeed(env, candidateIdsArr),
+    fetchFlameScoresByIdsForFeed(env, candidateIdsArr),
+    fetchPhotosByIdsForFeed(env, candidateIdsArr),
+  ]);
+  const t2 = Date.now();
+
+  // 8. Build ViewerSignals
+  const restaurantById = new Map(restaurants.map((r) => [r.id, r]));
+  const lovedRestaurants = [...lovedIds]
+    .map((id) => restaurantById.get(id))
+    .filter(Boolean);
+  const viewer = buildViewerSignalsForFeed({
+    userData,
+    followedCities,
+    myLowRated,
+    friendsLowRatedMap,
+    railResults,
+    lovedRestaurants,
+    friendFoundMap,
+  });
+
+  // 9. Build per-restaurant badge assignment (highest priority wins)
+  const badgeMap = buildBadgeAssignmentsForFeed(railResults, friendFoundMap);
+
+  // 10. Score each candidate
+  const context = { now: new Date() };
+  const scored = [];
+  for (const rid of candidateIds) {
+    if (lovedIds.has(rid)) continue; // exclude already-loved
+    const restaurant = restaurantById.get(rid);
+    if (!restaurant) continue;
+    if (city && city !== "All Cities" && city !== "Favorites" && restaurant.city !== city) continue;
+
+    const flameScore = flameScores.get(rid) ?? 3.0;
+    const engagementForR = engagement.get(rid) || null;
+
+    // Map Supabase row shape -> feed-scoring expectation
+    const restaurantForScoring = {
+      id: restaurant.id,
+      tags: restaurant.tags,
+      cuisine: restaurant.cuisine,
+      neighborhood: restaurant.neighborhood,
+      city: restaurant.city,
+      photoUrl: photoMap.get(rid) || restaurant.img,
+      description: restaurant.description,
+      googleReviews: restaurant.google_reviews,
+    };
+
+    const breakdown = scoreRestaurant(restaurantForScoring, flameScore, viewer, engagementForR, context);
+
+    const badge = badgeMap.get(rid) || { kind: "cookedForYou", priority: 8, payload: {} };
+
+    scored.push({
+      restaurant,
+      photoUrl: photoMap.get(rid) || restaurant.img,
+      flameScore,
+      badge,
+      score: breakdown.total,
+      breakdown,
+    });
+  }
+
+  // 11. Sort by score, apply Phase 0 negative filter, then diversity caps
+  scored.sort((a, b) => b.score - a.score);
+  const phase0Filtered = applyPhase0NegativeFilter(scored, viewer, viewer.friendLoveCountByRestaurant);
+  const capped = applyDiversityCapsForFeed(phase0Filtered).slice(0, limit);
+  const t3 = Date.now();
+
+  // 12. Response
+  return jsonResponse({
+    cards: capped.map((c) => ({
+      restaurant: c.restaurant,
+      photoUrl: c.photoUrl,
+      flameScore: c.flameScore,
+      badge: c.badge,
+      score: c.score,
+      breakdown: c.breakdown,
+    })),
+    diagnostics: {
+      queryMs: t1 - t0,
+      candidateMs: t2 - t1,
+      scoringMs: t3 - t2,
+      totalMs: t3 - t0,
+      candidateCount: candidateIds.size,
+      cardCount: capped.length,
+      friendCount: friendIds.length,
+      lovedCount: lovedIds.size,
+      city,
+    },
+  });
+}
+
 // ── Main handler ──────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
@@ -1672,6 +4260,12 @@ export default {
       try { return await handleExtractFromSocial(request, env); }
       catch (err) { console.log("[extract-from-social] error:", err.message); return jsonResponse({ error: err.message || "Internal error" }, 500); }
     }
+    // Article import — extract places from a generic article URL
+    // (Eater maps, Infatuation guides, NYT lists, food blogs, etc.).
+    if (request.method === "POST" && path === "/extract-from-article") {
+      try { return await handleExtractFromArticle(request, env); }
+      catch (err) { console.log("[extract-from-article] error:", err.message); return jsonResponse({ error: err.message || "Internal error" }, 500); }
+    }
 
     // Research routes
     if (request.method === "POST" && path === "/fetch-url") {
@@ -1679,6 +4273,63 @@ export default {
     }
     if (request.method === "POST" && path === "/crawl") {
       return handleCrawl(request);
+    }
+
+    // Neo4j proxy. Replaces the IPA-embedded Aura credentials path —
+    // every iOS Cypher call now hits this route with a Clerk session JWT.
+    if (request.method === "POST" && path === "/neo4j/query") {
+      try { return await handleNeo4jQuery(request, env); }
+      catch (err) { console.log("[neo4j/query] error:", err.message); return jsonResponse({ error: "Internal error" }, 500); }
+    }
+
+    // Server-side feed assembly (Build 64+). Collapses 30+ iOS network
+    // round-trips per home load into ONE response. iOS sends a Clerk
+    // JWT in Authorization; worker runs all 17 Neo4j rails + Supabase
+    // queries + scoring + diversity caps server-side and returns the
+    // ready feed. Falls back to ?userId=X for curl testing.
+    if (request.method === "POST" && path === "/api/home-feed") {
+      try { return await handleHomeFeed(request, env); }
+      catch (err) { console.log("[home-feed] error:", err.message, err.stack); return jsonResponse({ error: "Internal error", detail: err.message }, 500); }
+    }
+
+    // One-shot backfill: import historical user_data.noped/.skipped
+    // arrays into Neo4j as PASSED / SKIPPED edges. Run ONCE after
+    // Phase 1B deploys. No auth here today — keep the URL secret.
+    // POST /admin/backfill-card-events
+    if (request.method === "POST" && path === "/admin/backfill-card-events") {
+      try {
+        const result = await backfillNopedSkippedToNeo4j(env);
+        return jsonResponse(result);
+      } catch (err) {
+        console.log("[backfill] error:", err.message);
+        return jsonResponse({ error: err.message }, 500);
+      }
+    }
+
+    // Manual trigger for the event sync. Useful for debugging without
+    // waiting for the 15-minute cron. POST /admin/sync-events-now
+    if (request.method === "POST" && path === "/admin/sync-events-now") {
+      try {
+        ctx.waitUntil(syncCardEventsToNeo4j(env));
+        return jsonResponse({ status: "queued" });
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500);
+      }
+    }
+
+    // One-shot reconcile: bring Neo4j LOVED / WATCHLISTED / FOLLOWS
+    // into sync with Supabase by deleting orphan edges (places the
+    // user has since unloved / unwatchlisted, friends they unfollowed).
+    // Also converts legacy FOLLOWS-to-City edges to FOLLOWS_CITY.
+    // POST /admin/reconcile-neo4j-state — run once after deploy.
+    if (request.method === "POST" && path === "/admin/reconcile-neo4j-state") {
+      try {
+        const result = await reconcileNeo4jToSupabase(env);
+        return jsonResponse(result);
+      } catch (err) {
+        console.log("[reconcile] error:", err.message);
+        return jsonResponse({ error: err.message }, 500);
+      }
     }
 
     // Push notification routes. Errors are logged but NOT returned verbatim —
@@ -1748,8 +4399,20 @@ export default {
     return jsonResponse({ error: "Not found", routes: ["/", "/fetch-url", "/crawl", "/auto-research/run", "/auto-research/status", "/push/send", "/push/broadcast", "/push/event"] }, 404);
   },
 
-  // ── Cron trigger (twice a week) ─────────────────────────
+  // ── Cron triggers ─────────────────────────────────────────
+  // Multiple cron schedules dispatched by cron pattern. Add new
+  // schedules in the Cloudflare dashboard → Workers → cooked-proxy
+  // → Settings → Triggers.
+  //
+  // Today's triggers:
+  //   `0 10 * * *`      — daily 3am PT, auto-research
+  //   `*/15 * * * *`    — every 15 minutes, sync card_events → Neo4j
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runAutoResearch(env));
+    if (event.cron === "*/15 * * * *") {
+      ctx.waitUntil(syncCardEventsToNeo4j(env));
+    } else {
+      // Default / daily research cron
+      ctx.waitUntil(runAutoResearch(env));
+    }
   },
 };
