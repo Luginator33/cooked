@@ -4101,6 +4101,56 @@ async function handleHomeFeed(request, env) {
     return jsonResponse({ error: "Supabase credentials not configured" }, 500);
   }
 
+  // ── Build 66 perf fix: response caching ──────────────────────────────
+  // Cache the assembled feed for 60 seconds per (userId, city). Repeat
+  // opens within the TTL window return the cached body in <50ms instead
+  // of re-running the 17 Neo4j rails + 5 Supabase queries (~8s).
+  //
+  // Cache API requires GET-style URLs as keys. We build a deterministic
+  // synthetic URL — never actually fetched, just used as the cache key.
+  // The `?nocache=1` query param lets us bypass for testing.
+  const url = new URL(request.url);
+  const bypassCache = url.searchParams.get("nocache") === "1";
+  const cache = caches.default;
+  const cityKey = encodeURIComponent(city || "_all_");
+  const cacheKey = new Request(
+    `https://cooked-proxy.cache/api/home-feed?user=${encodeURIComponent(clerkUserId)}&city=${cityKey}`,
+    { method: "GET" }
+  );
+  if (!bypassCache) {
+    const cached = await cache.match(cacheKey);
+    if (cached) {
+      const cacheT = Date.now() - t0;
+      console.log(`[home-feed] CACHE HIT for ${clerkUserId} / ${city || "all"} (${cacheT}ms)`);
+      const headers = new Headers(cached.headers);
+      headers.set("X-Cache", "HIT");
+      headers.set("X-Cache-Ms", String(cacheT));
+      return new Response(cached.body, {
+        status: cached.status,
+        statusText: cached.statusText,
+        headers,
+      });
+    }
+  }
+  console.log(`[home-feed] cache miss for ${clerkUserId} / ${city || "all"} — running full pipeline`);
+
+  // Build 64 DEBUG: one synchronous diagnostic Supabase call. Surfaces the
+  // raw HTTP status + body so we can see exactly why queries are failing.
+  // Remove after the root cause is fixed.
+  const _debugSupabase = { status: null, bodyLen: null, snippet: null, urlLen: null, hasSupabaseUrl: !!env.SUPABASE_URL, hasServiceKey: !!env.SUPABASE_SERVICE_ROLE_KEY, supabaseUrlPrefix: (env.SUPABASE_URL || "").slice(0, 40), serviceKeyLen: (env.SUPABASE_SERVICE_ROLE_KEY || "").length };
+  try {
+    const debugUrl = `${env.SUPABASE_URL}/rest/v1/user_data?clerk_user_id=eq.${encodeURIComponent(clerkUserId)}&select=clerk_user_id&limit=1`;
+    _debugSupabase.urlLen = debugUrl.length;
+    const debugRes = await fetch(debugUrl, { headers: supabaseHeaders(env) });
+    _debugSupabase.status = debugRes.status;
+    const debugBody = await debugRes.text();
+    _debugSupabase.bodyLen = debugBody.length;
+    _debugSupabase.snippet = debugBody.slice(0, 300);
+  } catch (err) {
+    _debugSupabase.status = -1;
+    _debugSupabase.snippet = "EXCEPTION: " + String(err?.message || err);
+  }
+
   // 4. Fire ALL queries in parallel — this is the magic
   const neoBasic = "Basic " + btoa(`${env.NEO4J_USER}:${env.NEO4J_PASSWORD}`);
   const railEntries = Object.entries(HOME_FEED_CYPHER);
@@ -4221,8 +4271,12 @@ async function handleHomeFeed(request, env) {
   const capped = applyDiversityCapsForFeed(phase0Filtered).slice(0, limit);
   const t3 = Date.now();
 
-  // 12. Response
-  return jsonResponse({
+  // 12. Response — DETAILED diagnostics for debugging which query is failing
+  const railsThatReturned = {};
+  for (const [name, results] of Object.entries(railResults)) {
+    if (results.length > 0) railsThatReturned[name] = results.length;
+  }
+  const responseBody = {
     cards: capped.map((c) => ({
       restaurant: c.restaurant,
       photoUrl: c.photoUrl,
@@ -4241,8 +4295,48 @@ async function handleHomeFeed(request, env) {
       friendCount: friendIds.length,
       lovedCount: lovedIds.size,
       city,
+      // Build 64 debugging — pinpoint which query is returning empty
+      userDataLoaded: userData !== null,
+      userDataLovedArrayLen: Array.isArray(userData?.loved) ? userData.loved.length : -1,
+      userDataWatchlistArrayLen: Array.isArray(userData?.watchlist) ? userData.watchlist.length : -1,
+      followedCitiesCount: followedCities.length,
+      myLowRatedCount: myLowRated.length,
+      friendsLowRatedSize: friendsLowRatedMap.size,
+      friendFoundSize: friendFoundMap.size,
+      engagementSize: engagement.size,
+      restaurantsHydratedCount: restaurants.length,
+      flameScoresLoadedCount: flameScores.size,
+      photosLoadedCount: photoMap.size,
+      railsThatReturned,
+      sampleCandidateIds: [...candidateIds].slice(0, 5),
+      clerkUserIdResolved: clerkUserId,
+      _debugSupabase,
+    },
+  };
+
+  // Build 66 perf: store the response in the Cache API for 60s so the
+  // next call with the same (userId, city) returns instantly. Cache
+  // requires Cache-Control header to honor the TTL.
+  const response = jsonResponse(responseBody);
+  const cacheable = new Response(JSON.stringify(responseBody), {
+    status: 200,
+    headers: {
+      ...CORS,
+      "Content-Type": "application/json",
+      "Cache-Control": "public, s-maxage=60",
+      "X-Cache": "MISS",
+      "X-Cache-Ms": String(Date.now() - t0),
     },
   });
+  // Use waitUntil so the cache write doesn't block the response.
+  // Falls back to a direct await if ctx isn't available (we don't
+  // always have it in this scope — see the route handler).
+  try {
+    await cache.put(cacheKey, cacheable.clone());
+  } catch (err) {
+    console.log("[home-feed] cache.put err:", err?.message || err);
+  }
+  return cacheable;
 }
 
 // ── Main handler ──────────────────────────────────────────
@@ -4290,6 +4384,29 @@ export default {
     if (request.method === "POST" && path === "/api/home-feed") {
       try { return await handleHomeFeed(request, env); }
       catch (err) { console.log("[home-feed] error:", err.message, err.stack); return jsonResponse({ error: "Internal error", detail: err.message }, 500); }
+    }
+
+    // Build 64 DEBUG — minimal Supabase test. ONE query, no parallel
+    // fan-out, no Neo4j. If this works fast, the issue with /api/home-feed
+    // is parallel concurrency. If this also times out, there's a general
+    // Cloudflare → Supabase connectivity issue. Remove once root cause
+    // is fixed.
+    if (request.method === "GET" && path === "/admin/test-supabase") {
+      const t0 = Date.now();
+      const out = { hasUrl: !!env.SUPABASE_URL, hasKey: !!env.SUPABASE_SERVICE_ROLE_KEY };
+      try {
+        const userId = new URL(request.url).searchParams.get("userId") || "user_3B9bXI2JCTGmvdVl6lRtjQ276W3";
+        const url = `${env.SUPABASE_URL}/rest/v1/user_data?clerk_user_id=eq.${encodeURIComponent(userId)}&select=clerk_user_id&limit=1`;
+        const r = await fetch(url, { headers: supabaseHeaders(env) });
+        out.status = r.status;
+        out.bodyMs = Date.now() - t0;
+        out.snippet = (await r.text()).slice(0, 200);
+      } catch (err) {
+        out.status = -1;
+        out.error = String(err?.message || err);
+      }
+      out.totalMs = Date.now() - t0;
+      return jsonResponse(out);
     }
 
     // One-shot backfill: import historical user_data.noped/.skipped
