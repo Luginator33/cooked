@@ -4102,7 +4102,10 @@ async function handleHomeFeed(request, env) {
   }
 
   // ── Build 66 perf fix: response caching ──────────────────────────────
-  // Cache the assembled feed for 60 seconds per (userId, city). Repeat
+  // 2026-05-26 update: TTL bumped 60s → 300s (5 min) in response to
+  // Supabase Disk IO Budget alert. More cache hits = fewer DB reads.
+  // Cards being up to 5 min stale is invisible at our 18-user scale.
+  // Cache the assembled feed for 300 seconds per (userId, city). Repeat
   // opens within the TTL window return the cached body in <50ms instead
   // of re-running the 17 Neo4j rails + 5 Supabase queries (~8s).
   //
@@ -4323,7 +4326,7 @@ async function handleHomeFeed(request, env) {
     headers: {
       ...CORS,
       "Content-Type": "application/json",
-      "Cache-Control": "public, s-maxage=60",
+      "Cache-Control": "public, s-maxage=300",
       "X-Cache": "MISS",
       "X-Cache-Ms": String(Date.now() - t0),
     },
