@@ -4367,41 +4367,42 @@ async function handleHomeFeed(request, env) {
 //   avatars:           26 orphans / 38 total (~67 MB freed)
 
 async function fetchOrphanPaths(env, bucket) {
-  // Calls the SECURITY DEFINER SQL function `public.list_storage_orphans`
-  // which has access to the `storage` schema (PostgREST doesn't expose
-  // it by default). The function does the orphan-vs-active join in SQL
-  // and returns only the orphans we need to delete.
-  // Range header overrides PostgREST's default 1000-row cap so we get
-  // back ALL orphans in one call instead of being silently truncated.
-  // 49999 is well over our actual orphan count (~5000) but a safe ceiling.
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/rpc/list_storage_orphans`,
-    {
-      method: "POST",
-      headers: {
-        ...supabaseHeaders(env),
-        "Content-Type": "application/json",
-        "Range": "0-49999",
-        "Range-Unit": "items",
-      },
-      body: JSON.stringify({ p_bucket: bucket }),
-    }
-  );
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`list_storage_orphans ${bucket} HTTP ${res.status}: ${text.slice(0, 300)}`);
-  }
-  const rows = await res.json();
-  const orphans = rows.map((r) => r.name).filter(Boolean);
+  // PostgREST caps RPC responses at 1000 rows project-wide; Range header
+  // doesn't override it for SECURITY DEFINER functions. So we paginate
+  // via p_offset / p_limit args to the SQL function instead. Loops until
+  // a page returns fewer than `pageSize` rows.
+  const pageSize = 1000;
+  const maxPages = 20; // safety: 20 × 1000 = 20k orphans max per bucket
+  const orphans = [];
   let orphanSize = 0;
-  for (const r of rows) {
-    const sz = Number(r.size || 0);
-    if (Number.isFinite(sz)) orphanSize += sz;
+  for (let page = 0; page < maxPages; page++) {
+    const offset = page * pageSize;
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/rpc/list_storage_orphans`,
+      {
+        method: "POST",
+        headers: { ...supabaseHeaders(env), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          p_bucket: bucket,
+          p_offset: offset,
+          p_limit: pageSize,
+        }),
+      }
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`list_storage_orphans ${bucket} HTTP ${res.status}: ${text.slice(0, 300)}`);
+    }
+    const rows = await res.json();
+    for (const r of rows) {
+      if (r.name) orphans.push(r.name);
+      const sz = Number(r.size || 0);
+      if (Number.isFinite(sz)) orphanSize += sz;
+    }
+    console.log(`[cleanup] ${bucket} page ${page}: +${rows.length} (total ${orphans.length})`);
+    if (rows.length < pageSize) break;
   }
   console.log(`[cleanup] ${bucket}: ${orphans.length} orphans, ${Math.round(orphanSize / 1024 / 1024)} MB`);
-  // We don't have a precise "totalFiles" without a second query.
-  // Set it to orphans.length + active_count_estimate. Since the user
-  // already saw the totals in the audit, this number is informational.
   return { totalFiles: -1, orphans, orphanSize };
 }
 
