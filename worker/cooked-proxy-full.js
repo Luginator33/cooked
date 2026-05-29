@@ -4344,6 +4344,167 @@ async function handleHomeFeed(request, env) {
   return cacheable;
 }
 
+// ────────────────────────────────────────────────────────────────────────
+// /admin/cleanup-orphan-photos — delete files in Supabase Storage that
+// aren't referenced by any database table. One-time use; safe to re-run.
+// ────────────────────────────────────────────────────────────────────────
+//
+// USAGE
+//   Dry run (lists what would be deleted, doesn't actually delete):
+//     curl -X POST 'https://.../admin/cleanup-orphan-photos?dryRun=1'
+//   Real run:
+//     curl -X POST 'https://.../admin/cleanup-orphan-photos'
+//
+// SAFETY
+//   - Only deletes files in restaurant-photos and avatars buckets
+//   - A file is "orphan" iff NO table row references its path
+//   - Idempotent — second run finds 0 new orphans
+//   - dryRun=1 returns the count + first 10 sample paths without deleting
+//   - Hits Supabase service_role API so RLS doesn't matter
+//
+// AUDIT QUERIES (already run)
+//   restaurant-photos: 4,969 orphans / 17,818 total (~1.7 GB freed)
+//   avatars:           26 orphans / 38 total (~67 MB freed)
+
+async function fetchOrphanPaths(env, bucket) {
+  // The same WITH...SELECT we used in the SQL Editor, executed via
+  // PostgREST RPC against a helper function. Simpler: just use raw
+  // SQL through a one-shot Supabase REST call to the rpc endpoint.
+  //
+  // Since we don't have a server-side function, we run the join via
+  // two REST calls and join client-side. For 17k files this is fine.
+
+  // 1. Fetch all storage object names for the bucket
+  const objects = [];
+  let offset = 0;
+  const pageSize = 1000;
+  while (true) {
+    const url = `${env.SUPABASE_URL}/rest/v1/objects?bucket_id=eq.${bucket}&select=name,metadata&limit=${pageSize}&offset=${offset}`;
+    const res = await fetch(url, {
+      headers: { ...supabaseHeaders(env), "Accept-Profile": "storage" },
+    });
+    if (!res.ok) {
+      console.log(`[cleanup] objects fetch ${bucket} HTTP ${res.status}`);
+      const text = await res.text();
+      throw new Error(`objects fetch failed: ${res.status} ${text.slice(0, 200)}`);
+    }
+    const rows = await res.json();
+    objects.push(...rows);
+    if (rows.length < pageSize) break;
+    offset += pageSize;
+  }
+  console.log(`[cleanup] ${bucket}: fetched ${objects.length} storage objects`);
+
+  // 2. Build the set of active filenames per bucket
+  let active;
+  if (bucket === "restaurant-photos") {
+    // Read restaurant_photos.photo_url, extract path after "/restaurant-photos/"
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/restaurant_photos?select=photo_url&photo_url=not.is.null`,
+      { headers: supabaseHeaders(env) }
+    );
+    if (!res.ok) throw new Error(`restaurant_photos query failed: ${res.status}`);
+    const rows = await res.json();
+    active = new Set();
+    for (const r of rows) {
+      const url = r.photo_url || "";
+      const i = url.indexOf("/restaurant-photos/");
+      if (i >= 0) active.add(url.slice(i + "/restaurant-photos/".length));
+    }
+  } else if (bucket === "avatars") {
+    // Read user_data.avatar_url + profile_photo, extract path after "/avatars/"
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/user_data?select=avatar_url,profile_photo`,
+      { headers: supabaseHeaders(env) }
+    );
+    if (!res.ok) throw new Error(`user_data query failed: ${res.status}`);
+    const rows = await res.json();
+    active = new Set();
+    for (const r of rows) {
+      for (const url of [r.avatar_url, r.profile_photo]) {
+        if (!url) continue;
+        const i = url.indexOf("/avatars/");
+        if (i >= 0) active.add(url.slice(i + "/avatars/".length));
+      }
+    }
+  } else {
+    throw new Error(`unsupported bucket: ${bucket}`);
+  }
+  console.log(`[cleanup] ${bucket}: ${active.size} active references`);
+
+  // 3. Filter objects to those not in active
+  const orphans = [];
+  let orphanSize = 0;
+  for (const o of objects) {
+    if (!active.has(o.name)) {
+      orphans.push(o.name);
+      const sz = parseInt(o.metadata?.size || "0", 10);
+      if (Number.isFinite(sz)) orphanSize += sz;
+    }
+  }
+  return { totalFiles: objects.length, orphans, orphanSize };
+}
+
+async function deleteOrphans(env, bucket, paths) {
+  // Supabase Storage supports batch delete: POST with body { prefixes: [...] }
+  // We chunk in batches of 200 to keep request sizes manageable.
+  let deleted = 0;
+  const chunkSize = 200;
+  for (let i = 0; i < paths.length; i += chunkSize) {
+    const chunk = paths.slice(i, i + chunkSize);
+    const res = await fetch(
+      `${env.SUPABASE_URL}/storage/v1/object/${bucket}`,
+      {
+        method: "DELETE",
+        headers: { ...supabaseHeaders(env), "Content-Type": "application/json" },
+        body: JSON.stringify({ prefixes: chunk }),
+      }
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      console.log(`[cleanup] delete batch ${i} HTTP ${res.status}: ${text.slice(0, 200)}`);
+      continue; // skip the failed batch, keep going
+    }
+    deleted += chunk.length;
+  }
+  return deleted;
+}
+
+async function handleCleanupOrphanPhotos(request, env) {
+  const t0 = Date.now();
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    return jsonResponse({ error: "Supabase env not configured" }, 500);
+  }
+  const url = new URL(request.url);
+  const dryRun = url.searchParams.get("dryRun") === "1";
+  const bucketsParam = url.searchParams.get("buckets") || "restaurant-photos,avatars";
+  const buckets = bucketsParam.split(",").map((s) => s.trim()).filter(Boolean);
+
+  const summary = {};
+  for (const bucket of buckets) {
+    try {
+      const { totalFiles, orphans, orphanSize } = await fetchOrphanPaths(env, bucket);
+      summary[bucket] = {
+        totalFiles,
+        orphansFound: orphans.length,
+        orphanSizeMb: Math.round((orphanSize / 1024 / 1024) * 10) / 10,
+        deleted: 0,
+        sampleOrphans: orphans.slice(0, 10),
+      };
+      if (!dryRun && orphans.length > 0) {
+        summary[bucket].deleted = await deleteOrphans(env, bucket, orphans);
+      }
+    } catch (err) {
+      summary[bucket] = { error: err.message || String(err) };
+    }
+  }
+  return jsonResponse({
+    mode: dryRun ? "dry-run" : "real",
+    summary,
+    elapsedMs: Date.now() - t0,
+  });
+}
+
 // ── Main handler ──────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
@@ -4389,6 +4550,14 @@ export default {
     if (request.method === "POST" && path === "/api/home-feed") {
       try { return await handleHomeFeed(request, env); }
       catch (err) { console.log("[home-feed] error:", err.message, err.stack); return jsonResponse({ error: "Internal error", detail: err.message }, 500); }
+    }
+
+    // One-time cleanup: delete files in Supabase Storage that aren't
+    // referenced by any database row. ?dryRun=1 to preview without
+    // deleting. Safe to re-run — idempotent.
+    if (request.method === "POST" && path === "/admin/cleanup-orphan-photos") {
+      try { return await handleCleanupOrphanPhotos(request, env); }
+      catch (err) { console.log("[cleanup] error:", err.message); return jsonResponse({ error: err.message }, 500); }
     }
 
     // Build 64 DEBUG — minimal Supabase test. ONE query, no parallel
