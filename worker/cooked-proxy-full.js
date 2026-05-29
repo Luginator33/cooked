@@ -4367,82 +4367,34 @@ async function handleHomeFeed(request, env) {
 //   avatars:           26 orphans / 38 total (~67 MB freed)
 
 async function fetchOrphanPaths(env, bucket) {
-  // The same WITH...SELECT we used in the SQL Editor, executed via
-  // PostgREST RPC against a helper function. Simpler: just use raw
-  // SQL through a one-shot Supabase REST call to the rpc endpoint.
-  //
-  // Since we don't have a server-side function, we run the join via
-  // two REST calls and join client-side. For 17k files this is fine.
-
-  // 1. Fetch all storage object names for the bucket
-  const objects = [];
-  let offset = 0;
-  const pageSize = 1000;
-  while (true) {
-    const url = `${env.SUPABASE_URL}/rest/v1/objects?bucket_id=eq.${bucket}&select=name,metadata&limit=${pageSize}&offset=${offset}`;
-    const res = await fetch(url, {
-      headers: { ...supabaseHeaders(env), "Accept-Profile": "storage" },
-    });
-    if (!res.ok) {
-      console.log(`[cleanup] objects fetch ${bucket} HTTP ${res.status}`);
-      const text = await res.text();
-      throw new Error(`objects fetch failed: ${res.status} ${text.slice(0, 200)}`);
+  // Calls the SECURITY DEFINER SQL function `public.list_storage_orphans`
+  // which has access to the `storage` schema (PostgREST doesn't expose
+  // it by default). The function does the orphan-vs-active join in SQL
+  // and returns only the orphans we need to delete.
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/rpc/list_storage_orphans`,
+    {
+      method: "POST",
+      headers: { ...supabaseHeaders(env), "Content-Type": "application/json" },
+      body: JSON.stringify({ p_bucket: bucket }),
     }
-    const rows = await res.json();
-    objects.push(...rows);
-    if (rows.length < pageSize) break;
-    offset += pageSize;
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`list_storage_orphans ${bucket} HTTP ${res.status}: ${text.slice(0, 300)}`);
   }
-  console.log(`[cleanup] ${bucket}: fetched ${objects.length} storage objects`);
-
-  // 2. Build the set of active filenames per bucket
-  let active;
-  if (bucket === "restaurant-photos") {
-    // Read restaurant_photos.photo_url, extract path after "/restaurant-photos/"
-    const res = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/restaurant_photos?select=photo_url&photo_url=not.is.null`,
-      { headers: supabaseHeaders(env) }
-    );
-    if (!res.ok) throw new Error(`restaurant_photos query failed: ${res.status}`);
-    const rows = await res.json();
-    active = new Set();
-    for (const r of rows) {
-      const url = r.photo_url || "";
-      const i = url.indexOf("/restaurant-photos/");
-      if (i >= 0) active.add(url.slice(i + "/restaurant-photos/".length));
-    }
-  } else if (bucket === "avatars") {
-    // Read user_data.avatar_url + profile_photo, extract path after "/avatars/"
-    const res = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/user_data?select=avatar_url,profile_photo`,
-      { headers: supabaseHeaders(env) }
-    );
-    if (!res.ok) throw new Error(`user_data query failed: ${res.status}`);
-    const rows = await res.json();
-    active = new Set();
-    for (const r of rows) {
-      for (const url of [r.avatar_url, r.profile_photo]) {
-        if (!url) continue;
-        const i = url.indexOf("/avatars/");
-        if (i >= 0) active.add(url.slice(i + "/avatars/".length));
-      }
-    }
-  } else {
-    throw new Error(`unsupported bucket: ${bucket}`);
-  }
-  console.log(`[cleanup] ${bucket}: ${active.size} active references`);
-
-  // 3. Filter objects to those not in active
-  const orphans = [];
+  const rows = await res.json();
+  const orphans = rows.map((r) => r.name).filter(Boolean);
   let orphanSize = 0;
-  for (const o of objects) {
-    if (!active.has(o.name)) {
-      orphans.push(o.name);
-      const sz = parseInt(o.metadata?.size || "0", 10);
-      if (Number.isFinite(sz)) orphanSize += sz;
-    }
+  for (const r of rows) {
+    const sz = Number(r.size || 0);
+    if (Number.isFinite(sz)) orphanSize += sz;
   }
-  return { totalFiles: objects.length, orphans, orphanSize };
+  console.log(`[cleanup] ${bucket}: ${orphans.length} orphans, ${Math.round(orphanSize / 1024 / 1024)} MB`);
+  // We don't have a precise "totalFiles" without a second query.
+  // Set it to orphans.length + active_count_estimate. Since the user
+  // already saw the totals in the audit, this number is informational.
+  return { totalFiles: -1, orphans, orphanSize };
 }
 
 async function deleteOrphans(env, bucket, paths) {
