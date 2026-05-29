@@ -4371,11 +4371,19 @@ async function fetchOrphanPaths(env, bucket) {
   // which has access to the `storage` schema (PostgREST doesn't expose
   // it by default). The function does the orphan-vs-active join in SQL
   // and returns only the orphans we need to delete.
+  // Range header overrides PostgREST's default 1000-row cap so we get
+  // back ALL orphans in one call instead of being silently truncated.
+  // 49999 is well over our actual orphan count (~5000) but a safe ceiling.
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/rpc/list_storage_orphans`,
     {
       method: "POST",
-      headers: { ...supabaseHeaders(env), "Content-Type": "application/json" },
+      headers: {
+        ...supabaseHeaders(env),
+        "Content-Type": "application/json",
+        "Range": "0-49999",
+        "Range-Unit": "items",
+      },
       body: JSON.stringify({ p_bucket: bucket }),
     }
   );
