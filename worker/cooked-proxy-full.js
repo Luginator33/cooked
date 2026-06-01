@@ -4533,9 +4533,12 @@ async function cfImagesUploadFromUrl(env, sourceUrl, metadata) {
   };
 }
 
-async function updateRestaurantPhotoUrl(env, photoRowId, newUrl) {
+async function updateRestaurantPhotoUrl(env, oldPhotoUrl, newUrl) {
+  // restaurant_photos has no id column — photo_url IS the unique key.
+  // We have to URL-encode the old URL to make it a valid query param.
+  const encoded = encodeURIComponent(oldPhotoUrl);
   const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/restaurant_photos?id=eq.${photoRowId}`,
+    `${env.SUPABASE_URL}/rest/v1/restaurant_photos?photo_url=eq.${encoded}`,
     {
       method: "PATCH",
       headers: {
@@ -4548,7 +4551,7 @@ async function updateRestaurantPhotoUrl(env, photoRowId, newUrl) {
   );
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`DB update ${photoRowId} HTTP ${res.status}: ${text.slice(0, 200)}`);
+    throw new Error(`DB update HTTP ${res.status}: ${text.slice(0, 200)}`);
   }
 }
 
@@ -4571,10 +4574,11 @@ async function handleMigratePhotosToCloudflare(request, env) {
   const concurrency = Math.max(1, Math.min(10,
     parseInt(url.searchParams.get("concurrency") || "5", 10)));
 
-  // Count total un-migrated (Range header gives us a count without
-  // fetching rows). PostgREST uses content-range like "0-0/12849".
+  // Count total un-migrated. restaurant_photos has no id column —
+  // we select restaurant_id instead and let PostgREST's count header
+  // give us the total via the content-range trick.
   const countRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/restaurant_photos?photo_url=like.*supabase.co/storage*&photo_url=not.like.*imagedelivery.net*&select=id`,
+    `${env.SUPABASE_URL}/rest/v1/restaurant_photos?photo_url=like.*supabase.co/storage*&photo_url=not.like.*imagedelivery.net*&select=restaurant_id`,
     {
       method: "HEAD",
       headers: {
@@ -4590,7 +4594,7 @@ async function handleMigratePhotosToCloudflare(request, env) {
 
   // Fetch this batch of un-migrated photos
   const fetchRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/restaurant_photos?photo_url=like.*supabase.co/storage*&photo_url=not.like.*imagedelivery.net*&select=id,photo_url,restaurant_id&limit=${limit}`,
+    `${env.SUPABASE_URL}/rest/v1/restaurant_photos?photo_url=like.*supabase.co/storage*&photo_url=not.like.*imagedelivery.net*&select=photo_url,restaurant_id&limit=${limit}`,
     { headers: supabaseHeaders(env) }
   );
   if (!fetchRes.ok) {
@@ -4605,7 +4609,6 @@ async function handleMigratePhotosToCloudflare(request, env) {
       totalRemaining: total,
       thisBatchSize: photos.length,
       sample: photos.slice(0, 5).map((p) => ({
-        id: p.id,
         restaurantId: p.restaurant_id,
         photoUrl: (p.photo_url || "").slice(0, 120),
       })),
@@ -4634,15 +4637,18 @@ async function handleMigratePhotosToCloudflare(request, env) {
     try {
       const { publicUrl } = await cfImagesUploadFromUrl(env, photo.photo_url, {
         sourceTable: "restaurant_photos",
-        sourceId: String(photo.id),
         restaurantId: String(photo.restaurant_id),
       });
-      await updateRestaurantPhotoUrl(env, photo.id, publicUrl);
+      await updateRestaurantPhotoUrl(env, photo.photo_url, publicUrl);
       migrated++;
     } catch (err) {
       failed++;
       if (errors.length < 10) {
-        errors.push({ id: photo.id, error: String(err.message || err).slice(0, 200) });
+        errors.push({
+          restaurantId: photo.restaurant_id,
+          photoUrl: (photo.photo_url || "").slice(0, 80),
+          error: String(err.message || err).slice(0, 200),
+        });
       }
     }
   }
