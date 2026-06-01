@@ -4466,6 +4466,203 @@ async function handleCleanupOrphanPhotos(request, env) {
   });
 }
 
+// ────────────────────────────────────────────────────────────────────────
+// /admin/migrate-photos-to-cloudflare — move Supabase Storage photos to
+// Cloudflare Images one batch at a time. Idempotent: only operates on
+// rows whose photo_url still points at Supabase.
+// ────────────────────────────────────────────────────────────────────────
+//
+// FLOW
+//   1. Query restaurant_photos rows where photo_url is still a Supabase URL
+//   2. For each row, ask Cloudflare Images to fetch the URL (so we don't
+//      have to download to the worker — Cloudflare grabs it directly)
+//   3. Cloudflare returns variants[]; we store variants[0] (the "public"
+//      delivery URL) back into restaurant_photos.photo_url
+//   4. Subsequent dry-runs naturally exclude already-migrated rows
+//
+// USAGE
+//   Dry run:  curl -X POST 'https://.../admin/migrate-photos-to-cloudflare?dryRun=1'
+//   Real:     curl -X POST 'https://.../admin/migrate-photos-to-cloudflare'
+//   Bigger batch: ?limit=100 (default 50, max 200)
+//
+//   For full migration, loop in shell:
+//     while true; do
+//       r=$(curl -sX POST '.../admin/migrate-photos-to-cloudflare')
+//       echo "$r"
+//       remaining=$(echo "$r" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("remaining",0))')
+//       [ "$remaining" -le 0 ] && break
+//       sleep 2
+//     done
+
+async function cfImagesUploadFromUrl(env, sourceUrl, metadata) {
+  // Cloudflare's "upload by URL" form endpoint. Cloudflare fetches the
+  // source directly so the worker isn't a bandwidth bottleneck.
+  const formData = new FormData();
+  formData.append("url", sourceUrl);
+  if (metadata) {
+    formData.append("metadata", JSON.stringify(metadata));
+  }
+
+  const res = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/images/v1`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.CLOUDFLARE_IMAGES_TOKEN}`,
+      },
+      body: formData,
+    }
+  );
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    const errorMsg = data.errors?.[0]?.message || `HTTP ${res.status}`;
+    throw new Error(`CF Images upload: ${errorMsg}`);
+  }
+  // data.result.variants is an array of delivery URLs. First one is the
+  // default "public" variant which serves the original size. We store
+  // that as the new canonical URL; iOS can later request named variants
+  // by swapping the last URL segment (/card, /thumb, etc.).
+  const variants = data.result?.variants || [];
+  if (variants.length === 0) {
+    throw new Error("CF Images: response missing variants");
+  }
+  return {
+    cloudflareImageId: data.result.id,
+    publicUrl: variants[0],
+  };
+}
+
+async function updateRestaurantPhotoUrl(env, photoRowId, newUrl) {
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/restaurant_photos?id=eq.${photoRowId}`,
+    {
+      method: "PATCH",
+      headers: {
+        ...supabaseHeaders(env),
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ photo_url: newUrl, updated_at: new Date().toISOString() }),
+    }
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`DB update ${photoRowId} HTTP ${res.status}: ${text.slice(0, 200)}`);
+  }
+}
+
+async function handleMigratePhotosToCloudflare(request, env) {
+  const t0 = Date.now();
+
+  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_IMAGES_TOKEN) {
+    return jsonResponse({
+      error: "Cloudflare Images credentials not configured (need CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_IMAGES_TOKEN)",
+    }, 500);
+  }
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    return jsonResponse({ error: "Supabase env not configured" }, 500);
+  }
+
+  const url = new URL(request.url);
+  const dryRun = url.searchParams.get("dryRun") === "1";
+  const requestedLimit = parseInt(url.searchParams.get("limit") || "50", 10);
+  const limit = Math.max(1, Math.min(200, isFinite(requestedLimit) ? requestedLimit : 50));
+  const concurrency = Math.max(1, Math.min(10,
+    parseInt(url.searchParams.get("concurrency") || "5", 10)));
+
+  // Count total un-migrated (Range header gives us a count without
+  // fetching rows). PostgREST uses content-range like "0-0/12849".
+  const countRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/restaurant_photos?photo_url=like.*supabase.co/storage*&photo_url=not.like.*imagedelivery.net*&select=id`,
+    {
+      method: "HEAD",
+      headers: {
+        ...supabaseHeaders(env),
+        Prefer: "count=exact",
+        Range: "0-0",
+        "Range-Unit": "items",
+      },
+    }
+  );
+  const contentRange = countRes.headers.get("content-range") || "";
+  const total = parseInt(contentRange.split("/")[1] || "-1", 10);
+
+  // Fetch this batch of un-migrated photos
+  const fetchRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/restaurant_photos?photo_url=like.*supabase.co/storage*&photo_url=not.like.*imagedelivery.net*&select=id,photo_url,restaurant_id&limit=${limit}`,
+    { headers: supabaseHeaders(env) }
+  );
+  if (!fetchRes.ok) {
+    const txt = await fetchRes.text();
+    return jsonResponse({ error: `Query failed: ${fetchRes.status} ${txt.slice(0, 200)}` }, 500);
+  }
+  const photos = await fetchRes.json();
+
+  if (dryRun) {
+    return jsonResponse({
+      mode: "dry-run",
+      totalRemaining: total,
+      thisBatchSize: photos.length,
+      sample: photos.slice(0, 5).map((p) => ({
+        id: p.id,
+        restaurantId: p.restaurant_id,
+        photoUrl: (p.photo_url || "").slice(0, 120),
+      })),
+      elapsedMs: Date.now() - t0,
+    });
+  }
+
+  if (photos.length === 0) {
+    return jsonResponse({
+      mode: "real",
+      processed: 0,
+      migrated: 0,
+      failed: 0,
+      remaining: 0,
+      message: "Migration complete — no more Supabase-hosted photos.",
+      elapsedMs: Date.now() - t0,
+    });
+  }
+
+  // Migrate the batch with bounded parallelism.
+  let migrated = 0;
+  let failed = 0;
+  const errors = [];
+
+  async function migrateOne(photo) {
+    try {
+      const { publicUrl } = await cfImagesUploadFromUrl(env, photo.photo_url, {
+        sourceTable: "restaurant_photos",
+        sourceId: String(photo.id),
+        restaurantId: String(photo.restaurant_id),
+      });
+      await updateRestaurantPhotoUrl(env, photo.id, publicUrl);
+      migrated++;
+    } catch (err) {
+      failed++;
+      if (errors.length < 10) {
+        errors.push({ id: photo.id, error: String(err.message || err).slice(0, 200) });
+      }
+    }
+  }
+
+  for (let i = 0; i < photos.length; i += concurrency) {
+    const chunk = photos.slice(i, i + concurrency);
+    await Promise.all(chunk.map(migrateOne));
+  }
+
+  return jsonResponse({
+    mode: "real",
+    processed: photos.length,
+    migrated,
+    failed,
+    remaining: Math.max(0, total - migrated),
+    errors,
+    elapsedMs: Date.now() - t0,
+  });
+}
+
 // ── Main handler ──────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
@@ -4519,6 +4716,13 @@ export default {
     if (request.method === "POST" && path === "/admin/cleanup-orphan-photos") {
       try { return await handleCleanupOrphanPhotos(request, env); }
       catch (err) { console.log("[cleanup] error:", err.message); return jsonResponse({ error: err.message }, 500); }
+    }
+
+    // Migrate restaurant_photos from Supabase Storage to Cloudflare
+    // Images. Process in batches. Run repeatedly until remaining=0.
+    if (request.method === "POST" && path === "/admin/migrate-photos-to-cloudflare") {
+      try { return await handleMigratePhotosToCloudflare(request, env); }
+      catch (err) { console.log("[migrate] error:", err.message); return jsonResponse({ error: err.message }, 500); }
     }
 
     // Build 64 DEBUG — minimal Supabase test. ONE query, no parallel
