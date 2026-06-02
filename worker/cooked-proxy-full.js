@@ -3547,18 +3547,23 @@ RETURN r.id AS id, r.name AS name, r.city AS city, r.cuisine AS cuisine,
 // scale. Aggregates friend activity into patterns like "Katie loved 4
 // places in Mexico City this week" — pure data manipulation, no new infra.
 //
-// First pattern: friend-grouped-by-city. Finds friends who have loved
-// 3+ places in the SAME city within the last 7 days. Returns one recap
-// per (friend, city) pair, ordered by love count.
+// Two patterns ship in Build 69:
+//   1. friend-by-city — friend who loved 2+ places in same city, last 14d
+//   2. friend-this-period — any friend with 2+ loves total in last 14d
+//
+// Both thresholds are intentionally low (2 over 14 days) because at our
+// current 18-user scale, friends don't generate enough activity to fire
+// the stricter 3-in-7-days pattern. As the user base grows, we can
+// tighten back up; for now, low thresholds ensure SOMETHING shows.
 
 const RECAP_FRIEND_BY_CITY_CYPHER = `
 MATCH (me:User {id: $userId})-[:FOLLOWS]->(friend:User)-[l:LOVED]->(r:Restaurant)
-WHERE l.timestamp > datetime() - duration('P7D')
+WHERE l.timestamp > datetime() - duration('P14D')
   AND r.city IS NOT NULL
   AND r.city <> ''
 WITH friend, r.city AS city, count(r) AS loveCount,
      collect({id: r.id, name: r.name})[..5] AS restaurants
-WHERE loveCount >= 3
+WHERE loveCount >= 2
 RETURN friend.id AS friendId,
        friend.name AS friendName,
        city,
@@ -3567,50 +3572,107 @@ RETURN friend.id AS friendId,
 ORDER BY loveCount DESC
 LIMIT 5`;
 
-async function fetchFriendByCityRecaps(neoBasic, userId) {
+// Fallback pattern: any friend who's been active recently. Fires when
+// the friend hasn't concentrated their loves in one city, but has been
+// loving across multiple places. "Katie loved 3 places this week."
+const RECAP_FRIEND_THIS_PERIOD_CYPHER = `
+MATCH (me:User {id: $userId})-[:FOLLOWS]->(friend:User)-[l:LOVED]->(r:Restaurant)
+WHERE l.timestamp > datetime() - duration('P14D')
+  AND r.name IS NOT NULL
+WITH friend, count(r) AS loveCount,
+     collect({id: r.id, name: r.name})[..5] AS restaurants,
+     collect(DISTINCT r.city)[..3] AS cities
+WHERE loveCount >= 2
+RETURN friend.id AS friendId,
+       friend.name AS friendName,
+       loveCount,
+       restaurants,
+       cities
+ORDER BY loveCount DESC
+LIMIT 5`;
+
+async function runRecapCypher(neoBasic, statement, userId) {
   try {
     const upstream = await fetch(NEO4J_AURA_URL, {
       method: "POST",
       headers: { "Authorization": neoBasic, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        statement: RECAP_FRIEND_BY_CITY_CYPHER,
-        parameters: { userId },
-      }),
+      body: JSON.stringify({ statement, parameters: { userId } }),
       signal: AbortSignal.timeout(8000),
     });
     if (!upstream.ok) {
-      console.log(`[recap/friend-by-city] HTTP ${upstream.status}`);
+      console.log(`[recap] HTTP ${upstream.status}`);
       return [];
     }
     const body = await upstream.json();
-    const rows = body?.data?.values || [];
-    return rows.map((values) => {
-      const friendId = coerceString(values[0]);
-      const friendName = coerceString(values[1]);
-      const city = coerceString(values[2]);
-      const loveCount = coerceInt(values[3]);
-      // restaurants is an array of {id, name} objects from Cypher's collect()
-      const rawList = Array.isArray(values[4]) ? values[4] : [];
-      const restaurants = rawList.map((r) => ({
-        id: coerceInt(r?.id),
-        name: coerceString(r?.name),
-      })).filter((r) => r.id !== null);
-      if (!friendId || !friendName || !city || loveCount === null) return null;
-      return {
-        kind: "friendByCity",
-        friendId,
-        friendName,
-        city,
-        count: loveCount,
-        restaurants,
-        // Lightweight headline iOS can render as-is.
-        title: `${friendName} loved ${loveCount} places in ${city} this week`,
-      };
-    }).filter((r) => r !== null);
+    return body?.data?.values || [];
   } catch (err) {
-    console.log(`[recap/friend-by-city] threw:`, err?.message || err);
+    console.log(`[recap] threw:`, err?.message || err);
     return [];
   }
+}
+
+async function fetchRecapMoments(neoBasic, userId) {
+  // Run both queries in parallel so total wall time stays small.
+  const [byCityRows, thisPeriodRows] = await Promise.all([
+    runRecapCypher(neoBasic, RECAP_FRIEND_BY_CITY_CYPHER, userId),
+    runRecapCypher(neoBasic, RECAP_FRIEND_THIS_PERIOD_CYPHER, userId),
+  ]);
+
+  // Parse friend-by-city
+  const byCityRecaps = byCityRows.map((values) => {
+    const friendId = coerceString(values[0]);
+    const friendName = coerceString(values[1]);
+    const city = coerceString(values[2]);
+    const loveCount = coerceInt(values[3]);
+    const rawList = Array.isArray(values[4]) ? values[4] : [];
+    const restaurants = rawList.map((r) => ({
+      id: coerceInt(r?.id),
+      name: coerceString(r?.name),
+    })).filter((r) => r.id !== null);
+    if (!friendId || !friendName || !city || loveCount === null) return null;
+    return {
+      kind: "friendByCity",
+      friendId,
+      friendName,
+      city,
+      count: loveCount,
+      restaurants,
+      title: `${friendName} loved ${loveCount} places in ${city}`,
+      subtitle: "in the last 2 weeks",
+    };
+  }).filter((r) => r !== null);
+
+  // Parse friend-this-period (fallback — only include friends NOT
+  // already represented in the by-city recaps so we don't duplicate)
+  const cityFriendIds = new Set(byCityRecaps.map((r) => r.friendId));
+  const periodRecaps = thisPeriodRows.map((values) => {
+    const friendId = coerceString(values[0]);
+    const friendName = coerceString(values[1]);
+    const loveCount = coerceInt(values[2]);
+    const rawList = Array.isArray(values[3]) ? values[3] : [];
+    const restaurants = rawList.map((r) => ({
+      id: coerceInt(r?.id),
+      name: coerceString(r?.name),
+    })).filter((r) => r.id !== null);
+    const cities = Array.isArray(values[4])
+      ? values[4].filter((c) => typeof c === "string")
+      : [];
+    if (!friendId || !friendName || loveCount === null) return null;
+    if (cityFriendIds.has(friendId)) return null; // already covered by friendByCity
+    return {
+      kind: "friendThisPeriod",
+      friendId,
+      friendName,
+      count: loveCount,
+      restaurants,
+      cities,
+      title: `${friendName} loved ${loveCount} places`,
+      subtitle: "in the last 2 weeks",
+    };
+  }).filter((r) => r !== null);
+
+  // byCity first (richer pattern), then period fallbacks
+  return [...byCityRecaps, ...periodRecaps].slice(0, 5);
 }
 
 // ─── home-feed-handler.js ─────────────────────────────────────────────────────
@@ -4256,12 +4318,12 @@ async function handleHomeFeed(request, env) {
   const t1 = Date.now();
 
   // 5. Friends-dependent queries (need friendIds)
-  // Phase C: also fetch friend-by-city recaps in parallel with the
-  // friend-derived signal queries. Cheap — single Cypher call.
+  // Phase C: fetch recap moments in parallel with friend signals.
+  // Two patterns: friend-by-city (richer) and friend-this-period (fallback).
   const [friendsLowRatedMap, friendFoundMap, recapMoments] = await Promise.all([
     fetchFriendsLowRatedForFeed(env, friendIds),
     fetchFriendFoundForFeed(env, friendIds),
-    fetchFriendByCityRecaps(neoBasic, clerkUserId),
+    fetchRecapMoments(neoBasic, clerkUserId),
   ]);
 
   // Bundle rail results into a named object
