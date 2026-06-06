@@ -3591,6 +3591,58 @@ RETURN friend.id AS friendId,
 ORDER BY loveCount DESC
 LIMIT 5`;
 
+// Phase C-2 — cuisine spike. A friend has been on a flavor kick:
+// 2+ loves of the same cuisine in the past 14 days. Generates "Stella's
+// been on a sushi kick" / "Madison loved 4 Mexican spots lately" recaps
+// — high product value because it reveals taste shifts, not just where
+// friends are eating.
+const RECAP_CUISINE_SPIKE_CYPHER = `
+MATCH (me:User {id: $userId})-[:FOLLOWS]->(friend:User)-[l:LOVED]->(r:Restaurant)
+WHERE l.timestamp > datetime() - duration('P14D')
+  AND r.cuisine IS NOT NULL
+  AND r.cuisine <> ''
+WITH friend, r.cuisine AS cuisine, count(r) AS loveCount,
+     collect({id: r.id, name: r.name})[..5] AS restaurants
+WHERE loveCount >= 2
+RETURN friend.id AS friendId,
+       friend.name AS friendName,
+       cuisine,
+       loveCount,
+       restaurants
+ORDER BY loveCount DESC
+LIMIT 5`;
+
+// Phase C-2 — friend milestone. A friend just crossed a round-number
+// total love count (25 / 50 / 100 / 250 / 500) during the past 14 days.
+// "Stella just hit 100 loved places!" — rare-but-eventful, biggest
+// dopamine hit of the three new patterns. We check `crossed`:
+// totalLoves >= milestone AND (totalLoves - lovesLast14d) < milestone
+// means the friend was BELOW the threshold 14 days ago and crossed it
+// since. Returns the largest crossed milestone if multiple match.
+const RECAP_FRIEND_MILESTONE_CYPHER = `
+MATCH (me:User {id: $userId})-[:FOLLOWS]->(friend:User)-[l:LOVED]->(:Restaurant)
+WITH friend,
+     count(l) AS totalLoves,
+     count(CASE WHEN l.timestamp > datetime() - duration('P14D') THEN 1 END) AS recentLoves
+WHERE recentLoves > 0
+WITH friend, totalLoves, recentLoves,
+     [m IN [25, 50, 100, 250, 500]
+      WHERE totalLoves >= m AND (totalLoves - recentLoves) < m] AS crossed
+WHERE size(crossed) > 0
+WITH friend, totalLoves, recentLoves, crossed[-1] AS milestone
+OPTIONAL MATCH (friend)-[lr:LOVED]->(r:Restaurant)
+WHERE lr.timestamp > datetime() - duration('P14D')
+  AND r.name IS NOT NULL
+WITH friend, totalLoves, milestone,
+     collect({id: r.id, name: r.name})[..5] AS recentRestaurants
+RETURN friend.id AS friendId,
+       friend.name AS friendName,
+       milestone,
+       totalLoves,
+       recentRestaurants
+ORDER BY milestone DESC, totalLoves DESC
+LIMIT 3`;
+
 async function runRecapCypher(neoBasic, statement, userId) {
   try {
     const upstream = await fetch(NEO4J_AURA_URL, {
@@ -3612,13 +3664,74 @@ async function runRecapCypher(neoBasic, statement, userId) {
 }
 
 async function fetchRecapMoments(neoBasic, userId) {
-  // Run both queries in parallel so total wall time stays small.
-  const [byCityRows, thisPeriodRows] = await Promise.all([
+  // Run all four queries in parallel so total wall time stays small.
+  // Aura handles N independent reads concurrently with no penalty.
+  const [byCityRows, thisPeriodRows, cuisineRows, milestoneRows] = await Promise.all([
     runRecapCypher(neoBasic, RECAP_FRIEND_BY_CITY_CYPHER, userId),
     runRecapCypher(neoBasic, RECAP_FRIEND_THIS_PERIOD_CYPHER, userId),
+    runRecapCypher(neoBasic, RECAP_CUISINE_SPIKE_CYPHER, userId),
+    runRecapCypher(neoBasic, RECAP_FRIEND_MILESTONE_CYPHER, userId),
   ]);
 
-  // Parse friend-by-city
+  // Friend milestones — highest priority. "Stella just hit 100 loved places!"
+  // Rare-but-eventful so they go first in the dedupe chain.
+  const milestoneRecaps = milestoneRows.map((values) => {
+    const friendId = coerceString(values[0]);
+    const friendName = coerceString(values[1]);
+    const milestone = coerceInt(values[2]);
+    const totalLoves = coerceInt(values[3]);
+    const rawList = Array.isArray(values[4]) ? values[4] : [];
+    const restaurants = rawList.map((r) => ({
+      id: coerceInt(r?.id),
+      name: coerceString(r?.name),
+    })).filter((r) => r.id !== null);
+    if (!friendId || !friendName || milestone === null) return null;
+    return {
+      kind: "friendMilestone",
+      friendId,
+      friendName,
+      count: milestone,
+      restaurants,
+      title: `${friendName} just hit ${milestone} loved places`,
+      subtitle: totalLoves !== null && totalLoves > milestone
+        ? `${totalLoves} total — and counting`
+        : "a fresh milestone",
+    };
+  }).filter((r) => r !== null);
+
+  // Cuisine spikes — "Stella's been on a sushi kick"
+  // Skip friends already covered by a milestone recap (they win).
+  const milestoneFriendIds = new Set(milestoneRecaps.map((r) => r.friendId));
+  const cuisineRecaps = cuisineRows.map((values) => {
+    const friendId = coerceString(values[0]);
+    const friendName = coerceString(values[1]);
+    const cuisine = coerceString(values[2]);
+    const loveCount = coerceInt(values[3]);
+    const rawList = Array.isArray(values[4]) ? values[4] : [];
+    const restaurants = rawList.map((r) => ({
+      id: coerceInt(r?.id),
+      name: coerceString(r?.name),
+    })).filter((r) => r.id !== null);
+    if (!friendId || !friendName || !cuisine || loveCount === null) return null;
+    if (milestoneFriendIds.has(friendId)) return null;
+    return {
+      kind: "cuisineSpike",
+      friendId,
+      friendName,
+      city: null,
+      count: loveCount,
+      restaurants,
+      cuisine,
+      title: `${friendName} loved ${loveCount} ${cuisine} ${loveCount === 1 ? "spot" : "spots"} lately`,
+      subtitle: "in the last 2 weeks",
+    };
+  }).filter((r) => r !== null);
+
+  // Parse friend-by-city — skip friends already covered upstream.
+  const claimedFriendIds = new Set([
+    ...milestoneFriendIds,
+    ...cuisineRecaps.map((r) => r.friendId),
+  ]);
   const byCityRecaps = byCityRows.map((values) => {
     const friendId = coerceString(values[0]);
     const friendName = coerceString(values[1]);
@@ -3630,6 +3743,7 @@ async function fetchRecapMoments(neoBasic, userId) {
       name: coerceString(r?.name),
     })).filter((r) => r.id !== null);
     if (!friendId || !friendName || !city || loveCount === null) return null;
+    if (claimedFriendIds.has(friendId)) return null;
     return {
       kind: "friendByCity",
       friendId,
@@ -3643,8 +3757,8 @@ async function fetchRecapMoments(neoBasic, userId) {
   }).filter((r) => r !== null);
 
   // Parse friend-this-period (fallback — only include friends NOT
-  // already represented in the by-city recaps so we don't duplicate)
-  const cityFriendIds = new Set(byCityRecaps.map((r) => r.friendId));
+  // already represented upstream so we don't duplicate.)
+  byCityRecaps.forEach((r) => claimedFriendIds.add(r.friendId));
   const periodRecaps = thisPeriodRows.map((values) => {
     const friendId = coerceString(values[0]);
     const friendName = coerceString(values[1]);
@@ -3658,7 +3772,7 @@ async function fetchRecapMoments(neoBasic, userId) {
       ? values[4].filter((c) => typeof c === "string")
       : [];
     if (!friendId || !friendName || loveCount === null) return null;
-    if (cityFriendIds.has(friendId)) return null; // already covered by friendByCity
+    if (claimedFriendIds.has(friendId)) return null;
     return {
       kind: "friendThisPeriod",
       friendId,
@@ -3671,8 +3785,14 @@ async function fetchRecapMoments(neoBasic, userId) {
     };
   }).filter((r) => r !== null);
 
-  // byCity first (richer pattern), then period fallbacks
-  return [...byCityRecaps, ...periodRecaps].slice(0, 5);
+  // Priority order: milestones (rarest/most eventful), cuisine spikes
+  // (taste signal), city concentration, generic period fallback.
+  return [
+    ...milestoneRecaps,
+    ...cuisineRecaps,
+    ...byCityRecaps,
+    ...periodRecaps,
+  ].slice(0, 5);
 }
 
 // ─── home-feed-handler.js ─────────────────────────────────────────────────────
