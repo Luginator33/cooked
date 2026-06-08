@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy — Cooked</title>
+    <style>
+        :root {
+            --bg: #0f0c09;
+            --fg: #f0ebe2;
+            --accent: #c4603a;
+            --muted: rgba(240, 235, 226, 0.65);
+        }
+        * { box-sizing: border-box; }
+        body {
+            background: var(--bg);
+            color: var(--fg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-family: Georgia, serif;
+            font-style: italic;
+            font-weight: bold;
+            font-size: 36px;
+            margin-bottom: 8px;
+        }
+        h1 .accent { color: var(--accent); }
+        h2 {
+            font-size: 20px;
+            margin-top: 36px;
+            margin-bottom: 12px;
+            color: var(--accent);
+        }
+        h3 {
+            font-size: 16px;
+            margin-top: 20px;
+            margin-bottom: 8px;
+        }
+        p, li { font-size: 15px; }
+        .meta {
+            color: var(--muted);
+            font-size: 13px;
+            margin-bottom: 36px;
+        }
+        a { color: var(--accent); }
+        ul { padding-left: 22px; }
+        li { margin-bottom: 6px; }
+        .footer {
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(240, 235, 226, 0.1);
+            font-size: 13px;
+            color: var(--muted);
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+<h1><span>cook</span><span class="accent">ed</span></h1>
+<p class="meta">Privacy Policy &middot; Last updated: June 7, 2026</p>
+
+<p>This Privacy Policy explains what data Cooked collects, how we use it, and the choices you have. We try to keep it short and plain. If anything here is unclear, email us — contact is at the bottom.</p>
+
+<h2>1. Who we are</h2>
+<p>Cooked is a restaurant discovery app operated by Luga Podesta as a sole proprietor in Los Angeles, California, USA. Contact: <a href="mailto:luga.podesta@gmail.com">luga.podesta@gmail.com</a>.</p>
+
+<h2>2. What we collect</h2>
+
+<h3>Account information</h3>
+<ul>
+    <li>Your name, email, and profile photo — provided when you sign in (we support Google and Apple sign-in via Clerk).</li>
+    <li>A unique user ID that identifies your account across our systems.</li>
+</ul>
+
+<h3>Profile content you create</h3>
+<ul>
+    <li>Restaurants you love, save to your watchlist, swipe through, or pass on.</li>
+    <li>Reviews you write and photos you attach to reviews.</li>
+    <li>Restaurants you submit as "Finds" via the social-link importer.</li>
+    <li>Your follows and the cities you follow.</li>
+    <li>Your bio, banner image, dietary preferences, and home city.</li>
+    <li>Direct messages you send to other users.</li>
+</ul>
+
+<h3>Device information</h3>
+<ul>
+    <li>An Apple Push Notification token, used only to deliver push notifications you opted in to.</li>
+    <li>Your device type and iOS version (for crash diagnostics and compatibility).</li>
+</ul>
+
+<h3>Location (optional)</h3>
+<p>If you grant location permission, we use your approximate current city to surface restaurants near you. Location is only used while the app is open ("While Using" only) — we do not track you in the background. You can deny or revoke location access at any time from iOS Settings.</p>
+
+<h3>App-interaction data</h3>
+<ul>
+    <li>Which restaurants you see, tap, love, watchlist, pass on, or share.</li>
+    <li>What city you're browsing and what filters you apply.</li>
+    <li>Aggregate engagement signals used to personalize recommendations (we never sell this data).</li>
+</ul>
+
+<h2>3. How we use your data</h2>
+<ul>
+    <li><strong>Personalize the feed.</strong> Your loves, swipes, follows, and reviews feed the recommendation engine that ranks restaurants for you.</li>
+    <li><strong>Social features.</strong> Your loved restaurants, watchlist, and reviews are visible to other users by default unless your profile is set to private. Your direct messages are visible only to you and the recipient.</li>
+    <li><strong>Notifications.</strong> Push you when a friend follows you, loves a place you saved, or comments on your review (if you opt in).</li>
+    <li><strong>AI chatbot.</strong> The chatbot uses your taste profile (loved restaurants, cuisines, followed cities) as context to give personalized recommendations. Chat history is not used to train any third-party model.</li>
+    <li><strong>Improve the app.</strong> Aggregated, anonymized signals help us understand what's working and what isn't.</li>
+</ul>
+
+<h2>4. Who we share data with</h2>
+<p>We use a small number of trusted third-party services to run the app. Each is contractually obligated to protect your data:</p>
+<ul>
+    <li><strong>Clerk</strong> — handles authentication (Google + Apple sign-in).</li>
+    <li><strong>Supabase</strong> — hosts our database and stores your account, content, and photos.</li>
+    <li><strong>Cloudflare</strong> — runs our worker proxy and serves images via Cloudflare Images.</li>
+    <li><strong>Neo4j Aura</strong> — hosts the social graph (follows, loves, recommendations).</li>
+    <li><strong>Anthropic</strong> — powers the AI chatbot. Chat messages are sent to Anthropic's Claude API; Anthropic does not retain conversations for model training per their API terms.</li>
+    <li><strong>Google Places</strong> — provides restaurant addresses, photos, hours, and metadata.</li>
+    <li><strong>Apple Push Notification service</strong> — delivers push notifications.</li>
+</ul>
+<p>We <strong>never</strong> sell your personal data. We <strong>never</strong> share your data with advertisers. We only share with the services above as needed to run the app.</p>
+
+<h2>5. Your rights</h2>
+<ul>
+    <li><strong>Access.</strong> You can see your loved restaurants, watchlist, reviews, and follows directly in the app at any time.</li>
+    <li><strong>Edit.</strong> Settings → Edit Profile lets you change your name, username, photo, banner, bio, dietary preferences, and home city.</li>
+    <li><strong>Delete.</strong> Settings → Delete Account permanently removes your account, profile content, reviews, and follows. This is irreversible.</li>
+    <li><strong>Block.</strong> Settings → Blocked Users lets you block other users from interacting with you.</li>
+    <li><strong>Opt out of notifications.</strong> iOS Settings → Cooked → Notifications.</li>
+    <li><strong>Opt out of location.</strong> iOS Settings → Cooked → Location.</li>
+    <li><strong>Export.</strong> Email us at <a href="mailto:luga.podesta@gmail.com">luga.podesta@gmail.com</a> and we'll send you a copy of all data we hold about you within 30 days.</li>
+</ul>
+
+<h2>6. Children</h2>
+<p>Cooked is not directed at children under 13. We do not knowingly collect personal information from anyone under 13. If you believe we have done so, contact us and we'll delete the account.</p>
+
+<h2>7. Data retention</h2>
+<p>We keep your data while your account is active. If you delete your account, we delete your profile, content, follows, and reviews within 30 days. Aggregated, anonymized analytics may be retained indefinitely.</p>
+
+<h2>8. Security</h2>
+<p>All data in transit is encrypted via HTTPS / TLS. Account passwords are managed entirely by our authentication provider (Clerk) and are never visible to us. No system is perfectly secure, but we use industry-standard practices to protect your data.</p>
+
+<h2>9. International users</h2>
+<p>Cooked is operated from the United States. If you use Cooked from outside the US, your data may be transferred to and processed in the United States. By using Cooked you consent to this transfer.</p>
+
+<h2>10. Changes to this policy</h2>
+<p>We may update this policy from time to time. If we make a material change, we'll notify you in the app and update the "Last updated" date at the top. Continued use of the app after a change constitutes acceptance.</p>
+
+<h2>11. Contact</h2>
+<p>Questions about this policy? Email <a href="mailto:luga.podesta@gmail.com">luga.podesta@gmail.com</a>.</p>
+
+<div class="footer">
+    <p>Cooked &copy; 2026. <a href="terms.html">Terms of Service</a></p>
+</div>
+
+</div>
+</body>
+</html>
