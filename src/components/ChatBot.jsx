@@ -557,7 +557,7 @@ export default function ChatBot({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 1500,
         system: `You are a restaurant/hotel/bar knowledge extractor for the app "Cooked". Given content from a blog, article, Instagram post, or website, do TWO things:
 
@@ -891,7 +891,7 @@ If the content isn't about food/restaurants/hotels/bars/nightlife, say "NOT_RELE
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-opus-4-8",
           max_tokens: 1000,
           system: systemPrompt,
           messages: newMessages.map(m => ({ role: m.role, content: m.content }))

@@ -506,7 +506,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
           method: "POST",
           headers: { "Content-Type": "application/json", "anthropic-version": "2023-06-01" },
           body: JSON.stringify({
-            model: "claude-sonnet-4-20250514", max_tokens: 1024,
+            model: "claude-haiku-4-5-20251001", max_tokens: 1024,
             system: "You are a food critic and restaurant expert. Return ONLY valid JSON, no markdown.",
             messages: [{ role: "user", content: `Tell me about the restaurant "${baseName}" in ${city || "unknown city"}, ${neighborhood || ""}. Return JSON with these fields: cuisine (string), tags (array of 3 tags like "date night", "omakase", "craft cocktails"), about (2-3 sentence description of restaurant history & uniqueness), must_order (array of 3 dish recommendations), vibe (one sentence about atmosphere), best_for (array of 3 occasion types), known_for (one thing it's most famous for), insider_tip (specific actionable local knowledge), desc (one poetic sentence for the card)` }],
           }),
@@ -1447,7 +1447,7 @@ export default function AdminRestaurants({ allRestaurants: allRestaurantsRaw, us
                         method: "POST",
                         headers: { "Content-Type": "application/json", "anthropic-version": "2023-06-01" },
                         body: JSON.stringify({
-                          model: "claude-sonnet-4-20250514", max_tokens: 1024,
+                          model: "claude-haiku-4-5-20251001", max_tokens: 1024,
                           system: "You are a food critic and restaurant expert. Return ONLY valid JSON, no markdown.",
                           messages: [{ role: "user", content: `Tell me about "${baseName}" in ${city}. Return JSON: cuisine, tags (array of 3), desc (one poetic sentence), about (2-3 sentences)` }],
                         }),

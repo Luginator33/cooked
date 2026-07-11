@@ -2827,7 +2827,7 @@ If unsure about a field, use "Unknown" for strings or "$" for price.`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-haiku-4-5-20251001",
           max_tokens: 1024,
           messages: [{
             role: "user",
@@ -3009,7 +3009,7 @@ If unsure about a field, use "Unknown" for strings or "$" for price.`;
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  model: "claude-sonnet-4-20250514",
+                  model: "claude-haiku-4-5-20251001",
                   max_tokens: 800,
                   system: "You are a food critic and restaurant expert. Return ONLY valid JSON, no markdown, no explanation.",
                   messages: [{

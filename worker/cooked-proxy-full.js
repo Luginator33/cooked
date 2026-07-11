@@ -583,7 +583,7 @@ Rules:
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 6000, // articles can carry 30-50 places easily
       system: "Return ONLY valid JSON. No markdown fences, no preamble.",
       messages: [{ role: "user", content: prompt }],
@@ -996,7 +996,7 @@ Rules:
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-haiku-4-5-20251001",
       // 4000 tokens — a luxury concierge carousel with 8 slides can
       // list 20-30 places. The previous 1500 ceiling was getting hit
       // by mattconcierge / "Top 30 St Tropez spots" style posts,
@@ -1181,7 +1181,7 @@ async function askClaude(env, text) {
     },
     signal: AbortSignal.timeout(15000),
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 1500,
       system: `You are a restaurant/hotel/bar knowledge extractor for the app "Cooked". Given content from a blog, article, or website, do TWO things:
 
